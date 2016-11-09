@@ -1,6 +1,6 @@
-# Final Degree Project - Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)
+Final Degree Project - Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)
 
- MAC - STATIC IP in University WiFi Network:
+MAC - STATIC IP in University WiFi Network:
 
 Node    MAC Address             IP Address
 server	6c:f0:49:ee:d7:9f	132.72.110.192	(132.72.110.150 - last check)
