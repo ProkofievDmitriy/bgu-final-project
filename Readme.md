@@ -1,6 +1,19 @@
 ![](http://in.bgu.ac.il/Style%20Library/he-IL/Images/logotextfull.gif)![Alt text](http://in.bgu.ac.il/Style%20Library/Images/bgu/general/logo-simbol.gif)
-###Final Degree Project
-####Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)
+####Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)               
+#####Reports :    [PDR](https://drive.google.com/open?id=0BwYXH0n9ZthMblJyOXNEZzBxWjg)      [PRE]()       [PROGRESS1]()       [PROGRESS2]()       [FINAL]()       [POSTER]()
+---
+#### Node setup proggress:
+>TODO
+>
+>
+```erlang
+some_function() -> other_function().
+```
+---
+#### Data Server setup progress:
+>TODO
+>
+>
 ---
 #####MAC - STATIC IP in University WiFi Network:
 |Node    |MAC Address             |IP Address|
