@@ -1,2 +1,5 @@
 *.beam
-*.*~
+*~
+*.swp
+*.swo
+.dump
