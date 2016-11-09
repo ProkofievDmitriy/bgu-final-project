@@ -1,7 +1,8 @@
-##Final Degree Project - Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)
-
-####MAC - STATIC IP in University WiFi Network:
-
+![](http://in.bgu.ac.il/Style%20Library/he-IL/Images/logotextfull.gif)![Alt text](http://in.bgu.ac.il/Style%20Library/Images/bgu/general/logo-simbol.gif)
+###Final Degree Project
+####Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)
+---
+#####MAC - STATIC IP in University WiFi Network:
 |Node    |MAC Address             |IP Address|
 |-----|--------------------|---------------------|
 |server|6c:f0:49:ee:d7:9f	|132.72.110.192	(132.72.110.150 - last check)|
@@ -23,6 +24,7 @@
 |16	|90:b6:86:13:39:21|	132.73.192.175|		
 |17	|90:b6:86:0d:e4:ec|	132.73.192.38|		
 |18	|                 |                  |
+|19     |                 |                   |
 |21	|90:b6:86:03:a1:4d|	132.73.192.163|
 |22	|90:b6:86:04:23:66|	132.73.192.120|
 |23	|90:b6:86:0a:72:cb|	132.73.192.80|
