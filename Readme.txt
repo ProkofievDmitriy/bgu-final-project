@@ -1,21 +1,5 @@
 Final Degree Project - hyLOADng and Data Server
 
-
-
-Nodes MAC Addresses:
-
-1,78:4b:87:a3:07:48
-2,78:4b:87:a6:b7:31
-3,78:4b:87:a5:05:1b
-4,78:4b:87:a8:4b:d5
-5,90:b6:86:03:62:f5
-6,90:b6:86:09:6c:64
-7,90:b6:86:0e:f6:11
-8,90:b6:86:0e:8c:dd
-9,90:b6:86:04:31:0a
-10,90:b6:86:0a:4e:1d
-
-
 MAC - STATIC IP in University WiFi Network:
 
 Node    MAC Address             IP Address
@@ -49,4 +33,3 @@ Node    MAC Address             IP Address
 26	90:b6:86:0b:b8:27			132.73.192.180
 27	90:b6:86:01:db:77			132.73.192.56
 28	90:b6:86:09:cc:3c			132.73.192.47
-				
