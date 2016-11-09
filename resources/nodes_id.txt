@@ -1,9 +1,3 @@
-Final Degree Project - hyLOADng and Data Server
-
-
-
-Nodes MAC Addresses:
-
 1,78:4b:87:a3:07:48
 2,78:4b:87:a6:b7:31
 3,78:4b:87:a5:05:1b
