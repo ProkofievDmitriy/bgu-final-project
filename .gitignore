@@ -3,3 +3,7 @@
 *.swp
 *.swo
 .dump
+.idea
+*.iml
+out
+src
