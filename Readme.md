@@ -15,7 +15,7 @@ some_function() -> other_function().
 >
 >
 ---
-#####MAC - STATIC IP in University WiFi Network:
+#####MAC - STATIC IP in University WiFi Network: fist 10 addreses defined static IP's
 |Node    |MAC Address             |IP Address|
 |-----|--------------------|---------------------|
 |server|6c:f0:49:ee:d7:9f	|132.72.110.192	(132.72.110.150 - last check)|
