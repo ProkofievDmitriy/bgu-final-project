@@ -46,6 +46,7 @@ stop() ->
 
 
 %send Packet via channel Channel, with payload Payload.
+% Channel : 1 - RF , 2 - PLC , 3 RF + PLC 
 send(Channel, Payload) ->
 		MSG = [Channel] ++ [0] ++ Payload,
     call_port(MSG).
@@ -150,10 +151,11 @@ loop(Port, OS_PID, Super_PID, Port_Errors) ->
 	{_Port2, {data, Data}} ->		
 			Ans = exemine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
+				% first byte not recognized
 				channel_error->	io:format("modem_port: got msg: ~p~n but didnt pass exemine reason:~p~n",[Data,Ans]);
 				crc_error -> io:format("*************~nmodem_port: got msg: ~p~n but didnt pass exemine reason:~p~n***************~n",[Data,Ans]);
 				crc_error_try_split -> io:format("*************~nmodem_port: got msg: ~p~n but didnt pass exemine reason:~p. now split data and check splits~n***************~n",[Data,Ans]);
-				_List -> hyRPL:send_message_Fsm(Ans)
+				_List -> hyRPL:send_message_Fsm(Ans) %(channel , rssi, payload)
 			end,
 			loop(Port, OS_PID, Super_PID, Port_Errors );
 			

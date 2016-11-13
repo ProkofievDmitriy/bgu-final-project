@@ -1,0 +1,27 @@
+#in order to run influxdb
+sudo influxd
+#in order to run grafana
+sudo service grafana-server start
+#login to influxdb (localhost:8086)
+sudo influx
+#show list of DBs in influx db
+SHOW databases
+#create DB
+CREATE database <name>
+#choose current DB
+USE <name>
+#print all DB contents
+SELECT * FROM /.*/ LIMIT 19
+
+
+
+#################################
+inserting information to influxdb
+#################################
+#number of connected nodes (source route table size): conn_nodes
+curl -i -XPOST 'http://localhost:8086/write?db=mydb' --data-binary 'conn_nodes value=17'
+#number of management messages sent in network: mgmt_msg
+curl -i -XPOST 'http://localhost:8086/write?db=mydb' --data-binary 'mgmt_msg value=0'
+#number of data messages sent in network: data_msgs
+curl -i -XPOST 'http://localhost:8086/write?db=mydb' --data-binary 'data_msgs value=0'	//data message sent
+curl -i -XPOST 'http://localhost:8086/write?db=mydb' --data-binary 'data_msgs value=1'	//data message received
