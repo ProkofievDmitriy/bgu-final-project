@@ -5,5 +5,3 @@
 .dump
 .idea
 *.iml
-./out
-./src
