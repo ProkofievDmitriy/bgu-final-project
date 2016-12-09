@@ -114,12 +114,6 @@ get_mac() ->
 get_ip() -> I = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep \"inet addr\" | cut -d ':' -f 2 | cut -d ' ' -f 1"),
 	delete_line_feed([], I).
 
-extract_id2([H|_Rest], L) when H =:= 10 -> L;
-extract_id2([H|Rest], L) -> L1 = L ++ [H], extract_id2( Rest, L1 ).
-
-extract_id([H|Rest]) when H =:= 95 -> extract_id2(Rest, []);
-extract_id([_H|Rest]) ->  extract_id(Rest).
-
 delete_line_feed(M1, [M | Rest]) when Rest =:= "\n" -> M1++[M];
 delete_line_feed(M1, [M | Rest]) -> M2 = M1 ++ [M], delete_line_feed(M2, Rest).
 
@@ -127,7 +121,7 @@ get_id() ->
 	Host = os:cmd("hostname"),
 	?LOGGER:debug("at get_id: hostname is:~p~n", [Host]),
 %	A = extract_id(Host),
-	{delete_line_feed([], Host), 1987}.
+	{delete_line_feed([], Host), todo_node_id}.
 
 
 compile_resources() ->
