@@ -46,8 +46,11 @@ stop() ->
 init(Params) ->
 	?LOGGER:debug("~p Starting ... ~n", [?MODULE]),
 	process_flag(trap_exit, true),
-    ?LOGGER:info("~P is up as gen server~n", [?MODULE]),
 
+    ?DATA_LINK:start([]),
+    ?LOAD_NG_CORE:start([]),
+
+    ?LOGGER:info("~P is up as gen server~n", [?MODULE]),
     {ok, #context{
         messages_queue = []
     }}.

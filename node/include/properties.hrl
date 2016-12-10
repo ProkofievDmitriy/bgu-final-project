@@ -12,9 +12,10 @@
 -define(LOAD_NG_CORE, load_ng_core).
 -define(DATA_LINK, data_link).
 -define(APPLICATION, simple_app).
+-define(REPORT, report).
 
 
--define(NODE_RESOURCES, [?LOGGER, ?LOAD_NG, ?LOAD_NG_CORE, ?DATA_LINK, ?APPLICATION]).
+-define(NODE_RESOURCES, [?LOGGER, ?REPORT, ?LOAD_NG, ?LOAD_NG_CORE, ?DATA_LINK, ?APPLICATION]).
 
 
 %%% hy-LOADng PROPERTIES
