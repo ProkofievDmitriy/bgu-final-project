@@ -81,24 +81,24 @@ init(Params) ->
 
 %call for termination of node gen server
 handle_call(Request, From, State) ->
-    ?LOGGER:debug("~p Handle CALL Request(~p) from ~p, State : ~p~n", [?MODULE, Request, From, State]),
+    ?LOGGER:debug("~p STUB Handle CALL Request(~p) from ~p, State : ~p~n", [?MODULE, Request, From, State]),
     {reply, ok, State}.
 
 handle_cast(Request, State) ->
-    ?LOGGER:debug("~p Handle CAST Request(~p), State : ~p ~n", [?MODULE, Request, State]),
+    ?LOGGER:debug("~p STUB Handle CAST Request(~p), State : ~p ~n", [?MODULE, Request, State]),
     {noreply, State}.
 
 
 
 
 handle_info(Request, State)  ->
-    ?LOGGER:debug("~p Handle INFO Request(~p), State : ~p~n", [?MODULE, Request, State]),
+    ?LOGGER:debug("~p STUB Handle INFO Request(~p), State : ~p~n", [?MODULE, Request, State]),
 	{noreply, State}.
 
 
 
 terminate(Reason, State) ->
-    ?LOGGER:debug("~p terminating, reason ~p, state ~p~n", [?MODULE, Reason, State]),
+    ?LOGGER:debug("~p STUB terminating, reason ~p, state ~p~n", [?MODULE, Reason, State]),
     ok.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.

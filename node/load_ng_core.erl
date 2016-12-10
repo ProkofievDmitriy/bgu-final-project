@@ -12,7 +12,7 @@
 
 
 start_fsm(Params) ->
-	gen_fsm:start(?MODULE, [Params], []).
+	gen_fsm:start(?MODULE, Params, []).
 
 stop_fsm(Ref)->
 	gen_fsm:send_all_state_event(Ref, stop).
@@ -25,7 +25,7 @@ stop_fsm(Ref)->
 %% ============================================================================================
 %% =========================================== Init ==========================================
 %% ============================================================================================
-init([Params]) ->
+init(Params) ->
     RoutingSet_Id = ets:new(routing_set, [set, public]),
     {ok, idle, #state{
         routing_set = RoutingSet_Id
@@ -36,25 +36,27 @@ init([Params]) ->
 %% ============================================================================================
 
 handle_sync_event(Event, _From, StateName, StateData) ->
-    ?LOGGER:debug("~p Handle SYNC EVENT Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Event, StateName, StateData]),
+    ?LOGGER:debug("~p STUB Handle SYNC EVENT Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Event, StateName, StateData]),
 	{reply, "Stub Reply", StateName, StateData}.
 
 
 handle_info(Request, StateName, StateData) ->
-    ?LOGGER:debug("~p Handle INFO Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Request, StateName,StateData]),
+    ?LOGGER:debug("~p STUB Handle INFO Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Request, StateName,StateData]),
     {next_state, StateName, StateData}.
 
 handle_event(Event, StateName, StateData) ->
-    ?LOGGER:debug("~p Handle INFO Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Event, StateName,StateData]),
+    ?LOGGER:debug("~p STUB Handle INFO Request(~p), StateName: ~p, StateData: ~p~n", [?MODULE, Event, StateName,StateData]),
     {next_state, normal, StateData}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================
 %% ============================================================================================
-terminate(_Reason, _StateName, _StateData) ->
+terminate(Reason, StateName, StateData) ->
+    ?LOGGER:debug("~p STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~p~n", [?MODULE, Reason, StateName,StateData]),
     ok.
 
-code_change(_OldVsn, StateName, StateData, _Extra) ->
+code_change(OldVsn, StateName, StateData, Extra) ->
+    ?LOGGER:debug("~p STUB Handle CODE_CHANGE Request, OldVsn: ~p, StateName: ~p, StateData: ~p, Extra: ~p.~n", [?MODULE, OldVsn, StateName, StateData, Extra]),
     {ok, StateName, StateData}.
 
 
