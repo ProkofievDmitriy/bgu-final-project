@@ -10,6 +10,7 @@ print(Level, LevelMessage, Message, Params) ->
         true -> ok
     end.
 
+
 info(Message, Params) ->
     print(1, "[INFO]   ", Message, Params).
 info(Message) ->
@@ -21,7 +22,7 @@ debug(Message) ->
     debug(Message, []).
 
 error(Message, Params) ->
-    print(3, "[ERROR]  ", Message, Params).
+    print(3, "[ERROR]  ", Message, Params),
 error(Message) ->
     error(Message, []).
 

@@ -26,10 +26,10 @@
 %   API Functions Implementation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-start() ->
+start(Params) ->
     log:info("Node starting ...~n"),
     compile_resources(),
-    gen_server:start_link({local,?NODE }, ?MODULE, [], []).
+    gen_server:start_link({local, ?NODE }, ?MODULE, Params, []).
 
 stop() ->
     gen_server:call(?NODE, stop).
@@ -40,7 +40,7 @@ stop() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Private Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init([]) ->
+init(Params) ->
 	process_flag(trap_exit, true),
 	%extract muchine's parameters (MAC Address, IP Address, Host name & Serial ID number
 	{HostName, ID} = get_id(),
@@ -109,21 +109,32 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 get_mac() ->
 	M = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep -o -E '([[:xdigit:]]{1,2}:){5}[[:xdigit:]]{1,2}'"),
-	delete_line_feed([], M).
+    ?LOGGER:debug("get_mac: mac is:~p~n", [M]),
+	remove_end_of_line(M).
 
-get_ip() -> I = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep \"inet addr\" | cut -d ':' -f 2 | cut -d ' ' -f 1"),
-	delete_line_feed([], I).
+get_ip() ->
+    I = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep \"inet addr\" | cut -d ':' -f 2 | cut -d ' ' -f 1"),
+    ?LOGGER:debug("get_ip: ip is:~p~n", [I]),
+	remove_end_of_line(I).
 
-delete_line_feed(M1, [M | Rest]) when Rest =:= "\n" -> M1++[M];
-delete_line_feed(M1, [M | Rest]) -> M2 = M1 ++ [M], delete_line_feed(M2, Rest).
+remove_end_of_line([H|Tail])->
+    case Tail == "\n" of
+        true -> H;
+        _ -> remove_end_of_line([H], Tail)
+    end.
+
+remove_end_of_line(Result, [H | []]) -> Result++[H];
+remove_end_of_line(Result, [H | Tail]) when Tail =:= "\n" -> Result++[H];
+remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail).
 
 get_id() ->
 	Host = os:cmd("hostname"),
 	?LOGGER:debug("at get_id: hostname is:~p~n", [Host]),
 %	A = extract_id(Host),
-	{delete_line_feed([], Host), todo_node_id}.
+	{remove_end_of_line(Host), todo_node_id}.
 
 
 compile_resources() ->
 	?LOGGER:debug("~p Compiling Resources: ~p~n", [?MODULE, ?NODE_RESOURCES]),
-	compile:file(?NODE_RESOURCES).
+	[compile:file(File) || File <- ?NODE_RESOURCES],
+    ?LOGGER:debug("Resources compilation finished.~n").
