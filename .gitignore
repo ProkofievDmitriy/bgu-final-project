@@ -5,3 +5,5 @@
 .dump
 .idea
 *.iml
+*.dump
+

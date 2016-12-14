@@ -22,7 +22,7 @@ debug(Message) ->
     debug(Message, []).
 
 error(Message, Params) ->
-    print(3, "[ERROR]  ", Message, Params),
+    print(3, "[ERROR]  ", Message, Params).
 error(Message) ->
     error(Message, []).
 

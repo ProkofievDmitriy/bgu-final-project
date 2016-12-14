@@ -1,20 +1,20 @@
 -module(data_link).
 -behaviour(gen_fsm).
 -include("./include/properties.hrl").
--export([init/1]).
 
--export([handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+-export([start/1, stop/1]).
+-export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_fsm/1, stop_fsm/1]).
 
 
-start_fsm(Params) ->
-	gen_fsm:start(?MODULE, Params, []).
+start(Params) ->
+	{ok,PID} = gen_fsm:start(?MODULE, Params, []),
+	PID.
 
-stop_fsm(Ref)->
+stop(Ref)->
 	gen_fsm:send_all_state_event(Ref, stop).
 
 %% ====================================================================
@@ -26,6 +26,7 @@ stop_fsm(Ref)->
 %% =========================================== Init ==========================================
 %% ============================================================================================
 init(Params) ->
+    ?LOGGER:info("~p: Starting FSM with params: ~p.~n", [?MODULE, Params]),
     RoutingSet_Id = ets:new(routing_set, [set, public]),
     {ok, idle, #state{
         routing_set = RoutingSet_Id

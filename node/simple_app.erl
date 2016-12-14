@@ -1,34 +1,32 @@
 -module(simple_app).
--export([start/2, stop/0]).
+-export([start/1, stop/0]).
 
 -include("./include/properties.hrl").
 
-
-%%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_NAME, simple_application).
--define(PROTOCOL, load_ng).
--define(MESSAGE_SEND_INTERVAL, 5000). % 5 seconds interval between messages
 
 
 stop()->
     ?APPLICATION_NAME ! stop.
 
 
-start(Role, Node_Id)->
-	?LOGGER:info("Starting Simple Application in role: ~p~n", [Role]),
+start(Properties)->
+	?LOGGER:info("~p: Starting Simple Application with props: ~p~n", [?MODULE, Properties]),
+	AppProperties = proplists:get_value(?APPLICATION_PROPERTIES, Properties),
+    Role = proplists:get_value(role, AppProperties),
 	case Role of
 		smart_meter ->
-            Pid = spawn(fun()->smart_meter_loop(Node_Id) end),
+            PID = spawn(fun()->smart_meter_loop(Node_Id) end),
             ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
-            register(?APPLICATION_NAME, Pid),
-            Pid;
+            register(?APPLICATION_NAME, PID),
+            PID;
 		data_concentration_server ->
             ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
-			Sender_PID = spawn(fun()-> data_concentration_loop(Node_Id) end),
-			register(app,Sender_PID), Sender_PID;
+			PID = spawn(fun()-> data_concentration_loop(Node_Id) end),
+			register(?APPLICATION_NAME, PID),
+			PID;
 		_else ->
 		    ?LOGGER:error("~p not supported role : ~p~n", [?MODULE, Role]),
-		    ok
+		    not_supported_role_error
 	end.
 
 data_concentration_loop(Node_Id)->
@@ -44,14 +42,14 @@ data_concentration_loop(Node_Id)->
 
 
 smart_meter_loop(Node_Id) ->
-    Destination = "some destination",
-    Data = " some message",
-    ?PROTOCOL:send({Destination, Data}),
     receive
         stop->
 		    ?LOGGER:info("Received stop message. Exiting smart meter App~n"),
             normal
         after ?MESSAGE_SEND_INTERVAL ->
+            Destination = "some destination",
+            Data = " some message",
+            ?PROTOCOL:send({Destination, Data}),
             smart_meter_loop(Node_Id)
     end.
 
