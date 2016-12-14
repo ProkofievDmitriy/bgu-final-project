@@ -31,7 +31,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start(Params) ->
-    {ok,PID} = gen_server:start_link({local, ?MODULE }, ?MODULE, Params, []),
+    {ok,PID} = gen_server:start_link({global, ?MODULE }, ?MODULE, Params, []),
     PID.
 
 stop() ->
@@ -42,7 +42,7 @@ stop() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-send({Destination, Data})-> gen_server:call({local, ?MODULE}, {data_message, {Destination, Data}}).
+send({Destination, Data})-> gen_server:call({global, ?MODULE}, {data_message, {Destination, Data}}).
 
 
 
@@ -50,7 +50,7 @@ send({Destination, Data})-> gen_server:call({local, ?MODULE}, {data_message, {De
 %   callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Params) ->
-	?LOGGER:info("~p: Starting ... ~n", [?MODULE]),
+	?LOGGER:info("~p: Starting LOADng with props: ~p~n", [?MODULE, Params]),
 %	process_flag(trap_exit, true),
 
 
@@ -80,23 +80,23 @@ init(Params) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({data_message, {Destination, Data}}, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:debug("~p  Handle CALL Request(data_message), Message: {~p, ~p}, Context : ~p~n", [?MODULE, Destination, Data, Context]),
-    {reply, ok, Context}.
+handle_call({data_message, {Destination, Data}}, _From, Context=#context{messages_queue = MessagesQueue}) ->
+    ?LOGGER:debug("~p: Handle CALL Request(data_message), Message: {~p, ~p}, Context : ~p~n", [?MODULE, Destination, Data, Context]),
+    {reply, ok, Context};
 
 
 
 
 
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("~p STUB Handle CALL Request(~p) from ~p, Context : ~p~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:debug("~p: STUB Handle CALL Request(~p) from ~p, Context : ~p~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("~p STUB Handle CAST Request(~p), Context : ~p ~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("~p: STUB Handle CAST Request(~p), Context : ~p ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 

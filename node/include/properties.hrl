@@ -13,8 +13,9 @@
 -define(LOAD_NG_CORE, load_ng_core).
 -define(DATA_LINK, data_link).
 -define(APPLICATION, simple_app).
--define(REPORT, report).
--define(NODE_RESOURCES, [?LOGGER, ?REPORT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?APPLICATION]).
+-define(REPORT_UNIT, report).
+-define(MODEM_PORT, modem_port).
+-define(NODE_RESOURCES, [?LOGGER, ?REPORT_UNIT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION]).
 
 -define(NODE_PROPERTIES, node_properties).
 -define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG},
@@ -29,7 +30,8 @@
 -define(PROTOCOL_PROPERTIES, protocol_properties).
 
 %%% REPORTING UNIT PROPERTIES
-
+-define(REPORT_UNIT_PROPS_LIST, []).
+-define(REPORT_UNIT_PROPERTIES, report_unit_properties).
 
 
 %%% SIMPLE APPLICATION PROPERTIES

@@ -11,17 +11,17 @@ stop()->
 
 start(Properties)->
 	?LOGGER:info("~p: Starting Simple Application with props: ~p~n", [?MODULE, Properties]),
-	AppProperties = proplists:get_value(?APPLICATION_PROPERTIES, Properties),
-    Role = proplists:get_value(role, AppProperties),
+    Role = proplists:get_value(role, Properties),
 	case Role of
 		smart_meter ->
-            PID = spawn(fun()->smart_meter_loop(Node_Id) end),
+	        SendInterval = proplists:get_value(send_message_interval, Properties),
+            PID = spawn(fun()->smart_meter_loop(SendInterval) end),
             ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
             register(?APPLICATION_NAME, PID),
             PID;
 		data_concentration_server ->
             ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
-			PID = spawn(fun()-> data_concentration_loop(Node_Id) end),
+			PID = spawn(fun()-> data_concentration_loop() end),
 			register(?APPLICATION_NAME, PID),
 			PID;
 		_else ->
@@ -29,19 +29,19 @@ start(Properties)->
 		    not_supported_role_error
 	end.
 
-data_concentration_loop(Node_Id)->
+data_concentration_loop()->
 	receive
 		stop ->
 		    ?LOGGER:info("Received stop message. Exiting data concentration server App~n"),
 		    normal;
 		{Source, Data}->
 	        ?LOGGER:info("Received message from ~p, data: ~p~n", [Source, Data]),
-            data_concentration_loop(Node_Id)
+            data_concentration_loop()
 	end.
 
 
 
-smart_meter_loop(Node_Id) ->
+smart_meter_loop(SendInterval) ->
     receive
         stop->
 		    ?LOGGER:info("Received stop message. Exiting smart meter App~n"),
@@ -50,7 +50,7 @@ smart_meter_loop(Node_Id) ->
             Destination = "some destination",
             Data = " some message",
             ?PROTOCOL:send({Destination, Data}),
-            smart_meter_loop(Node_Id)
+            smart_meter_loop(SendInterval)
     end.
 
 

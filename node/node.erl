@@ -31,14 +31,21 @@
                   application_monitor_ref,
                   application_properties,
                   protocol_monitor_ref,
-                  protocol_properties
+                  protocol_properties,
+                  report_unit_monitor_ref,
+                  report_unit_properties
+
                   }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API Functions Implementation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-start() -> start(test).
+start() ->
+        GlobalProperties = read_props(),
+        io:format("GlobalProps: ~p ...~n", [GlobalProperties]),
+
+        start(GlobalProperties).
 
 start(Properties) when is_list(Properties)->
     compile_resources(),
@@ -48,14 +55,7 @@ start(Properties) when is_list(Properties)->
     {ok,NodePID} = gen_server:start({global, NodeName}, ?MODULE, Properties, []),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
-    NodePID;
-
-start(NodeName) ->
-        GlobalProperties = read_props(NodeName),
-        io:format("GlobalProps: ~p ...~n", [GlobalProperties]),
-
-        start(GlobalProperties).
-
+    NodePID.
 
 stop() ->
     gen_server:call(?NODE, stop).
@@ -78,16 +78,17 @@ init(GlobalProperties) ->
 	IP = get_ip(),
 	?LOGGER:debug("Node Name: ~p, IP: ~p, MAC: ~p~n", [NodeName, IP, MAC]),
 
-	%init reporting-unit
-%	{ok, Pid_server} = server_port:start_link(ID, MAC_Addr, IP_Addr, Node_Name),
-%	Server_Ref = erlang:monitor(process, Pid_server),
-%	io:format("local server port initiated and monitored!~n"),
+	%initialize reporting-unit
+	ReportUnitProperties = proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties),
+	ReportUnitPid = ?REPORT_UNIT:start(ReportUnitProperties),
+	ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
+	?LOGGER:debug("Report Unit: ~p started and monitored by node: ~p.~n", [?REPORT_UNIT, NodeName]),
 
-	%initiate PROTOCOL
+	%initialize PROTOCOL
 	ProtocolProperties = proplists:get_value(?PROTOCOL_PROPERTIES, GlobalProperties),
 	Protocol_Pid = ?PROTOCOL:start(ProtocolProperties),
 	Protocol_Monitor_Reference = erlang:monitor(process, Protocol_Pid),
-	?LOGGER:info("Protocol: ~p started and monitored by node: ~p.~n", [?PROTOCOL, NodeName]),
+	?LOGGER:debug("Protocol: ~p started and monitored by node: ~p.~n", [?PROTOCOL, NodeName]),
 
 	%initiate modem_port module
 %	Pid_modem = modem_port:start(),
@@ -98,7 +99,7 @@ init(GlobalProperties) ->
     ApplicationProperties = proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties),
 	Application_Pid = ?APPLICATION:start(ApplicationProperties),
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
-	?LOGGER:info("Application started and monitored by node: ~p.~n", [NodeName]),
+	?LOGGER:debug("Application started and monitored by node: ~p.~n", [NodeName]),
 
     ?LOGGER:info("Node: ~p, is up.~n", [NodeName]),
 
@@ -140,6 +141,14 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application
     Application_Pid = ?APPLICATION:start(Context#context.application_properties),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
     NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference},
+    {noreply, NewContext};
+
+%case Report Unit crashed, restart it
+handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit_monitor_ref = Monitor_Ref} = Context)  ->
+    ?LOGGER:info("~p: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ReportUnitPid = ?REPORT_UNIT:start(Context#context.report_unit_properties),
+    ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
+    NewContext = Context#context{report_unit_monitor_ref = ReportUnitMonitorReference},
     {noreply, NewContext};
 
 %case Protocol crashed. restart it
