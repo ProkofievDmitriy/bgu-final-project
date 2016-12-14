@@ -7,7 +7,6 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/1, stop/0, send/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -23,27 +22,10 @@
                   data_link_monitor_ref,
                   data_link_properties,
                   load_ng_core_monitor_ref,
-                  load_ng_core_properties
+                  load_ng_core_properties,
+                  modem_port_monitor_ref,
+                  modem_port_properties
                 }).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   API Functions Implementation
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-start(Params) ->
-    {ok,PID} = gen_server:start_link({global, ?MODULE }, ?MODULE, Params, []),
-    PID.
-
-stop() ->
-    gen_server:call(?MODULE, stop).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   API functions
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-send({Destination, Data})-> gen_server:call({global, ?MODULE}, {data_message, {Destination, Data}}).
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -52,6 +34,12 @@ send({Destination, Data})-> gen_server:call({global, ?MODULE}, {data_message, {D
 init(Params) ->
 	?LOGGER:info("~p: Starting LOADng with props: ~p~n", [?MODULE, Params]),
 %	process_flag(trap_exit, true),
+
+	%initialize Mode Port module
+	ModemPortProperties = [],
+	ModemPortPid = ?MODEM_PORT:start(ModemPortProperties),
+	ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
+	?LOGGER:debug("Modem Port: ~p satrted and monitored by ~p~n", [?MODEM_PORT, ?MODULE]),
 
 
 	%initialize DATA_LINK
@@ -72,7 +60,9 @@ init(Params) ->
         data_link_monitor_ref = DataLinkMonitorRef,
         data_link_properties = DataLinkProperties,
         load_ng_core_monitor_ref = LoadNgCoreMonitorRef,
-        load_ng_core_properties = LoadNgCoreProperties
+        load_ng_core_properties = LoadNgCoreProperties,
+        modem_port_monitor_ref = ModemPortMonitorRef,
+        modem_port_properties = ModemPortProperties
 
     }}.
 

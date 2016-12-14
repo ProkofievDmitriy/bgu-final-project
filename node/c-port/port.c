@@ -190,7 +190,7 @@ int send_to_Modem(byte * buffer, short len){
 	if(a==0)  {packet_size= b*20;}
 	else {packet_size= (b+1)*20;}
 	if(len>40) {packet_size=66;}
-	if(len==0) {return;}
+	if(len==0) {return 0;}
 	sprintf(m, "sending Modem a Packet: len is:%d packet_size is:%d, whole buff is:\n", packet_size, int_len);
     writeToFile(m);
 	writeToFile2(buffer,packet_size);

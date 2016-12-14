@@ -46,7 +46,7 @@ report(Message)-> gen_server:call({global, ?MODULE}, {report, Message}).
 %   callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Params) ->
-	?LOGGER:info("~p: Starting REPORT with props: ~p~n", [?MODULE, Params]),
+	?LOGGER:debug("~p: Starting REPORT with props: ~p~n", [?MODULE, Params]),
 %	process_flag(trap_exit, true),
     {ok, #context{ }}.
 

@@ -2,12 +2,6 @@
 %%% SYSTEM PROPERTIES
 -define(CURRENT_LOG_LEVEL, 0). % 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR
 
-
-%%% NODE PROPERTIES
-%-define(NETWORK_DEVICE, "enp2s0").
-%-define(NETWORK_DEVICE, "wlp3s0").
--define(NETWORK_DEVICE, "lo").
-
 -define(LOGGER, log).
 -define(LOAD_NG, load_ng).
 -define(LOAD_NG_CORE, load_ng_core).
@@ -15,7 +9,13 @@
 -define(APPLICATION, simple_app).
 -define(REPORT_UNIT, report).
 -define(MODEM_PORT, modem_port).
--define(NODE_RESOURCES, [?LOGGER, ?REPORT_UNIT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION]).
+-define(PROTOCOL, protocol_interface).
+
+%%% NODE PROPERTIES
+%-define(NETWORK_DEVICE, "enp2s0").
+%-define(NETWORK_DEVICE, "wlp3s0").
+-define(NETWORK_DEVICE, "lo").
+-define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION]).
 
 -define(NODE_PROPERTIES, node_properties).
 -define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG},
@@ -36,8 +36,7 @@
 
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
--define(PROTOCOL, load_ng).
--define(MESSAGE_SEND_INTERVAL, 5000). % 5 seconds interval between messages
+-define(MESSAGE_SEND_INTERVAL, 15000). % 15 seconds interval between messages
 
 -define(APPLICATION_PROPERTIES, application_properties).
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},

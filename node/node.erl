@@ -14,14 +14,9 @@
 -export([start/0, stop/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Defines
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
--define(NODE, node_id).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   Defines
+%   Records
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -record(context, {node_properties,
@@ -49,16 +44,15 @@ start() ->
 
 start(Properties) when is_list(Properties)->
     compile_resources(),
-    NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
-    NodeName = proplists:get_value(node_name, NodeProperties),
-    io:format("Node ~p starting ...~n", [NodeName]),
-    {ok,NodePID} = gen_server:start({global, NodeName}, ?MODULE, Properties, []),
+%    NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
+%    NodeName = proplists:get_value(node_name, NodeProperties),
+    {ok,NodePID} = gen_server:start_link({global, ?MODULE}, ?MODULE, Properties, []),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
     NodePID.
 
 stop() ->
-    gen_server:call(?NODE, stop).
+    gen_server:call(?MODULE, stop).
 
 
 
@@ -86,9 +80,10 @@ init(GlobalProperties) ->
 
 	%initialize PROTOCOL
 	ProtocolProperties = proplists:get_value(?PROTOCOL_PROPERTIES, GlobalProperties),
-	Protocol_Pid = ?PROTOCOL:start(ProtocolProperties),
+	CurrentProtocol = proplists:get_value(protocol, NodeProperties),
+	Protocol_Pid = ?PROTOCOL:start(CurrentProtocol, ProtocolProperties),
 	Protocol_Monitor_Reference = erlang:monitor(process, Protocol_Pid),
-	?LOGGER:debug("Protocol: ~p started and monitored by node: ~p.~n", [?PROTOCOL, NodeName]),
+	?LOGGER:debug("Protocol: ~p started and monitored by node: ~p.~n", [CurrentProtocol, NodeName]),
 
 	%initiate modem_port module
 %	Pid_modem = modem_port:start(),
@@ -111,7 +106,9 @@ init(GlobalProperties) ->
         protocol_monitor_ref = Protocol_Monitor_Reference,
         protocol_properties = ProtocolProperties,
         application_monitor_ref = Application_Monitor_Reference,
-        application_properties =ApplicationProperties
+        application_properties = ApplicationProperties,
+        report_unit_monitor_ref = ReportUnitMonitorReference,
+        report_unit_properties = ReportUnitProperties
     }}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -137,7 +134,7 @@ handle_cast(Request, Context) ->
 
 %case Application crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("~p: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ?LOGGER:debug("~p: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     Application_Pid = ?APPLICATION:start(Context#context.application_properties),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
     NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference},
@@ -145,7 +142,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application
 
 %case Report Unit crashed, restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("~p: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ?LOGGER:debug("~p: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     ReportUnitPid = ?REPORT_UNIT:start(Context#context.report_unit_properties),
     ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
     NewContext = Context#context{report_unit_monitor_ref = ReportUnitMonitorReference},
@@ -153,8 +150,9 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit
 
 %case Protocol crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("~p: Protocol crashed on node ~p, reason: ~p, restarting protocol.~n",[?MODULE, Context#context.node_name, Reason]),
-    ProtocolPid = ?APPLICATION:start(Context#context.protocol_properties),
+    CurrentProtocol = proplists:get_value(protocol, Context#context.node_properties),
+    ?LOGGER:debug("~p: Protocol ~p crashed on node ~p, reason: ~p, restarting protocol.~n",[?MODULE, CurrentProtocol, Context#context.node_name, Reason]),
+    ProtocolPid = ?PROTOCOL:start(CurrentProtocol, Context#context.protocol_properties),
     Protocol_Monitor_Reference = erlang:monitor(process, ProtocolPid),
     NewContext = Context#context{application_monitor_ref = Protocol_Monitor_Reference},
     {noreply, NewContext};
@@ -179,9 +177,11 @@ read_props() ->
     ApplicationProperties = ?APP_PROPS_LIST,
     NodeProperties = ?NODE_PROPS_LIST,
     ProtocolProperties = ?PROTOCOL_PROPS_LIST,
+    ReportUnitProperties = ?REPORT_UNIT_PROPS_LIST,
 
     [{?APPLICATION_PROPERTIES, ApplicationProperties},
      {?NODE_PROPERTIES, NodeProperties},
+     {?REPORT_UNIT_PROPERTIES, ReportUnitProperties},
      {?PROTOCOL_PROPERTIES, ProtocolProperties}
     ].
 
@@ -211,7 +211,7 @@ remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail
 compile_resources() ->
 	io:format("~p: Compiling Resources: ~p~n", [?MODULE, ?NODE_RESOURCES]),
 	Results = [compile:file(File) || File <- ?NODE_RESOURCES],
-    ?LOGGER:info("Compilation result : ~p.~n", [Results]),
+    ?LOGGER:debug("Compilation result : ~p.~n", [Results]),
     ?LOGGER:info("Resources compilation finished.~n").
 
 
