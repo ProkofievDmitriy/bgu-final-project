@@ -1,6 +1,6 @@
 -module(log).
 
--export([info/2, debug/2, err/2, warn/2, info/1, debug/1, err/1, warn/1]).
+-export([info/2, debug/2, preciseDebug/2, err/2, warn/2, info/1, debug/1, preciseDebug/1, err/1, warn/1]).
 
 -include("./include/properties.hrl").
 
@@ -19,6 +19,11 @@ info(Message) ->
 debug(Message, Params) ->
     print(0, "[DEBUG]  ", Message, Params).
 debug(Message) ->
+    debug(Message, []).
+
+preciseDebug(Message, Params) ->
+    print(-1, "[DEBUG+]  ", Message, Params).
+preciseDebug(Message) ->
     debug(Message, []).
 
 err(Message, Params) ->
