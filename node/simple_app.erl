@@ -10,22 +10,22 @@ stop()->
 
 
 start(Properties)->
-	?LOGGER:info("~p: Starting Simple Application with props: ~p~n", [?MODULE, Properties]),
+	?LOGGER:info("[~p]: Starting Simple Application with props: ~p~n", [?MODULE, Properties]),
     Role = proplists:get_value(role, Properties),
 	case Role of
 		smart_meter ->
 	        SendInterval = proplists:get_value(send_message_interval, Properties),
             PID = spawn(fun()->smart_meter_loop(SendInterval) end),
-            ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
+            ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
             register(?APPLICATION_NAME, PID),
             PID;
 		data_concentration_server ->
-            ?LOGGER:info("~p ~p  mode started~n", [?MODULE, Role]),
+            ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
 			PID = spawn(fun()-> data_concentration_loop() end),
 			register(?APPLICATION_NAME, PID),
 			PID;
 		_else ->
-		    ?LOGGER:error("~p not supported role : ~p~n", [?MODULE, Role]),
+		    ?LOGGER:error("[~p]: not supported role : ~p~n", [?MODULE, Role]),
 		    not_supported_role_error
 	end.
 
@@ -49,7 +49,8 @@ smart_meter_loop(SendInterval) ->
         after ?MESSAGE_SEND_INTERVAL ->
             Destination = "some destination",
             Data = " some message",
-            ?PROTOCOL:send({Destination, Data}),
+            Headers = [],
+            ?PROTOCOL:send({Destination, Headers, Data}),
             smart_meter_loop(SendInterval)
     end.
 

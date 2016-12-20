@@ -19,14 +19,15 @@
 
 -define(NODE_PROPERTIES, node_properties).
 -define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG},
-                          {node_name, test}
+                          {node_name, node_1}
                          ]).
 
 
 
 
 %%% hy-LOADng PROPERTIES
--define(PROTOCOL_PROPS_LIST, []).
+-define(ADDRESS_LENGTH, 5). % number of bits to store address
+-define(PROTOCOL_PROPS_LIST, [{address_length, ?ADDRESS_LENGTH}]).
 -define(PROTOCOL_PROPERTIES, protocol_properties).
 
 %%% REPORTING UNIT PROPERTIES

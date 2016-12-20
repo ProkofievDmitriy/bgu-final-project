@@ -38,7 +38,8 @@
 start(_Properties) ->
 		Caller_PID = self(),
     P = spawn(fun()-> init_supervisor(Caller_PID,0) end),
-		register(?SUPERVISOR, P), P.
+		register(?SUPERVISOR, P),
+		P.
 
 %stop the running of the port, which will end the supervisor
 stop() ->
@@ -153,7 +154,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors) ->
 			Ans = exemine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized
-				channel_error->	?LOGGER:debug("modem_port: modem_port: got msg: ~p~n but didnt pass exemine reason:~p~n",[Data,Ans]);
+				channel_error->	?LOGGER:debug("modem_port: got msg: ~p~n but didnt pass exemine reason:~p~n",[Data,Ans]);
 				crc_error -> ?LOGGER:debug("modem_port: got msg: ~p but didnt pass exemine reason:~p~n",[Data,Ans]);
 				crc_error_try_split -> ?LOGGER:debug("modem_port: got msg: ~p but didnt pass exemine reason:~p. now split data and check splits~n",[Data,Ans]);
 				_List -> hyRPL:send_message_Fsm(Ans) %(channel , rssi, payload)
