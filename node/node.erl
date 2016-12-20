@@ -207,8 +207,10 @@ remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail
 compile_resources() ->
 	io:format("[~p]: Compiling Resources: ~p~n", [?MODULE, ?NODE_RESOURCES]),
 	Results = [compile:file(File) || File <- ?NODE_RESOURCES],
-    %TODO Check for error and terminate execution if have any
     ?LOGGER:debug("Compilation result : ~p.~n", [Results]),
-    ?LOGGER:info("Resources compilation finished.~n").
+    case lists:member(error, Results) of
+        true -> erlang:error("Compilation Error");
+        false -> ?LOGGER:info("Resources compilation finished.~n")
+    end.
 
 
