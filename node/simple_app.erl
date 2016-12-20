@@ -2,7 +2,7 @@
 -export([start/1, stop/0]).
 
 -include("./include/properties.hrl").
-
+-include("./include/vcb.hrl").
 
 
 stop()->
@@ -10,7 +10,7 @@ stop()->
 
 
 start(Properties)->
-	?LOGGER:info("[~p]: Starting Simple Application with props: ~p~n", [?MODULE, Properties]),
+	?LOGGER:info("[~p]: Starting Simple Application with props: ~w~n", [?MODULE, Properties]),
     Role = proplists:get_value(role, Properties),
 	case Role of
 		smart_meter ->

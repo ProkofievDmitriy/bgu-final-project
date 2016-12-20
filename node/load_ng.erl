@@ -2,6 +2,8 @@
 -behaviour(gen_server).
 
 -include("./include/properties.hrl").
+-include("./include/vcb.hrl").
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API
@@ -33,8 +35,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-init(Params) ->
-	?LOGGER:info("[~p]: Starting LOADng with props: ~p~n", [?MODULE, Params]),
+init(Properties) ->
+	?LOGGER:info("[~p]: Starting LOADng with props: ~w~n", [?MODULE, Properties]),
 %	process_flag(trap_exit, true),
 
 	%initialize Mode Port module
@@ -44,21 +46,18 @@ init(Params) ->
 	?LOGGER:debug("Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODEM_PORT, ModemPortPid, ?MODULE]),
 
 	%initialize DATA_LINK
-	DataLinkProperties = [],
+	DataLinkProperties = proplists:get_value(?DATA_LINK_PROPERTIES, Properties),
 	DataLinkPid = ?DATA_LINK:start(DataLinkProperties),
 	DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
 	?LOGGER:info("Data Link: ~p started  started with pid: ~p and monitored by : ~p.~n", [?DATA_LINK, DataLinkPid, ?MODULE]),
 
 	%initialize LOAD_NG_CORE
-	LoadNgCoreProperties = [],
+	LoadNgCoreProperties = proplists:get_value(?LOAD_NG_CORE_PROPERTIES, Properties),
 	LoadNgCorePid = ?LOAD_NG_CORE:start(LoadNgCoreProperties),
 	LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
 	?LOGGER:info("LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?LOAD_NG_CORE, LoadNgCorePid, ?MODULE]),
 
-
-	%TODO update DATA_LINK_PID in LOAD_NG_CORE and opposite
-    ?DATA_LINK:updateUpperLevelPid(DataLinkPid, LoadNgCorePid),
-    ?LOAD_NG_CORE:updateBottomLevelPid(LoadNgCorePid, DataLinkPid),
+    bind_levels(LoadNgCorePid, DataLinkPid),
 
     ?LOGGER:info("[~p]: is up as gen server~n", [?MODULE]),
     {ok, #context{
@@ -78,26 +77,25 @@ init(Params) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({data_message, {Destination, Headers, Data}}, _From, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:debug("[~p]: Handle CALL Request(data_message), Message: {~p, ~p, ~p}, Context : ~p~n", [?MODULE, Destination, Headers, Data, Context]),
-
-
-
-    {reply, ok, Context};
+handle_call({data_message, {Destination, Headers, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
+    ?LOGGER:debug("[~p]: Handle CALL Request(data_message), Message: {~p, ~p, ~p}, Context: ~w~n", [?MODULE, Destination, Headers, Data, Context]),
+    Result = ?LOAD_NG_CORE:send(Context#context.load_ng_core_pid, {Destination, Headers, Data}),
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
+    {reply, Result, Context};
 
 
 
 
 
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~p) from ~p, Context : ~p~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~p), Context : ~p ~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -110,7 +108,7 @@ handle_cast(Request, Context) ->
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:info("[~p]: DATA LINK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     DataLinkPid = ?DATA_LINK:start(Context#context.data_link_properties),
-    ?DATA_LINK:updateUpperLevelPid(DataLinkPid, Context#context.load_ng_core_pid),
+    bind_levels(Context#context.load_ng_core_pid, DataLinkPid),
     DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
     NewContext = Context#context{data_link_monitor_ref = DataLinkMonitorRef, data_link_pid = DataLinkPid},
     ?LOGGER:info("[~p]: DATA LINK RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
@@ -120,14 +118,14 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_m
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{load_ng_core_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:info("[~p]: LOADng CORE crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     LoadNgCorePid = ?LOAD_NG_CORE:start(Context#context.load_ng_core_properties),
-    ?LOAD_NG_CORE:updateBottomLevelPid(LoadNgCorePid, Context#context.data_link_pid),
+    bind_levels(LoadNgCorePid, Context#context.data_link_pid),
     LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
     NewContext = Context#context{data_link_monitor_ref = LoadNgCoreMonitorRef, load_ng_core_pid = LoadNgCorePid},
     ?LOGGER:info("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, LoadNgCorePid]),
     {noreply, NewContext};
 
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~p), Context : ~p~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 
@@ -142,3 +140,7 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+bind_levels(LoadNgCorePid, DataLinkPid)->
+    ?LOAD_NG_CORE:updateBottomLevelPid(LoadNgCorePid, DataLinkPid),
+    ?DATA_LINK:updateUpperLevelPid(DataLinkPid, LoadNgCorePid).

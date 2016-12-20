@@ -1,5 +1,7 @@
 -module(protocol_interface).
 -include("./include/properties.hrl").
+-include("./include/vcb.hrl").
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API
@@ -22,7 +24,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start(ProtocolModule, Properties) ->
-    ?LOGGER:debug("[~p]: Starting protocol: ~p, with props: ~p~n", [?MODULE, ProtocolModule, Properties]),
+    ?LOGGER:debug("[~p]: Starting protocol: ~p, with props: ~w~n", [?MODULE, ProtocolModule, Properties]),
     {ok,PID} = gen_server:start_link({global, ?MODULE }, ProtocolModule, Properties, []),
     PID.
 

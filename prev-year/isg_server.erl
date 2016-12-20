@@ -707,7 +707,7 @@ node_atom_to_int_id(Node_Atom) when is_atom(Node_Atom)-> node_name_to_int_id(ato
 node_atom_to_int_id(Node_Atom) -> not_atom.
 node_name_to_int_id(Node_name) when is_list(Node_name)->
 	Node = string:sub_word(Node_name, 1, $@),
-	io:format("node is:~p~n", [Node]), 
+	io:format("node is:~p~n", [Node]),
 	Key = string:substr(Node, 6), 
 	io:format("Key is:~p~n", [Key]),
 	Key_int = list_to_integer(Key),
@@ -717,7 +717,7 @@ node_name_to_int_id(Node_name) -> not_string.
 update_node_status(Node_name, Status, ETS) when is_atom(Node_name)-> update_node_status(list_to_integer(atom_to_list(Node_name)), Status, ETS);
 update_node_status(Node_name, Status, ETS) when is_integer(Node_name)-> Name = "node_"++ integer_to_list(Node_name) ++ "@blabla", io:format("ETS is:~p~n", [ETS]), update_node_status(Name, Status, ETS);
 update_node_status(Node_name, Status, ETS)->
-	io:format("isg_server:update_node_status: got Node_name:~p, Status:~p, ETS:~p~n", [Node_name,Status,ETS]), 
+	io:format("isg_server:update_node_status: got Node_name:~p, Status:~p, ETS:~p~n", [Node_name,Status,ETS]),
 	Node = string:sub_word(Node_name, 1, $@),
 	Key_int = node_name_to_int_id(Node_name),
 	io:format("ETS is:~p~n", [ETS]),
