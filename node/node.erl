@@ -68,20 +68,21 @@ init(GlobalProperties) ->
 
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
 	NodeName = proplists:get_value(node_name, NodeProperties),
-
+    NodeAddress = get_node_number(NodeName),
 	%extract muchine's parameters (MAC Address, IP Address, Host name & Serial ID number
 	MAC = get_mac(),
 	IP = get_ip(),
-	?LOGGER:debug("Node Name: ~p, IP: ~p, MAC: ~p~n", [NodeName, IP, MAC]),
+	?LOGGER:debug("Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [NodeName, NodeAddress, IP, MAC]),
 
 	%initialize reporting-unit
 	ReportUnitProperties = proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties),
 	ReportUnitPid = ?REPORT_UNIT:start(ReportUnitProperties),
 	ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
 	?LOGGER:debug("Report Unit: ~p started with pid: ~p and monitored by node: ~p.~n", [?REPORT_UNIT, ReportUnitPid ,NodeName]),
+	?REPORT_UNIT:connect_to_data_server(),
 
 	%initialize PROTOCOL
-	ProtocolProperties = proplists:get_value(?PROTOCOL_PROPERTIES, GlobalProperties),
+	ProtocolProperties = [{?SELF_ADDRESS, NodeAddress} | proplists:get_value(?PROTOCOL_PROPERTIES, GlobalProperties)],
 	CurrentProtocol = proplists:get_value(protocol, NodeProperties),
 	Protocol_Pid = ?PROTOCOL:start(CurrentProtocol, ProtocolProperties),
 	Protocol_Monitor_Reference = erlang:monitor(process, Protocol_Pid),
@@ -183,15 +184,20 @@ read_props() ->
      {?PROTOCOL_PROPERTIES, ProtocolProperties}
     ].
 
+get_node_number(NodeName)->
+    NodeNameAsList = atom_to_list(NodeName),
+    ?LOGGER:debug("[~p]: get_node_number NodeNameAsList: ~p~n", [?MODULE, NodeNameAsList]),
+    {Address, []} = string:to_integer(cut_list_from_delimiter(NodeNameAsList, 95)), % 95 = "_".
+    Address.
 
 get_mac() ->
 	M = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep -o -E '([[:xdigit:]]{1,2}:){5}[[:xdigit:]]{1,2}'"),
-    ?LOGGER:debug("get_mac: mac is:~p~n", [M]),
+    ?LOGGER:debug("[~p]: get_mac: mac is:~p~n", [?MODULE, M]),
 	remove_end_of_line(M).
 
 get_ip() ->
     I = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep \"inet addr\" | cut -d ':' -f 2 | cut -d ' ' -f 1"),
-    ?LOGGER:debug("get_ip: ip is:~p~n", [I]),
+    ?LOGGER:debug("[~p]: get_ip: ip is:~p~n", [?MODULE, I]),
 	remove_end_of_line(I).
 
 remove_end_of_line([])-> none;
@@ -204,6 +210,16 @@ remove_end_of_line([H|Tail])->
 remove_end_of_line(Result, [H | []]) -> Result++[H];
 remove_end_of_line(Result, [H | Tail]) when Tail =:= "\n" -> Result++[H];
 remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail).
+
+cut_list_from_delimiter([], Delimiter)-> [];
+cut_list_from_delimiter([H|Tail], Delimiter)->
+    ?LOGGER:preciseDebug("[~p]: cut_list_from_delimiter H: ~p, Tail: ~p, Delimiter: ~p ~n", [?MODULE, H, Tail, Delimiter]),
+    case H == Delimiter of
+        true ->
+            ?LOGGER:preciseDebug("[~p]: cut_list_from_delimiter Result: ~p~n", [?MODULE, Tail]),
+            Tail;
+        _ -> cut_list_from_delimiter(Tail, Delimiter)
+    end.
 
 % no compilation errors handling, should not be errors
 compile_resources() ->

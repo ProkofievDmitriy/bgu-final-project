@@ -7,7 +7,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
--export([idle/3]).
+-export([double/3, plc_only/3, rf_only/3]).
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -31,25 +31,39 @@ updateUpperLevelPid(FsmPid, UpperLevelPid)->
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
--record(state, {properties, my_address, upper_level_pid}).
+-record(state, {self_address, upper_level_pid}).
 
 %% ============================================================================================
 %% =========================================== Init ==========================================
 %% ============================================================================================
 init(Properties) ->
     ?LOGGER:info("[~p]: Starting FSM with params: ~p.~n", [?MODULE, Properties]),
-    MyAddress = proplists:get_value(address, Properties),
+    SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
     {ok, idle, #state{
-        my_address = MyAddress,
-        properties = Properties
+        self_address = SelfAddress
     }}.
 
 %% ============================================================================================
 %% =========================================== States =========================================
 %% ============================================================================================
 
-idle({send, {Medium, Payload}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Request(send), , StateData: ~w~n", [?MODULE, StateData]),
+double({send, {Medium, Payload}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: DOUBLE - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Medium, StateData]),
+    ?MODEM_PORT:send(Medium, Payload),
+	{reply, ok, double, StateData}.
+
+plc_only({send, {Medium, Payload}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: PLC ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Medium, StateData]),
+    case Medium == ?PLC of
+        true ->
+            ?MODEM_PORT:send(Medium, Payload),
+	        {reply, ok, plc_only, StateData};
+	    _ ->
+	        {reply, error, plc_only, StateData}
+	 end.
+
+rf_only({send, {Medium, Payload}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: RF ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Medium, StateData]),
     ?MODEM_PORT:send(Medium, Payload),
 	{reply, ok, idle, StateData}.
 

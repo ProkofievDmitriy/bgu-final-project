@@ -2,7 +2,6 @@
 -behaviour(gen_fsm).
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
--include("./include/records.hrl").
 
 
 %include libraries to support qlc requests
@@ -14,8 +13,8 @@
 %states export
 -export([idle/3, idle/2]).
 
--record(state, {routing_set,rreq_handling_set, bottom_level_pid, net_traversal_time}).
--record(load_ng_message, {medium, source, destination, tlv, payload}).
+-record(state, {routing_set,rreq_handling_set, self_address, address_length, bottom_level_pid, net_traversal_time, reporting_unit}).
+-record(load_ng_message, {medium, type, source, destination, tlv, payload}).
 -record(routing_set_entry, {medium, destination, next_hop, link_cost, last_used}).
 -record(rreq_handling_set_entry, {rreq_id, destination, created_time}).
 %% ====================================================================
@@ -42,19 +41,31 @@ send(FsmPid, {Destination, Headers, Data})->
 generate_RREQ(Destination)->
     gen_fsm:send_event(self(), {generate_rreq, Destination}).
 
+generate_RREP(Destination)->
+    gen_fsm:send_event(self(), {generate_rrep, Destination}).
+
+generate_RERR(Destination)->
+    gen_fsm:send_event(self(), {generate_rerr, Destination}).
+
 
 %% ============================================================================================
 %% =========================================== Init ==========================================
 %% ============================================================================================
 init(Properties) ->
-    ?LOGGER:info("[~p]: Starting FSM with params: ~p.~n", [?MODULE, Properties]),
+    ?LOGGER:info("[~p]: Starting FSM with params: ~w.~n", [?MODULE, Properties]),
     NetTraversalTime = proplists:get_value(net_traversal_time, Properties),
+    AddressLength = proplists:get_value(address_length, Properties),
+    SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
+    ReportingUnit = proplists:get_value(reporting_unit, Properties),
     RoutingSet_Id = ets:new(routing_set, [set, public]),
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
     {ok, idle, #state{
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
-        net_traversal_time = NetTraversalTime
+        net_traversal_time = NetTraversalTime,
+        address_length = AddressLength,
+        reporting_unit = ReportingUnit,
+        self_address = SelfAddress
     }}.
 
 %% ============================================================================================
@@ -71,6 +82,7 @@ idle({send_message, {Destination, Headers, Data}}, _From, StateData) ->
         Hop ->
             Payload = prepare_payload(Destination, Headers, Data),
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {Hop, {Payload}}),
+            report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
             {reply, sent, idle, StateData}
     end.
 %% ============================================================================================
@@ -80,17 +92,35 @@ idle({send_message, {Destination, Headers, Data}}, _From, StateData) ->
 
 idle({generate_rreq, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Generating RREQ for ~p.~n", [?MODULE, Destination]),
+
+    Payload = {Destination, [] , {?RREQ}},
+    report_management_message(StateData#state.reporting_unit, Payload),
+
     {next_state, idle, StateData};
 
+idle({generate_rrep, Destination}, StateData) ->
+    ?LOGGER:debug("[~p]: IDLE - Generating RREP for ~p.~n", [?MODULE, Destination]),
+    Payload = {Destination, [] , {?RREP}},
+    report_management_message(StateData#state.reporting_unit, Payload),
+    {next_state, idle, StateData};
+
+idle({generate_rerr, Destination}, StateData) ->
+    ?LOGGER:debug("[~p]: IDLE - Generating RRER for ~p.~n", [?MODULE, Destination]),
+    Payload = {Destination, [] , {?RERR}},
+    report_management_message(StateData#state.reporting_unit, Payload),
+    {next_state, idle, StateData};
+
+
+% Receive Messages Handlers
 idle({rreq_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RREQ RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, idle, StateData};
 
-idle({rreq_received, Message}, StateData) ->
+idle({rrep_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RREP RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, idle, StateData};
 
-idle({rreq_received, Message}, StateData) ->
+idle({rerr_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, idle, StateData}.
 
@@ -184,3 +214,30 @@ find_next_hop(Destination, RoutingSetId)->
             {error, "UNEXPECTED RESULTS ERROR"}
     end,
     Result.
+
+
+%----------------------------------------------------------------------------
+% REPORT Functions
+%----------------------------------------------------------------------------
+
+%reporting process functions
+report_message(Type, ReportingUnit, Message)->
+    case ReportingUnit of
+        undefined ->
+            ?LOGGER:debug("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
+        _ ->
+           ReportingUnit:report(Type, Message)
+    end.
+
+report_data_message(ReportingUnit, MessageType, Message)->
+    Data = [{?DATA_MESSAGE_TYPE, MessageType}, {data, Message}],
+    report_message(?DATA_MESSAGE, ReportingUnit, Data).
+
+
+report_management_message(ReportingUnit, Message)->
+    report_message(?MANAGEMENT_MESSAGE, ReportingUnit, Message).
+
+report_routing_set(ReportingUnit, RoutingSetId)->
+    RoutingSet = [],
+    report_message(?ROUTING_SET, ReportingUnit, RoutingSet).
+

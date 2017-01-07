@@ -38,6 +38,7 @@
 init(Properties) ->
 	?LOGGER:info("[~p]: Starting LOADng with props: ~w~n", [?MODULE, Properties]),
 %	process_flag(trap_exit, true),
+    SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
 
 	%initialize Mode Port module
 	ModemPortProperties = [],
@@ -46,13 +47,13 @@ init(Properties) ->
 	?LOGGER:debug("Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODEM_PORT, ModemPortPid, ?MODULE]),
 
 	%initialize DATA_LINK
-	DataLinkProperties = proplists:get_value(?DATA_LINK_PROPERTIES, Properties),
+	DataLinkProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?DATA_LINK_PROPERTIES, Properties)],
 	DataLinkPid = ?DATA_LINK:start(DataLinkProperties),
 	DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
 	?LOGGER:info("Data Link: ~p started  started with pid: ~p and monitored by : ~p.~n", [?DATA_LINK, DataLinkPid, ?MODULE]),
 
 	%initialize LOAD_NG_CORE
-	LoadNgCoreProperties = proplists:get_value(?LOAD_NG_CORE_PROPERTIES, Properties),
+	LoadNgCoreProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?LOAD_NG_CORE_PROPERTIES, Properties)],
 	LoadNgCorePid = ?LOAD_NG_CORE:start(LoadNgCoreProperties),
 	LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
 	?LOGGER:info("LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?LOAD_NG_CORE, LoadNgCorePid, ?MODULE]),
@@ -78,7 +79,7 @@ init(Properties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Headers, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:debug("[~p]: Handle CALL Request(data_message), Message: {~p, ~p, ~p}, Context: ~w~n", [?MODULE, Destination, Headers, Data, Context]),
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p, ~p}, Context: ~w~n", [?MODULE, Destination, Headers, Data, Context]),
     Result = ?LOAD_NG_CORE:send(Context#context.load_ng_core_pid, {Destination, Headers, Data}),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
