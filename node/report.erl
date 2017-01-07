@@ -75,6 +75,7 @@ handle_cast(connect_to_data_server, Context) ->
 %TODO Pattern match in function definition to only not connected to server state
     ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server), Context: ~w ~n", [?MODULE, Context]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
+    test_connection(ServerNodeName),
     Ans = net_kernel:connect_node(ServerNodeName),
     timer:sleep(1000),
     case Ans of
@@ -123,3 +124,10 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_message(Type, Message)->
     {Type, [{message, Message}]}.
+
+test_connection(Address)->
+   case net_adm:ping(Address) of
+     pong-> ?LOGGER:debug("[~p]: Node ~p is UP ~n", [?MODULE, Address]);
+     pang-> ?LOGGER:debug("[~p]: Can't reach node ~p~n", [?MODULE, Address]);
+     Other-> ?LOGGER:debug("[~p]: ERROR :  ~p~n", [?MODULE, Other])
+    end.
