@@ -92,7 +92,7 @@ active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
         {error, Message} ->
-            {reply, {error, Message}, idle, StateData};
+            {reply, {error, Message}, active, StateData};
         Hop ->
             Payload = prepare_payload(Destination, Headers, Data),
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {Hop, {Payload}}),
