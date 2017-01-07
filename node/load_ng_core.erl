@@ -188,14 +188,14 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ======================================== Utils =========================================
 %% ============================================================================================
 get_next_hop(Destination, State)->
-    NextHop = find_next_hop(Destination, State#state.routing_set),
+    NextHop = query_find_next_hop(Destination, State#state.routing_set),
     Result = case NextHop of
         {ok, Hop} -> Hop;
         {?EMPTY_QUERY_RESULT, _Message} ->
             ?LOGGER:debug("[~p]: get_next_hop NO HOP FOUND for destination: ~p : ~p.~n", [?MODULE, Destination, NextHop]),
             generate_RREQ(Destination),
             receive after 2 * State#state.net_traversal_time ->
-                NextHop = find_next_hop(Destination, State#state.routing_set),
+                NextHop = query_find_next_hop(Destination, State#state.routing_set),
                 case NextHop of
                     {ok, Hop} -> Hop;
                     _ ->
@@ -221,7 +221,7 @@ prepare_payload(Destination, Headers, Data)->
 % DATA QUERIES
 %----------------------------------------------------------------------------
 
-find_next_hop(Destination, RoutingSetId)->
+query_find_next_hop(Destination, RoutingSetId)->
     Query = ets:fun2ms(fun({{Medium, Address},_Value}) when Address =:= Destination -> {Medium, Address} end),
     NextHop = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     Result = case NextHop of
