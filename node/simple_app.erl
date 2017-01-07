@@ -43,13 +43,18 @@ data_concentration_loop()->
 
 smart_meter_loop(SendInterval) ->
     receive
-        stop->
-		    ?LOGGER:info("Received stop message. Exiting smart meter App~n"),
-            normal
+        stop ->
+		    ?LOGGER:info("[~p]: Received stop message. Exiting ... ~n", [?MODULE]),
+            normal;
+        {error, Message} ->
+		    ?LOGGER:info("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);
+        sent ->
+		    ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE])
         after ?MESSAGE_SEND_INTERVAL ->
             Destination = "some destination",
             Data = " some message",
             Headers = [],
+            ?LOGGER:info("[~p]: Sending Message ~p~n" ,[?MODULE, {Destination, Headers, Data}]),
             ?PROTOCOL:send({Destination, Headers, Data}),
             smart_meter_loop(SendInterval)
     end.
