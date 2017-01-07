@@ -68,7 +68,7 @@ init(Properties) ->
     ReportingUnit = proplists:get_value(reporting_unit, Properties),
     RoutingSet_Id = ets:new(routing_set, [set, public]),
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
-    {ok, idle, #state{
+    {ok, active, #state{
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
         net_traversal_time = NetTraversalTime,
@@ -81,14 +81,19 @@ init(Properties) ->
 %% =========================================== SYNC States Transitions ========================
 %% ============================================================================================
 idle(enable, _From, StateData)->
-    {reply, ok, active, StateData}.
+    {reply, ok, active, StateData};
+
+idle(Request, _From, StateData)->
+    ?LOGGER:debug("[~p]: IDLE - IGNORING Request(~p),  StateData: ~w~n", [?MODULE, Request, StateData]),
+    {reply, {error, "LoadNG Core NOT ACTIVE, IGNORING EVENT"}, idle, StateData}.
+
 
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
 
 active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Request(send_message) in idle state, Message: {~p, ~p, ~p},  StateData: ~w~n", [?MODULE, Destination, Headers, Data, StateData]),
+    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) in idle state, Message: {~p, ~p, ~p},  StateData: ~w~n", [?MODULE, Destination, Headers, Data, StateData]),
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
         {error, Message} ->
@@ -105,7 +110,7 @@ active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
 
 
 active({generate_rreq, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Generating RREQ for ~p.~n", [?MODULE, Destination]),
+    ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for ~p.~n", [?MODULE, Destination]),
 
     Payload = {Destination, [] , {?RREQ}},
     report_management_message(StateData#state.reporting_unit, Payload),
@@ -113,13 +118,13 @@ active({generate_rreq, Destination}, StateData) ->
     {next_state, active, StateData};
 
 active({generate_rrep, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Generating RREP for ~p.~n", [?MODULE, Destination]),
+    ?LOGGER:debug("[~p]: ACTIVE - Generating RREP for ~p.~n", [?MODULE, Destination]),
     Payload = {Destination, [] , {?RREP}},
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
 
 active({generate_rerr, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Generating RRER for ~p.~n", [?MODULE, Destination]),
+    ?LOGGER:debug("[~p]: ACTIVE - Generating RRER for ~p.~n", [?MODULE, Destination]),
     Payload = {Destination, [] , {?RERR}},
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
@@ -127,15 +132,15 @@ active({generate_rerr, Destination}, StateData) ->
 
 % Receive Messages Handlers
 active({rreq_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - RREQ RECEIVED : ~p.~n", [?MODULE, Message]),
+    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, active, StateData};
 
 active({rrep_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - RREP RECEIVED : ~p.~n", [?MODULE, Message]),
+    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, active, StateData};
 
 active({rerr_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
+    ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, active, StateData}.
 
 %% ============================================================================================
