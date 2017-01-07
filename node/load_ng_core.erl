@@ -8,10 +8,11 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, send/2]).
+-export([start/1, stop/1, updateBottomLevelPid/2, send/2, enable/1, disable/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+
 %states export
--export([idle/3, idle/2]).
+-export([active/3, active/2, idle/3]).
 
 -record(state, {routing_set,rreq_handling_set, self_address, address_length, bottom_level_pid, net_traversal_time, reporting_unit}).
 -record(load_ng_message, {medium, type, source, destination, tlv, payload}).
@@ -34,6 +35,14 @@ updateBottomLevelPid(FsmPid, BottomLevelPid)->
 send(FsmPid, {Destination, Headers, Data})->
     %default sync event timeout 5000ms
     gen_fsm:sync_send_event(FsmPid, {send_message, {Destination, Headers, Data}}).
+
+
+enable(FsmPid)->
+    gen_fsm:sync_send_event(FsmPid, enable).
+
+disable(FsmPid)->
+    gen_fsm:sync_send_event(FsmPid, disable).
+
 
 %% ====================================================================
 %% Internal events
@@ -71,9 +80,14 @@ init(Properties) ->
 %% ============================================================================================
 %% =========================================== SYNC States Transitions ========================
 %% ============================================================================================
+idle(enable, _From, StateData)->
+    {reply, ok, active, StateData}.
+
+active(disable, _From, StateData)->
+    {reply, ok, idle, StateData};
 
 
-idle({send_message, {Destination, Headers, Data}}, _From, StateData) ->
+active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Request(send_message) in idle state, Message: {~p, ~p, ~p},  StateData: ~w~n", [?MODULE, Destination, Headers, Data, StateData]),
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
@@ -83,46 +97,46 @@ idle({send_message, {Destination, Headers, Data}}, _From, StateData) ->
             Payload = prepare_payload(Destination, Headers, Data),
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {Hop, {Payload}}),
             report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
-            {reply, sent, idle, StateData}
+            {reply, sent, active, StateData}
     end.
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
 
 
-idle({generate_rreq, Destination}, StateData) ->
+active({generate_rreq, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Generating RREQ for ~p.~n", [?MODULE, Destination]),
 
     Payload = {Destination, [] , {?RREQ}},
     report_management_message(StateData#state.reporting_unit, Payload),
 
-    {next_state, idle, StateData};
+    {next_state, active, StateData};
 
-idle({generate_rrep, Destination}, StateData) ->
+active({generate_rrep, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Generating RREP for ~p.~n", [?MODULE, Destination]),
     Payload = {Destination, [] , {?RREP}},
     report_management_message(StateData#state.reporting_unit, Payload),
-    {next_state, idle, StateData};
+    {next_state, active, StateData};
 
-idle({generate_rerr, Destination}, StateData) ->
+active({generate_rerr, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Generating RRER for ~p.~n", [?MODULE, Destination]),
     Payload = {Destination, [] , {?RERR}},
     report_management_message(StateData#state.reporting_unit, Payload),
-    {next_state, idle, StateData};
+    {next_state, active, StateData};
 
 
 % Receive Messages Handlers
-idle({rreq_received, Message}, StateData) ->
+active({rreq_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RREQ RECEIVED : ~p.~n", [?MODULE, Message]),
-    {next_state, idle, StateData};
+    {next_state, active, StateData};
 
-idle({rrep_received, Message}, StateData) ->
+active({rrep_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RREP RECEIVED : ~p.~n", [?MODULE, Message]),
-    {next_state, idle, StateData};
+    {next_state, active, StateData};
 
-idle({rerr_received, Message}, StateData) ->
+active({rerr_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
-    {next_state, idle, StateData}.
+    {next_state, active, StateData}.
 
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
