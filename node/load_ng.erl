@@ -28,7 +28,8 @@
                   load_ng_core_monitor_ref,
                   load_ng_core_properties,
                   modem_port_monitor_ref,
-                  modem_port_properties
+                  modem_port_properties,
+                  application_pid
                 }).
 
 
@@ -39,24 +40,24 @@ init(Properties) ->
 	?LOGGER:info("[~p]: Starting LOADng with props: ~w~n", [?MODULE, Properties]),
 %	process_flag(trap_exit, true),
     SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
-
-	%initialize Mode Port module
-	ModemPortProperties = [],
-	ModemPortPid = ?MODEM_PORT:start(ModemPortProperties),
-	ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
-	?LOGGER:debug("Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODEM_PORT, ModemPortPid, ?MODULE]),
-
 	%initialize DATA_LINK
 	DataLinkProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?DATA_LINK_PROPERTIES, Properties)],
 	DataLinkPid = ?DATA_LINK:start(DataLinkProperties),
 	DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
-	?LOGGER:info("Data Link: ~p started  started with pid: ~p and monitored by : ~p.~n", [?DATA_LINK, DataLinkPid, ?MODULE]),
+	?LOGGER:info("[~p]: Data Link: ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?DATA_LINK, DataLinkPid, ?MODULE]),
+
+	%initialize Mode Port module
+	ModemPortProperties = [],
+	ModemPortPid = ?MODEM_PORT:start(DataLinkPid),
+	ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
+	?LOGGER:debug("[~p]: Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODULE, ?MODEM_PORT, ModemPortPid, ?MODULE]),
+
 
 	%initialize LOAD_NG_CORE
 	LoadNgCoreProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?LOAD_NG_CORE_PROPERTIES, Properties)],
 	LoadNgCorePid = ?LOAD_NG_CORE:start(LoadNgCoreProperties),
 	LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
-	?LOGGER:info("LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?LOAD_NG_CORE, LoadNgCorePid, ?MODULE]),
+	?LOGGER:info("[~p]: LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?LOAD_NG_CORE, LoadNgCorePid, ?MODULE]),
 
     bind_levels(LoadNgCorePid, DataLinkPid),
 
@@ -85,7 +86,11 @@ handle_call({data_message, {Destination, Headers, Data}}, From, Context=#context
     {reply, Result, Context};
 
 
-
+handle_call({hand_shake, ApplicationPid}, From, Context) ->
+    ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p, Context: ~w~n", [?MODULE, ApplicationPid, From, Context]),
+    %TODO implement hand_shake with application
+    NewContext = Context#context{application_pid = ApplicationPid},
+    {reply, self(), NewContext};
 
 
 handle_call(Request, From, Context) ->
@@ -109,10 +114,12 @@ handle_cast(Request, Context) ->
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:info("[~p]: DATA LINK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     DataLinkPid = ?DATA_LINK:start(Context#context.data_link_properties),
+    ?MODEM_PORT:stop(),
+    ?MODEM_PORT:start(DataLinkPid),
     bind_levels(Context#context.load_ng_core_pid, DataLinkPid),
     DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
     NewContext = Context#context{data_link_monitor_ref = DataLinkMonitorRef, data_link_pid = DataLinkPid},
-    ?LOGGER:info("[~p]: DATA LINK RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
+    ?LOGGER:info("[~p]: DATA LINK AND MODEM PORT RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
     {noreply, NewContext};
 
 %case LOADng Core crashed. restart it

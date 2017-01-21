@@ -9,7 +9,7 @@
 %   API's
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/0, stop/0, test/0]).
+-export([start/0, stop/0, test/0, test/1, report/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 
@@ -34,12 +34,17 @@ stop() ->
 test()->
     test_connection('node@127.0.0.1').
 
+test(Node)->
+    test_connection(Node).
+
+
+report(Message)->gen_server:cast({global, ?MODULE}, {report, {Message}}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Callback Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init([]) ->
-    ?LOGGER:debug("[~p]: INIT~n", [?MODULE]),
+    io:format("[~p]: INIT~n", [?MODULE]),
 
 
     {ok, #context{
@@ -48,8 +53,12 @@ init([]) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+handle_call({report, {Message}}, _From, Context) ->
+    io:format("[~p]: STUB Handle CALL Request(report) Message ~p, Context: ~w~n", [?MODULE, Message, Context]),
+    {reply, ok, Context};
+
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
+    io:format("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 
@@ -57,7 +66,7 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    io:format("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -67,14 +76,14 @@ handle_cast(Request, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    io:format("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 
 
 terminate(Reason, Context) ->
     %TODO Proper termination of module with all consequences
-    ?LOGGER:debug("[~p]: STUB terminating, Reason ~p, State ~w.~n", [?MODULE, Reason, Context]),
+    io:format("[~p]: STUB terminating, Reason ~p, State ~w.~n", [?MODULE, Reason, Context]),
     ok.
 
 code_change(_OldVsn, Context, _Extra) -> {ok, Context}.

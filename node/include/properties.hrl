@@ -1,5 +1,5 @@
 %-define(MODULES_TO_LOG, ["load_ng_core", "report"]).
--define(MODULES_TO_LOG, [log,protocol_interface,report,load_ng_core,data_link,load_ng,modem_port,simple_app]).
+-define(MODULES_TO_LOG, [log,protocol_interface,report,load_ng_core,data_link,load_ng,modem_port,simple_app, node]).
 %-define(MODULES_TO_LOG, [report,load_ng_core,data_link]).
 
 
@@ -21,11 +21,11 @@
 %-define(NETWORK_DEVICE, "enp2s0").
 %-define(NETWORK_DEVICE, "wlp3s0").
 -define(NETWORK_DEVICE, "lo").
--define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION]).
+-define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?LOAD_NG_CORE, ?DATA_LINK, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION, stub_data_server]).
 
 
--define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG},
-                          {node_name, node_1} % temp value , need to be define per each node.
+-define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG}
+%                          {node_name, node_1} % temp value , need to be define per each node.
                          ]).
 
 
@@ -47,8 +47,9 @@
                              ]).
 
 %%% REPORTING UNIT PROPERTIES
--define(REPORT_UNIT_PROPS_LIST, [{data_server_name, data_server},
-                                 {data_server_ip, "127.0.0.1"}
+-define(REPORT_UNIT_PROPS_LIST, [{data_server_name,stub_data_server},
+                                 {data_server_ip, "192.168.14.98"}
+%                                 {data_server_ip, "127.0.0.1"}
                                 ]).
 
 

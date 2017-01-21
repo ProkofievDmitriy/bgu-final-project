@@ -7,7 +7,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/1]).
+-export([start/2, stop/0, send/1, hand_shake/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -32,6 +32,9 @@ stop() ->
     gen_server:call(?MODULE, stop).
 
 send({Destination, Headers, Data})-> gen_server:call({global, ?MODULE}, {data_message, {Destination, Headers, Data}}).
+
+
+hand_shake(ApplicationPid) -> gen_server:call({global, ?MODULE}, {hand_shake, ApplicationPid}).
 
 
 

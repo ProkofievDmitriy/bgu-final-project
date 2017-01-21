@@ -13,7 +13,7 @@
 -export([compile_resources/0]).
 
 
--export([start/0, stop/0]).
+-export([start/0, start/1, stop/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 
@@ -41,10 +41,14 @@
 start() ->
         GlobalProperties = read_props(),
         io:format("Globalprops: ~w ...~n", [GlobalProperties]),
+        internal_start([{node_name, local_1}|GlobalProperties]).
 
-        start(GlobalProperties).
+start([NodeName|_Tail]) ->
+        GlobalProperties = read_props(),
+        io:format("Globalprops: ~w ...~n", [GlobalProperties]),
+        internal_start([{node_name, NodeName}|GlobalProperties]).
 
-start(Properties) when is_list(Properties)->
+internal_start(Properties) when is_list(Properties)->
     compile_resources(),
 %    NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
 %    NodeName = proplists:get_value(node_name, NodeProperties),
@@ -67,18 +71,19 @@ init(GlobalProperties) ->
 	group_leader(whereis(user),self()), %this process is a group leader for this node
 
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
-	NodeName = proplists:get_value(node_name, NodeProperties),
+	NodeName = proplists:get_value(node_name, GlobalProperties),
+	?LOGGER:debug("[~p]: Node Name: ~p~n", [?MODULE, NodeName]),
     NodeAddress = get_node_number(NodeName),
 	%extract muchine's parameters (MAC Address, IP Address, Host name & Serial ID number
 	MAC = get_mac(),
 	IP = get_ip(),
-	?LOGGER:debug("Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [NodeName, NodeAddress, IP, MAC]),
+	?LOGGER:debug("[~p]: Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [?MODULE, NodeName, NodeAddress, IP, MAC]),
 
 	%initialize reporting-unit
 	ReportUnitProperties = proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties),
 	ReportUnitPid = ?REPORT_UNIT:start(ReportUnitProperties),
 	ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
-	?LOGGER:debug("Report Unit: ~p started with pid: ~p and monitored by node: ~p.~n", [?REPORT_UNIT, ReportUnitPid ,NodeName]),
+	?LOGGER:debug("[~p]: Report Unit: ~p started with pid: ~p and monitored by node: ~p.~n", [?MODULE, ?REPORT_UNIT, ReportUnitPid ,NodeName]),
 	?REPORT_UNIT:connect_to_data_server(),
 
 	%initialize PROTOCOL
@@ -86,15 +91,16 @@ init(GlobalProperties) ->
 	CurrentProtocol = proplists:get_value(protocol, NodeProperties),
 	Protocol_Pid = ?PROTOCOL:start(CurrentProtocol, ProtocolProperties),
 	Protocol_Monitor_Reference = erlang:monitor(process, Protocol_Pid),
-	?LOGGER:debug("Protocol: ~p started  started with pid: ~p and monitored by node: ~p.~n", [CurrentProtocol, Protocol_Pid, NodeName]),
+	?LOGGER:debug("[~p]: Protocol: ~p started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, CurrentProtocol, Protocol_Pid, NodeName]),
 
     %initialize application
     ApplicationProperties = proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties),
 	Application_Pid = ?APPLICATION:start(ApplicationProperties),
+    ?PROTOCOL:hand_shake(Application_Pid),
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
-	?LOGGER:debug("Application started  started with pid: ~p and monitored by node: ~p.~n", [Application_Pid, NodeName]),
+	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
 
-    ?LOGGER:info("Node: ~p, is up.~n", [NodeName]),
+    ?LOGGER:info("[~p]: Node: ~p, is up.~n", [?MODULE, NodeName]),
 
     {ok, #context{
         node_properties = NodeProperties,
@@ -134,6 +140,7 @@ handle_cast(Request, Context) ->
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:debug("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     Application_Pid = ?APPLICATION:start(Context#context.application_properties),
+    ?PROTOCOL:hand_shake(Application_Pid),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
     NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference},
     {noreply, NewContext};
@@ -185,9 +192,9 @@ read_props() ->
     ].
 
 get_node_number(NodeName)->
-    NodeNameAsList = atom_to_list(NodeName),
-    ?LOGGER:debug("[~p]: get_node_number NodeNameAsList: ~p~n", [?MODULE, NodeNameAsList]),
-    {Address, []} = string:to_integer(cut_list_from_delimiter(NodeNameAsList, 95)), % 95 = "_".
+%    NodeNameAsList = atom_to_list(NodeName),
+    ?LOGGER:debug("[~p]: get_node_number NodeName: ~p~n", [?MODULE, NodeName]),
+    {Address, []} = string:to_integer(cut_list_from_delimiter(NodeName, 95)), % 95 = "_".
     Address.
 
 get_mac() ->
@@ -211,7 +218,7 @@ remove_end_of_line(Result, [H | []]) -> Result++[H];
 remove_end_of_line(Result, [H | Tail]) when Tail =:= "\n" -> Result++[H];
 remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail).
 
-cut_list_from_delimiter([], Delimiter)-> [];
+cut_list_from_delimiter([], _Delimiter)-> [];
 cut_list_from_delimiter([H|Tail], Delimiter)->
     ?LOGGER:preciseDebug("[~p]: cut_list_from_delimiter H: ~p, Tail: ~p, Delimiter: ~p ~n", [?MODULE, H, Tail, Delimiter]),
     case H == Delimiter of

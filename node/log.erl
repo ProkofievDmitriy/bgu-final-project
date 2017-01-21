@@ -11,7 +11,7 @@ print(Level, LevelMessage, Message, Params) ->
     if
         (Level >= ?CURRENT_LOG_LEVEL) and IsValidModule ->
             {Hours, Minutes, Seconds} = erlang:time(),
-            io:format("~p:~p:~p ", [Hours, Minutes, Seconds]),
+%            io:format("~p:~p:~p ", [Hours, Minutes, Seconds]),
             io:format(LevelMessage ++ Message, Params);
         true -> ok
     end.

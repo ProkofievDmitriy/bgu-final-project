@@ -64,9 +64,12 @@ handle_call(Request, From, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({report,{Type, Message}}, Context) ->
+handle_cast({report, {Type, Message}}, Context) ->
     ?LOGGER:debug("[~p]: Handle CAST Request(report), message: ~p, Context: ~w~n", [?MODULE, Message, Context]),
     ReportMessage = prepare_message(Type, Message),
+    ServerModule = Context#context.data_server_name,
+    ServerModule:report(ReportMessage),
+    ?LOGGER:debug("[~p]: Request(report), ServerModule: ~p~n", [?MODULE, ServerModule]),
     {noreply, Context};
 
 
