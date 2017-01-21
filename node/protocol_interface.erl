@@ -25,16 +25,18 @@
 
 start(ProtocolModule, Properties) ->
     ?LOGGER:debug("[~p]: Starting protocol: ~p, with props: ~w~n", [?MODULE, ProtocolModule, Properties]),
-    {ok,PID} = gen_server:start_link({global, ?MODULE }, ProtocolModule, Properties, []),
+    {ok,PID} = gen_server:start_link({local, ?MODULE }, ProtocolModule, Properties, []),
     PID.
 
 stop() ->
     gen_server:call(?MODULE, stop).
 
-send({Destination, Headers, Data})-> gen_server:call({global, ?MODULE}, {data_message, {Destination, Headers, Data}}).
+%send({Destination, Data})-> gen_server:call({local, ?MODULE}, {data_message, {Destination, Data}}).
+send({Destination, Data})-> gen_server:call(?MODULE, {data_message, {Destination, Data}}).
 
 
-hand_shake(ApplicationPid) -> gen_server:call({global, ?MODULE}, {hand_shake, ApplicationPid}).
+hand_shake(ApplicationPid) -> gen_server:call(?MODULE, {hand_shake, ApplicationPid}).
+%hand_shake(ApplicationPid) -> gen_server:call({local, ?MODULE}, {hand_shake, ApplicationPid}).
 
 
 

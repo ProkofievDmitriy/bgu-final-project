@@ -3,6 +3,8 @@
 -define(PLC, 2).
 -define(RF_PLC, 3).
 
+
+
 %Properties atoms
 -define(NODE_PROPERTIES, node_properties).
 -define(LOAD_NG_CORE_PROPERTIES, load_ng_core_properties).

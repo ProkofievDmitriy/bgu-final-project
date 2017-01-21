@@ -32,7 +32,14 @@
 
 
 %%% hy-LOADng PROPERTIES
--define(ADDRESS_LENGTH, 5). % number of bits to store address
+-define(BROADCAST_ADDRESS, 0).
+
+%TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
+-define(ADDRESS_LENGTH, 6). % number of bits to store address
+-define(MESSAGE_TYPE_LENGTH, 4). % number of bits to store address
+-define(SESSION_MANAGEMENT_LENGTH, 8). % number of bits to store address
+-define(MAX_FRAME_LENGTH, 60 * 8). % number of bits to store address
+-define(MAX_DATA_LENGTH, ?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 2 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_TYPE_LENGTH)). % number of bits to store address
 -define(NET_TRAVERSAL_TIME, 2000).
 
 
@@ -55,7 +62,7 @@
 
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
--define(MESSAGE_SEND_INTERVAL, 15000). % 15 seconds interval between messages
+-define(MESSAGE_SEND_INTERVAL, 5000). % 15 seconds interval between messages
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},

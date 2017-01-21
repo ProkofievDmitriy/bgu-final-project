@@ -53,8 +53,8 @@ init([]) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({report, {Message}}, _From, Context) ->
-    io:format("[~p]: STUB Handle CALL Request(report) Message ~p, Context: ~w~n", [?MODULE, Message, Context]),
+handle_call({report, {Message}}, From, Context) ->
+    io:format("[~p]: STUB Handle CALL Request(report) From: ~p, Message ~p, Context: ~w~n", [?MODULE, From, Message, Context]),
     {reply, ok, Context};
 
 handle_call(Request, From, Context) ->

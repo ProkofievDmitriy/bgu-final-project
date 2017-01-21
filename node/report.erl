@@ -29,7 +29,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start(Params) ->
-    {ok,PID} = gen_server:start_link({global, ?MODULE }, ?MODULE, Params, []),
+    {ok,PID} = gen_server:start_link({local, ?MODULE }, ?MODULE, Params, []),
     PID.
 
 stop() ->
@@ -40,8 +40,8 @@ stop() ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-report(Type, Message)-> gen_server:cast({global, ?MODULE}, {report, {Type, Message}}).
-connect_to_data_server() -> gen_server:cast({global, ?MODULE}, connect_to_data_server).
+report(Type, Message)-> gen_server:cast(?MODULE, {report, {Type, Message}}).
+connect_to_data_server() -> gen_server:cast(?MODULE, connect_to_data_server).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -45,13 +45,15 @@ smart_meter_loop(SendInterval) ->
     receive
         stop ->
 		    ?LOGGER:info("[~p]: Received stop message. Exiting ... ~n", [?MODULE]),
-            normal
+            normal;
+         Message ->
+            ?LOGGER:info("[~p]: Received message: ~p  ~n", [?MODULE, Message]),
+            ok
         after ?MESSAGE_SEND_INTERVAL ->
-            Destination = "1",
-            Data = " some message",
-            Headers = [],
-            ?LOGGER:info("[~p]: Sending Message ~p~n" ,[?MODULE, {Destination, Headers, Data}]),
-            Result = ?PROTOCOL:send({Destination, Headers, Data}),
+            Destination = 1,
+            Data = "some message",
+            ?LOGGER:info("[~p]: Sending Message ~p~n" ,[?MODULE, {Destination, Data}]),
+            Result = ?PROTOCOL:send({Destination, Data}),
             case Result of
                     {error, Message} ->
             		    ?LOGGER:debug("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);

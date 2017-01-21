@@ -79,9 +79,9 @@ init(Properties) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({data_message, {Destination, Headers, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p, ~p}, Context: ~w~n", [?MODULE, Destination, Headers, Data, Context]),
-    Result = ?LOAD_NG_CORE:send(Context#context.load_ng_core_pid, {Destination, Headers, Data}),
+handle_call({data_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p}, Context: ~w~n", [?MODULE, Destination, Data, Context]),
+    Result = ?LOAD_NG_CORE:send(Context#context.load_ng_core_pid, {Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 

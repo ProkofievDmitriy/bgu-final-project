@@ -40,7 +40,7 @@ enable(FsmPid)->
     gen_fsm:send_event(FsmPid, enable).
 %Managing events
 send(FsmPid, {Hop, Payload})->
-    gen_fsm:send_event(FsmPid, {send, {Hop, Payload}}).
+    gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}).
 
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
@@ -96,14 +96,16 @@ dual(disable_rf, _From, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - Event(disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, plc_only, StateData};
 
-dual({send, {Medium, Payload}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(send) to medium ~p, StateData: ~w~n", [?MODULE, Medium, StateData]),
+dual({send, {Hop, Data}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: DUAL - Event(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    {Medium, NextHopAddress} = Hop,
+    Payload = preparePayload(NextHopAddress, Data),
     ?MODEM_PORT:send(Medium, Payload),
-	{reply, ok, double, StateData};
+	{reply, ok, dual, StateData};
 
 dual({received_message, Message}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - Event(received_message), Message :  ~p, StateData: ~w~n", [?MODULE, Message, StateData]),
-    {reply, ok, double, StateData}.
+    {reply, ok, dual, StateData}.
 
 
 
@@ -128,12 +130,11 @@ plc_only(enable, _From, StateData) ->
 plc_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(Medium, NextHopAddress, Data),
-    case Medium == ?PLC of
-        true ->
+    Payload = preparePayload(NextHopAddress, Data),
+    if Medium == ?PLC ->
             ?MODEM_PORT:send(Medium, Payload),
 	        {reply, ok, plc_only, StateData};
-	    _ ->
+	    true ->
 	        {reply, {error, not_active_medium}, plc_only, StateData}
 	 end;
 
@@ -159,14 +160,15 @@ rf_only(enable, _From, StateData) ->
     ?LOGGER:debug("[~p]: RF_ONLY - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
     {reply, ok, dual, StateData};
 
-rf_only({send, {Medium, Payload}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Medium, StateData]),
-    case Medium == ?RF of
-        true ->
+rf_only({send, {Hop, Data}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: RF_ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    {Medium, NextHopAddress} = Hop,
+    Payload = preparePayload(NextHopAddress, Data),
+    if Medium == ?RF ->
             ?MODEM_PORT:send(Medium, Payload),
-	        {reply, ok, rf_only, StateData};
-	    _ ->
-	        {reply, {error, not_active_medium}, rf_only, StateData}
+	        {reply, ok, plc_only, StateData};
+	    true ->
+	        {reply, {error, not_active_medium}, plc_only, StateData}
 	 end;
 
 rf_only({received_message, Message}, _From, StateData) ->
@@ -217,5 +219,13 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ============================================================================================
 %% ======================================== UTILS =============================================
 %% ============================================================================================
-preparePayload(Medium, Address, Data)->
-ok.
+preparePayload(Address, Data)->
+    BinaryNextHopAddress = <<Address:?ADDRESS_LENGTH>>,
+    Payload = <<BinaryNextHopAddress/bitstring, Data/bitstring>>,
+    if (bit_size(Payload) =< ?MAX_FRAME_LENGTH) ->
+            ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
+            Payload;
+        true ->
+            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: byte_size : ~p, bit_size: ~p ~n", [?MODULE, byte_size(Payload), bit_size(Payload)]),
+            {error, "Binary Data Length exceeded"}
+    end.

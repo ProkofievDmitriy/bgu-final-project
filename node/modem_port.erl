@@ -38,13 +38,26 @@
 
 %start the supervised modem port module.
 start(DataLinkFsmPid) ->
+        ?LOGGER:debug("[~p]: start, DataLinkFsmPid: ~p~n", [?MODULE, DataLinkFsmPid]),
 		Caller_PID = self(),
         P = spawn(fun()-> init_supervisor(Caller_PID, 0, DataLinkFsmPid) end),
 		register(?SUPERVISOR, P),
 		P.
 
 %stop the running of the port, which will end the supervisor
-stop() ->
+
+stop()->
+    try
+        stop_internal()
+    of
+        Result -> Result
+    catch
+        _:Reason -> ?LOGGER:err("[~p]: stop failed : ~p~n",[?MODULE, Reason])
+    end.
+
+
+stop_internal() ->
+	?LOGGER:debug("[~p]: stop~n", [?MODULE]),
     ?SUPERVISOR ! stop.
 
 
@@ -52,6 +65,7 @@ stop() ->
 %send Packet via channel Channel, with payload Payload.
 % Channel : 1 - RF , 2 - PLC , 3 RF + PLC 
 send(Channel, Payload) ->
+	?LOGGER:debug("[~p]: send: channel: ~p, payload ~p ~n", [?MODULE, Channel, Payload]),
 		MSG = [Channel] ++ [0] ++ Payload,
     call_port(MSG).
 %main use. user wants to sent a packet (list of bytes - integer of range [0,255])   
@@ -116,7 +130,16 @@ init_supervisor( Caller_PID, Port_crash, DataLinkFsmPid) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%		PROGRAM			%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-call_port(Msg) ->
+call_port(Message)->
+    try
+        call_port_internal(Message)
+     of
+        Result -> Result
+    catch
+        _:Reason -> ?LOGGER:err("[~p]: call port failed : ~p~n",[?MODULE, Reason])
+    end.
+
+call_port_internal(Msg) ->
   ?MODEM_PORT ! {call , Msg}.
 	
 %initiate modem_port. register it's name, compile c port's program, config pins of controller, open port to c program, and call for loop function
@@ -125,7 +148,8 @@ init(Super_PID, DataLinkFsmPid) ->
     ?LOGGER:debug("[~p]: start init ~p~n", [?MODULE, P]),
     register(?MODEM_PORT, P),
     compile_c_port(),
-    os:cmd("./scripts/uart_config.sh"),
+    UartConfigResult = os:cmd("./scripts/uart_config.sh"),
+    ?LOGGER:debug("[~p]: UartConfigResult: ~p~n", [?MODULE, UartConfigResult]),
     process_flag(trap_exit, true),
     PRG = "./" ++ ?PROGRAM_NAME,
     ?LOGGER:debug("[~p]: start port:  ~p~n", [?MODULE, PRG]),
@@ -150,13 +174,16 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 	%Caller wants to send Packet to c port
 	{call, Msg} ->
 			MSG = preper_msg(Msg),
-			if is_list(MSG) -> sendMsg(Port, MSG); true -> ?LOGGER:debug("[~p]: error prepering msg ~p~n", [?MODULE, MSG]),dont_send end,
+			if is_list(MSG) ->
+			    sendMsg(Port, MSG);
+			    true -> ?LOGGER:err("[~p]: error prepering msg ~p~n", [?MODULE, MSG]),dont_send end,
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
 			%loop(Port, OS_PID, Super_PID, Port_Errors + Error);
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
 			
 	%c port sent data
-	{_Port2, {data, Data}} ->		
+	{_Port2, {data, Data}} ->
+			?LOGGER:debug("[~p]: Received data from port: Data ~p~n", [?MODULE, Data]),
 			Ans = exemine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized
@@ -169,7 +196,8 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 			
 	%Something want to stop erlang's port run
 	{stop, Reason} ->
-			P = self(),
+        ?LOGGER:debug("[~p]: Received stop : Reason: ~p~n", [?MODULE, Reason]),
+        P = self(),
 	    Port ! {P, close},
 	    close_c_port_program(OS_PID),
 	    receive
@@ -253,19 +281,24 @@ close_c_port_program(OS_PID)->
 sendMsg(Port, MSG) ->
 	[H|T] = MSG,
 	backoff(H),
-	?LOGGER:debug("[~p]: \tMSG is:~p~n~n", [?MODULE, MSG]),
-	
+	?LOGGER:debug("[~p]: sendMsg: MSG is: ~p~n", [?MODULE, MSG]),
 	sendByte(Port, H, ?START_BYTE),
 	sendMSG2(Port, T).
-sendMSG2(Port, [H|T]) when T =:= [] -> 
+
+
+sendMSG2(Port, [H|[]]) ->
 	sendByte(Port, H, ?END_BYTE);
+
+
 sendMSG2(Port, [H|T]) -> 
 	sendByte(Port, H, ?REG_BYTE),
 	sendMSG2(Port, T).
 
 %this function get a port to send data to, a byte of info and it's header. it send the minipacket ([Header, Date_byte]) to the port.
-sendByte(Port, Byte, Type) -> P=self(), 
-	Port ! {P, {command, [Type,Byte]}}, sent.
+sendByte(Port, Byte, Type) -> P=self(),
+ 	?LOGGER:debug("[~p]: sendByte: Byte: ~p~n", [?MODULE, Byte]),
+	Port ! {P, {command, [Type,Byte]}},
+	sent.
 
 
 close_all_port_processes([],_) -> done;
@@ -281,25 +314,65 @@ crc_to_list(N) ->
 	binary:bin_to_list(binary:encode_unsigned(N)).
 
 preper_msg([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
-preper_msg([Channel, _ | Rest]) -> Size = lists:flatlength(Rest), 
-	case Size of
-		S1 when S1 =< 14 -> X = 20 - Size - 4 - 2, if X > 0 -> PAD = lists:seq(1,X); true -> PAD = [] end ,
-						    L = Rest ++ PAD, CRC = erlang:crc32(L), LCRC = crc_to_list(CRC), 
-						    ?LOGGER:debug("[~p]: LCRC is:~p~n,", [?MODULE, LCRC]),
-							[Channel] ++ [0] ++ L ++ LCRC;
-		S2 when S2 =< 34 -> X = 40 - Size - 4 - 2, if X > 0 -> PAD = lists:seq(1,X); true -> PAD = [] end ,
-						    L = Rest ++ PAD, CRC = erlang:crc32(L), LCRC = crc_to_list(CRC), 
-							[Channel] ++ [0] ++ L ++ LCRC;
-		S2 when S2 =< 60 -> X = 20 - Size - 4 - 2, if X > 0 -> PAD = lists:seq(1,X); true -> PAD = [] end ,
-						    L = Rest ++ PAD, CRC = erlang:crc32(L), LCRC = crc_to_list(CRC), 
-							[Channel] ++ [0] ++ L ++ LCRC;
+preper_msg([Channel, _ | Rest]) ->
+%    Size = lists:flatlength(bin_to_list(Rest)),
+    Size = byte_size(Rest),
+	Result = case Size of
+		S1 when S1 =< 14 ->
+		    X = 20 - Size - 4 - 2,
+            if X > 0 ->
+                PAD = lists:seq(1,X);
+                true -> PAD = []
+            end,
+            L = pad_list(Rest, PAD),
+            CRC = erlang:crc32(L),
+            BinaryCRC = <<CRC:32>>,
+%            LCRC = crc_to_list(CRC),
+            ?LOGGER:debug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
+            BinaryChannel = <<Channel:8>>,
+            BinaryZero = <<0:8>>,
+            <<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>;
+		S2 when S2 =< 34 ->
+		    X = 40 - Size - 4 - 2,
+		    if X > 0 ->
+		        PAD = lists:seq(1,X);
+		        true -> PAD = []
+            end ,
+            L = Rest ++ PAD,
+            CRC = erlang:crc32(L),
+            LCRC = crc_to_list(CRC),
+            [Channel] ++ [0] ++ L ++ LCRC;
+		S2 when S2 =< 60 ->
+		    X = 20 - Size - 4 - 2,
+		    if X > 0 ->
+		        PAD = lists:seq(1,X);
+		        true -> PAD = []
+            end,
+            L = Rest ++ PAD,
+            CRC = erlang:crc32(L),
+            LCRC = crc_to_list(CRC),
+            [Channel] ++ [0] ++ L ++ LCRC;
 		_ -> too_large
-	end.
+	end,
+	?LOGGER:debug("[~p]: preper_msg: Result: ~p~n", [?MODULE, Result]),
+	binary:bin_to_list(Result).
+
+
+pad_list(DestinationBinary, List) ->
+	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~p, List: ~p ~n", [?MODULE, DestinationBinary, List]),
+    F = fun(Num, Acc) ->
+%	    ?LOGGER:debug("[~p]: fun in pad list: Acc: ~p, B: ~p ~n", [?MODULE, Acc, Num]),
+	    BinNum = <<Num:8>>,
+        <<Acc/bitstring, BinNum/binary>>
+    end,
+    lists:foldr(F, DestinationBinary, List).
+
+
 
 
 backoff(Channel)  when Channel =:=1 ->
 	Wait = random:uniform(?BACKOFF_TIME),
-	?LOGGER:debug("[~p]: ~nbackoff - (~p)", [?MODULE, Wait]),
+	?LOGGER:debug("[~p]: backoff - (~p)", [?MODULE, Wait]),
 	receive after Wait -> ready end;
 backoff(Channel) ->
     ?LOGGER:debug("[~p]: BACKOFF on channel ~p~n", [?MODULE, Channel]),

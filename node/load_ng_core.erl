@@ -32,9 +32,9 @@ stop(Ref)->
 updateBottomLevelPid(FsmPid, BottomLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevelPid, BottomLevelPid}).
 
-send(FsmPid, {Destination, Headers, Data})->
+send(FsmPid, {Destination, Data})->
     %default sync event timeout 5000ms
-    gen_fsm:sync_send_event(FsmPid, {send_message, {Destination, Headers, Data}}).
+    gen_fsm:sync_send_event(FsmPid, {send_message, {Destination, Data}}).
 
 
 enable(FsmPid)->
@@ -42,6 +42,10 @@ enable(FsmPid)->
 
 disable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, disable).
+
+
+handle_message(FsmPid, MessageType, Message)->
+    gen_fsm:send_event(FsmPid, {MessageType, Message}).
 
 
 %% ====================================================================
@@ -92,17 +96,22 @@ active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
 
-active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) in idle state, Message: {~p, ~p, ~p},  StateData: ~w~n", [?MODULE, Destination, Headers, Data, StateData]),
+active({send_message, {Destination, Data}}, _From, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) in idle state, Message: {~p, ~p},  StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
-        {error, Message} ->
-            {reply, {error, Message}, active, StateData};
+        {error, ErrorMessage} ->
+            {reply, {error, ErrorMessage}, active, StateData};
         Hop ->
-            Payload = prepare_payload(Destination, Headers, Data),
-            ?DATA_LINK:send(StateData#state.bottom_level_pid, {Hop, {Payload}}),
-            report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
-            {reply, sent, active, StateData}
+            Payload = prepare_payload(Destination, ?DATA, Data),
+            case Payload of
+                {error, ErrorMessage} ->
+                   {reply, {error, ErrorMessage}, active, StateData};
+                _ ->
+                    Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {Hop, Payload}),
+                    report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
+                    {reply, Result, active, StateData}
+            end
     end.
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
@@ -110,22 +119,28 @@ active({send_message, {Destination, Headers, Data}}, _From, StateData) ->
 
 
 active({generate_rreq, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for ~p.~n", [?MODULE, Destination]),
-
-    Payload = {Destination, [] , {?RREQ}},
-    report_management_message(StateData#state.reporting_unit, Payload),
-
-    {next_state, active, StateData};
+    ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for Destination ~p.~n", [?MODULE, Destination]),
+    Payload = prepare_payload(Destination, ?RREQ, []),
+    case Payload of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: ACTIVE - Generating RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
+            %TODO handle error on a-synch events
+           {next_state, active, StateData};
+        _ ->
+            ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
+            report_management_message(StateData#state.reporting_unit, Payload),
+            {next_state, active, StateData}
+    end;
 
 active({generate_rrep, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RREP for ~p.~n", [?MODULE, Destination]),
-    Payload = {Destination, [] , {?RREP}},
+    Payload = prepare_payload(Destination, ?RREP, []),
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
 
 active({generate_rerr, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RRER for ~p.~n", [?MODULE, Destination]),
-    Payload = {Destination, [] , {?RERR}},
+    Payload = prepare_payload(Destination, ?RERR, []),
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
 
@@ -141,6 +156,10 @@ active({rrep_received, Message}, StateData) ->
 
 active({rerr_received, Message}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
+    {next_state, active, StateData};
+
+active({data_message_received, Message}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - DATA RECEIVED : ~p.~n", [?MODULE, Message]),
     {next_state, active, StateData}.
 
 %% ============================================================================================
@@ -204,7 +223,7 @@ get_next_hop(Destination, State)->
                 end
             end;
         Error ->
-            ?LOGGER:err("[~p]: get_next_hop UNEXPECTED RESULTS: ~p.~n", [?MODULE, NextHop]),
+            ?LOGGER:err("[~p]: get_next_hop UNEXPECTED RESULTS: ~p.~n", [?MODULE, Error]),
             Error
     end,
     ?LOGGER:debug("[~p]: get_next_hop Result: ~p.~n", [?MODULE, Result]),
@@ -212,10 +231,24 @@ get_next_hop(Destination, State)->
 
 
 
-prepare_payload(Destination, Headers, Data)->
-    Payload = [Destination] ++ Headers ++ [Data],
-    ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
-    Payload.
+prepare_payload(Destination, MessageType, Data)->
+    %TODO Remove Headers - meaningless
+    BinaryDestination = <<Destination:?ADDRESS_LENGTH>>,
+    BinaryMessageType = <<MessageType:?MESSAGE_TYPE_LENGTH>>,
+    BinaryData = list_to_binary(Data),
+    BinaryDataLengthInBits = bit_size(BinaryData),
+    ?LOGGER:debug("[~p]: prepare_payload BinaryDestination: ~p , BinaryMessageType: ~p, BinaryData: ~p, BinaryDataLengthInBits: ~p.~n", [?MODULE, BinaryDestination, BinaryMessageType, BinaryData ,BinaryDataLengthInBits]),
+    if (BinaryDataLengthInBits =< ?MAX_DATA_LENGTH) ->
+            Payload = <<BinaryDestination/bitstring, BinaryMessageType/bitstring, BinaryData/bitstring>>,
+            ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
+            Payload;
+        true ->
+            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: bit_size: ~p ~n", [?MODULE, BinaryDataLengthInBits]),
+            {error, "Binary Data Length exceeded"}
+    end.
+
+
+
 
 %----------------------------------------------------------------------------
 % DATA QUERIES
