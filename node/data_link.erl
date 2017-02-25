@@ -45,8 +45,10 @@ send(FsmPid, {Hop, Payload})->
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
-handle_incoming_message(FsmPid, Message)->
-    gen_fsm:send_event(FsmPid, {received_message, Message}).
+handle_incoming_message(FsmPid, Packet)->
+    <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
+    ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
+    gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
 
 
@@ -107,11 +109,9 @@ dual({send, {Hop, Data}}, _From, StateData) ->
 
 
 % Async dual events
-dual({received_message, Packet}, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Packet : ~w~n", [?MODULE, Packet]),
-    <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet),
-    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
-    ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Data),
+dual({received_message, {Medium, Target, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+    handle_message(Target, StateData, Data),
     {next_state, dual, StateData}.
 
 
@@ -143,11 +143,17 @@ plc_only({send, {Hop, Data}}, _From, StateData) ->
 	        {reply, ok, plc_only, StateData};
 	    true ->
 	        {reply, {error, not_active_medium}, plc_only, StateData}
-	 end;
+	 end.
 
-plc_only({received_message, Message}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message), Message :  ~p, StateData: ~w~n", [?MODULE, Message, StateData]),
-    {reply, ok, double, StateData}.
+plc_only({received_message, {Medium, Target, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+    case Medium of
+        ?PLC ->
+            handle_message(Target, StateData, Data);
+        _Else ->
+            ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
+    end,
+    {next_state, plc_only, StateData}.
 
 
 %% =========================================== RF ONLY =========================================
@@ -176,11 +182,17 @@ rf_only({send, {Hop, Data}}, _From, StateData) ->
 	        {reply, ok, plc_only, StateData};
 	    true ->
 	        {reply, {error, not_active_medium}, plc_only, StateData}
-	 end;
+	 end.
 
-rf_only({received_message, Message}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message), Message :  ~p, StateData: ~w~n", [?MODULE, Message, StateData]),
-    {reply, ok, rf_only, StateData}.
+rf_only({received_message, {Medium, Target, Data}}, StateData) ->
+     ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+     case Medium of
+         ?PLC ->
+             handle_message(Target, StateData, Data);
+         _Else ->
+             ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
+     end,
+     {next_state, rf_only, StateData}.
 
 %% ============================================================================================
 %% ============================== Sync Event Handling =========================================
@@ -235,4 +247,23 @@ preparePayload(Address, Data)->
         true ->
             ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: byte_size : ~p, bit_size: ~p ~n", [?MODULE, byte_size(Payload), bit_size(Payload)]),
             {error, "Binary Data Length exceeded"}
+    end.
+
+isValidTarget(Target, SelfAddress)->
+     case Target of
+        SelfAddress ->
+            true;
+        ?BROADCAST_ADDRESS ->
+            true;
+        _Else ->
+            false
+         end.
+
+handle_message(Target, StateData, Data)->
+    case isValidTarget(Target, StateData#state.self_address) of
+        true ->
+            ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to network layer~n", [?MODULE]),
+            ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Data);
+        Else ->
+            ?LOGGER:debug("[~p]: handle_message : target is NOT valid - IGNORING incoming message ~n", [?MODULE])
     end.
