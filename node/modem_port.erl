@@ -224,9 +224,9 @@ exemine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel
 exemine_data( [Channel, RSSI | Rest]) -> 
 	{LCRC, L_NO_CRC} = extract_crc(Rest),
 	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
-	?LOGGER:debug("[~p]: CRC is:~p~n", [?MODULE, CRC]),
+	?LOGGER:preciseDebug("[~p]: CRC is:~p~n", [?MODULE, CRC]),
 	CRC2 = erlang:crc32(L_NO_CRC),
-	?LOGGER:debug("[~p]: CRC2 is:~p. L_NO_CRC is:~p~n", [?MODULE, CRC2, L_NO_CRC]),
+	?LOGGER:preciseDebug("[~p]: CRC2 is:~p. L_NO_CRC is:~p~n", [?MODULE, CRC2, L_NO_CRC]),
 	case CRC2  of
 		CRC -> [Channel] ++ [RSSI] ++ L_NO_CRC;
 		_Else ->   crc_error
@@ -297,7 +297,7 @@ sendMSG2(Port, [H|T]) ->
 
 %this function get a port to send data to, a byte of info and it's header. it send the minipacket ([Header, Date_byte]) to the port.
 sendByte(Port, Byte, Type) -> P=self(),
- 	?LOGGER:debug("[~p]: sendByte: Byte: ~p~n", [?MODULE, Byte]),
+ 	?LOGGER:preciseDebug("[~p]: sendByte: Byte: ~p~n", [?MODULE, Byte]),
 	Port ! {P, {command, [Type,Byte]}},
 	sent.
 
@@ -330,7 +330,7 @@ prepare_payload([Channel, _ | Rest]) ->
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
 %            LCRC = crc_to_list(CRC),
-            ?LOGGER:debug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
+            ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
             <<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>;
 		S2 when S2 =< 34 ->

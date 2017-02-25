@@ -7,7 +7,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
--export([idle/3, dual/3, plc_only/3, rf_only/3]).
+-export([idle/3, dual/3, dual/2, plc_only/3, rf_only/3]).
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -61,7 +61,9 @@ handle_incoming_message(FsmPid, Message)->
 init(Properties) ->
     ?LOGGER:info("[~p]: Starting FSM with params: ~p.~n", [?MODULE, Properties]),
     SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
-    {ok, dual, #state{
+    StartState = proplists:get_value(default_state, Properties),
+
+    {ok, StartState, #state{
         self_address = SelfAddress
     }}.
 
@@ -101,11 +103,16 @@ dual({send, {Hop, Data}}, _From, StateData) ->
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     ?MODEM_PORT:send(Medium, Payload),
-	{reply, ok, dual, StateData};
+	{reply, ok, dual, StateData}.
 
-dual({received_message, Message}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Message :  ~p, StateData: ~w~n", [?MODULE, Message, StateData]),
-    {reply, ok, dual, StateData}.
+
+% Async dual events
+dual({received_message, Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Packet : ~w~n", [?MODULE, Packet]),
+    <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet),
+    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
+    ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Data),
+    {next_state, dual, StateData}.
 
 
 

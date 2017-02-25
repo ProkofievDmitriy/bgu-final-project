@@ -49,7 +49,7 @@
                                  {net_traversal_time, ?NET_TRAVERSAL_TIME},
                                  {reporting_unit, ?REPORT_UNIT}
                                 ]).
--define(DATA_LINK_PROPS_LIST, []).
+-define(DATA_LINK_PROPS_LIST, [{default_state, plc_only}]).
 -define(TRANSPORT_PROPS_LIST, [{default_state, disable}]).
 
 -define(PROTOCOL_PROPS_LIST, [{?NETWORK_PROPERTIES, ?NETWORK_PROP_LIST},
@@ -59,8 +59,8 @@
 
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_name,stub_data_server},
-%                                 {data_server_ip, "192.168.14.98"}
-                                 {data_server_ip, "127.0.0.1"}
+                                 {data_server_ip, "192.168.14.6"}
+%                                 {data_server_ip, "127.0.0.1"}
                                 ]).
 
 
@@ -70,5 +70,6 @@
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},
-                         {role, smart_meter}
+%                         {role, smart_meter}
+                         {role, data_concentration_server}
                         ]).

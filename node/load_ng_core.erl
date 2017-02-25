@@ -8,7 +8,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1]).
+-export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -47,8 +47,9 @@ disable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, disable).
 
 
-handle_message(FsmPid, MessageType, Message)->
-    gen_fsm:send_event(FsmPid, {MessageType, Message}).
+handle_incoming_message(FsmPid, BinaryData)->
+    <<Type:?MESSAGE_TYPE_LENGTH, Destination:?ADDRESS_LENGTH, Data/bitstring>> = BinaryData,
+    gen_fsm:send_event(FsmPid, {received_message, {Type, Destination, Data}}).
 
 
 %% ====================================================================
@@ -150,22 +151,25 @@ active({generate_rerr, Destination}, StateData) ->
     {next_state, active, StateData};
 
 
+
+
 % Receive Messages Handlers
-active({rreq_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : ~p.~n", [?MODULE, Message]),
+active({received_message, {?DATA, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - DATA {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData};
 
-active({rrep_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : ~p.~n", [?MODULE, Message]),
+active({received_message, {?RREQ, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData};
 
-active({rerr_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : ~p.~n", [?MODULE, Message]),
+active({received_message, {?RREP, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData};
 
-active({data_message_received, Message}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DATA RECEIVED : ~p.~n", [?MODULE, Message]),
+active({received_message, {?RERR, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData}.
+
 
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
@@ -251,7 +255,7 @@ prepare_payload(Destination, MessageType, Data)->
     BinaryDataLengthInBits = bit_size(BinaryData),
     ?LOGGER:debug("[~p]: prepare_payload BinaryDestination: ~p , BinaryMessageType: ~p, BinaryData: ~p, BinaryDataLengthInBits: ~p.~n", [?MODULE, BinaryDestination, BinaryMessageType, BinaryData ,BinaryDataLengthInBits]),
     if (BinaryDataLengthInBits =< ?MAX_DATA_LENGTH) ->
-            Payload = <<BinaryDestination/bitstring, BinaryMessageType/bitstring, BinaryData/bitstring>>,
+            Payload = <<BinaryMessageType/bitstring, BinaryDestination/bitstring, BinaryData/bitstring>>,
             ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
         true ->
