@@ -14,7 +14,17 @@
 %states export
 -export([active/3, active/2, idle/3]).
 
--record(state, {routing_set,rreq_handling_set, self_address, address_length, bottom_level_pid, upper_level_pid, net_traversal_time, reporting_unit}).
+-record(state, {routing_set,
+                rreq_handling_set,
+                self_address,
+                address_length,
+                bottom_level_pid,
+                upper_level_pid,
+                net_traversal_time,
+                reporting_unit,
+                rreq_seq_number
+                }).
+
 -record(load_ng_message, {medium, type, source, destination, tlv, payload}).
 -record(routing_set_entry, {medium, destination, next_hop, link_cost, last_used}).
 -record(rreq_handling_set_entry, {rreq_id, destination, created_time}).
@@ -84,7 +94,8 @@ init(Properties) ->
         net_traversal_time = NetTraversalTime,
         address_length = AddressLength,
         reporting_unit = ReportingUnit,
-        self_address = SelfAddress
+        self_address = SelfAddress,
+        rreq_seq_number = 0
     }}.
 
 %% ============================================================================================
@@ -126,7 +137,7 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
 
 active({generate_rreq, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for Destination ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(Destination, ?RREQ, []),
+    Payload = prepare_payload(Destination, ?RREQ, [StateData#state.rreq_seq_number, StateData#state.self_address]),
     case Payload of
         {error, ErrorMessage} ->
             ?LOGGER:err("[~p]: ACTIVE - Generating RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
@@ -134,8 +145,10 @@ active({generate_rreq, Destination}, StateData) ->
            {next_state, active, StateData};
         _ ->
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
+            update_rreq_handling_set(StateData#state.rreq_handling_set, {StateData#state.rreq_seq_number, StateData#state.self_address}),
             report_management_message(StateData#state.reporting_unit, Payload),
-            {next_state, active, StateData}
+            NewState = StateData#state{rreq_seq_number = StateData#state.rreq_seq_number + 1}, % increase RREQ Sequence number
+            {next_state, active, NewState}
     end;
 
 active({generate_rrep, Destination}, StateData) ->
@@ -288,7 +301,7 @@ query_find_next_hop(Destination, RoutingSetId)->
     end,
     Result.
 
-update_rreq_handling_set(RREQ_HandlingSet_Id, RREQ_Message)->
+update_rreq_handling_set(RREQ_HandlingSet_Id, RREQ_Message_Metadata)->
 
 
 
