@@ -56,11 +56,11 @@ smart_meter_loop(SendInterval) ->
             Result = ?PROTOCOL:send({Destination, Data}),
             case Result of
                     {error, Message} ->
-            		    ?LOGGER:debug("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);
+            		    ?LOGGER:info("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);
                     sent ->
-            		    ?LOGGER:debug("[~p]: Message successfully sent!!!~n" ,[?MODULE]);
+            		    ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE]);
                     SomeResult ->
-            		    ?LOGGER:debug("[~p]: Some unexpected result received: ~p~n" ,[?MODULE, SomeResult])
+            		    ?LOGGER:info("[~p]: Some unexpected result received: ~p~n" ,[?MODULE, SomeResult])
             end,
             smart_meter_loop(SendInterval)
     end.

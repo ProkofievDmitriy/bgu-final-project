@@ -99,7 +99,7 @@ dual(disable_rf, _From, StateData) ->
 dual({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - Event(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data),
+    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     ?MODEM_PORT:send(Medium, Payload),
 	{reply, ok, dual, StateData};
 
@@ -130,7 +130,7 @@ plc_only(enable, _From, StateData) ->
 plc_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data),
+    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     if Medium == ?PLC ->
             ?MODEM_PORT:send(Medium, Payload),
 	        {reply, ok, plc_only, StateData};
@@ -163,7 +163,7 @@ rf_only(enable, _From, StateData) ->
 rf_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: RF_ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data),
+    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     if Medium == ?RF ->
             ?MODEM_PORT:send(Medium, Payload),
 	        {reply, ok, plc_only, StateData};

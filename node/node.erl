@@ -103,6 +103,10 @@ init(GlobalProperties) ->
 
     ?LOGGER:info("[~p]: Node: ~p, is up.~n", [?MODULE, NodeName]),
 
+    %TODO : Remove in production
+    loadTestData(),
+
+
     {ok, #context{
         node_properties = NodeProperties,
         node_name = NodeName,
@@ -240,3 +244,6 @@ compile_resources() ->
     end.
 
 
+loadTestData()->
+
+ok.

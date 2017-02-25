@@ -1,6 +1,6 @@
 -module(modem_port).
 -export([start/1, stop/0, init/2]).
--export([send/2, send/1, check/0, loop_send/3, extract_crc/1, preper_msg/1, exemine_data/1]).
+-export([send/2, send/1, check/0, loop_send/3, extract_crc/1, prepare_payload/1, exemine_data/1]).
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 
@@ -173,10 +173,10 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
     receive
 	%Caller wants to send Packet to c port
 	{call, Msg} ->
-			MSG = preper_msg(Msg),
+			MSG = prepare_payload(Msg), % MSG = <<Channel:8, Rest/bitstring>>
 			if is_list(MSG) ->
 			    sendMsg(Port, MSG);
-			    true -> ?LOGGER:err("[~p]: error prepering msg ~p~n", [?MODULE, MSG]),dont_send end,
+			    true -> ?LOGGER:err("[~p]: error on message prepare : ~p~n", [?MODULE, MSG]),dont_send end,
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
 			%loop(Port, OS_PID, Super_PID, Port_Errors + Error);
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
@@ -238,12 +238,13 @@ exemine_data2(L) -> X = length(L),
 		channel_error -> channel_error;
 		crc_error->
 			if X>20 ->
-			L1 = lists:sublist(L, 1, 20),
-			L2 = lists:sublist(L,21,X),
-			Self = self(),
-			Self!{port,{data, L1}}, Self!{port,{data,L2}},
-			crc_error_try_split;
-			true -> crc_error
+			    L1 = lists:sublist(L, 1, 20),
+			    L2 = lists:sublist(L,21,X),
+			    Self = self(),
+			    Self!{port,{data, L1}}, Self!{port,{data,L2}},
+			    crc_error_try_split;
+			true ->
+			    crc_error
 			end;
 		_List -> Ans
 	end.
@@ -313,10 +314,11 @@ close_all_port_processes([H|T] , L2) ->
 crc_to_list(N) ->
 	binary:bin_to_list(binary:encode_unsigned(N)).
 
-preper_msg([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
-preper_msg([Channel, _ | Rest]) ->
+prepare_payload([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
+prepare_payload([Channel, _ | Rest]) ->
 %    Size = lists:flatlength(bin_to_list(Rest)),
     Size = byte_size(Rest),
+    BinaryZero = <<0:8>>,
 	Result = case Size of
 		S1 when S1 =< 14 ->
 		    X = 20 - Size - 4 - 2,
@@ -330,7 +332,6 @@ preper_msg([Channel, _ | Rest]) ->
 %            LCRC = crc_to_list(CRC),
             ?LOGGER:debug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
-            BinaryZero = <<0:8>>,
             <<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>;
 		S2 when S2 =< 34 ->
 		    X = 40 - Size - 4 - 2,
@@ -354,7 +355,7 @@ preper_msg([Channel, _ | Rest]) ->
             [Channel] ++ [0] ++ L ++ LCRC;
 		_ -> too_large
 	end,
-	?LOGGER:debug("[~p]: preper_msg: Result: ~p~n", [?MODULE, Result]),
+	?LOGGER:debug("[~p]: prepare_payload: Result: ~p~n", [?MODULE, Result]),
 	binary:bin_to_list(Result).
 
 

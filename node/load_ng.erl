@@ -24,11 +24,14 @@
                   data_link_pid,
                   data_link_monitor_ref,
                   data_link_properties,
-                  load_ng_core_pid,
-                  load_ng_core_monitor_ref,
-                  load_ng_core_properties,
+                  network_pid,
+                  network_monitor_ref,
+                  network_properties,
                   modem_port_monitor_ref,
                   modem_port_properties,
+                  transport_pid,
+                  transport_monitor_ref,
+                  transport_properties,
                   application_pid
                 }).
 
@@ -53,13 +56,20 @@ init(Properties) ->
 	?LOGGER:debug("[~p]: Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODULE, ?MODEM_PORT, ModemPortPid, ?MODULE]),
 
 
-	%initialize LOAD_NG_CORE
-	LoadNgCoreProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?LOAD_NG_CORE_PROPERTIES, Properties)],
-	LoadNgCorePid = ?LOAD_NG_CORE:start(LoadNgCoreProperties),
-	LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
-	?LOGGER:info("[~p]: LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?LOAD_NG_CORE, LoadNgCorePid, ?MODULE]),
+	%initialize NETWORK
+	NetworkProperties = [{?SELF_ADDRESS, SelfAddress} | proplists:get_value(?NETWORK_PROPERTIES, Properties)],
+	NetworkPid = ?NETWORK:start(NetworkProperties),
+	NetworkMonitorRef = erlang:monitor(process, NetworkPid),
+	?LOGGER:info("[~p]: LoadNG Core: ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?NETWORK, NetworkPid, ?MODULE]),
 
-    bind_levels(LoadNgCorePid, DataLinkPid),
+	%initialize TRANSPORT
+	TransportProperties = proplists:get_value(?TRANSPORT_PROPERTIES, Properties),
+	TransportPid = ?TRANSPORT:start(TransportProperties),
+	TransportMonitorRef = erlang:monitor(process, TransportPid),
+	?LOGGER:info("[~p]: TRANSPORT : ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?TRANSPORT, TransportPid, ?MODULE]),
+
+    bind_levels(?NETWORK, NetworkPid, ?DATA_LINK, DataLinkPid),
+    bind_levels(?TRANSPORT, TransportPid, ?NETWORK, NetworkPid),
 
     ?LOGGER:info("[~p]: is up as gen server~n", [?MODULE]),
     {ok, #context{
@@ -67,9 +77,12 @@ init(Properties) ->
         data_link_monitor_ref = DataLinkMonitorRef,
         data_link_pid = DataLinkPid,
         data_link_properties = DataLinkProperties,
-        load_ng_core_pid = LoadNgCorePid,
-        load_ng_core_monitor_ref = LoadNgCoreMonitorRef,
-        load_ng_core_properties = LoadNgCoreProperties,
+        network_pid = NetworkPid,
+        network_monitor_ref = NetworkMonitorRef,
+        network_properties = NetworkProperties,
+        transport_pid = TransportPid,
+        transport_monitor_ref = TransportMonitorRef,
+        transport_properties = TransportProperties,
         modem_port_monitor_ref = ModemPortMonitorRef,
         modem_port_properties = ModemPortProperties
 
@@ -80,8 +93,8 @@ init(Properties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p}, Context: ~w~n", [?MODULE, Destination, Data, Context]),
-    Result = ?LOAD_NG_CORE:send(Context#context.load_ng_core_pid, {Destination, Data}),
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    Result = ?TRANSPORT:send(Context#context.transport_pid, {Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
@@ -90,6 +103,7 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p, Context: ~w~n", [?MODULE, ApplicationPid, From, Context]),
     %TODO implement hand_shake with application
     NewContext = Context#context{application_pid = ApplicationPid},
+    ?TRANSPORT:updateUpperLevelPid(NewContext#context.transport_pid, NewContext#context.application_pid),
     {reply, self(), NewContext};
 
 
@@ -116,20 +130,31 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_m
     DataLinkPid = ?DATA_LINK:start(Context#context.data_link_properties),
     ?MODEM_PORT:stop(),
     ?MODEM_PORT:start(DataLinkPid),
-    bind_levels(Context#context.load_ng_core_pid, DataLinkPid),
+    bind_levels(?NETWORK, Context#context.network_pid, ?DATA_LINK, DataLinkPid),
     DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
     NewContext = Context#context{data_link_monitor_ref = DataLinkMonitorRef, data_link_pid = DataLinkPid},
     ?LOGGER:info("[~p]: DATA LINK AND MODEM PORT RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
     {noreply, NewContext};
 
 %case LOADng Core crashed. restart it
-handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{load_ng_core_monitor_ref = Monitor_Ref} = Context)  ->
+handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{network_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:info("[~p]: LOADng CORE crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
-    LoadNgCorePid = ?LOAD_NG_CORE:start(Context#context.load_ng_core_properties),
-    bind_levels(LoadNgCorePid, Context#context.data_link_pid),
-    LoadNgCoreMonitorRef = erlang:monitor(process, LoadNgCorePid),
-    NewContext = Context#context{data_link_monitor_ref = LoadNgCoreMonitorRef, load_ng_core_pid = LoadNgCorePid},
-    ?LOGGER:info("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, LoadNgCorePid]),
+    NetworkPid = ?NETWORK:start(Context#context.network_properties),
+    bind_levels(?NETWORK, NetworkPid, ?DATA_LINK, Context#context.data_link_pid),
+    bind_levels(?TRANSPORT, Context#context.transport_pid, ?NETWORK, NetworkPid),
+    NetworkMonitorRef = erlang:monitor(process, NetworkPid),
+    NewContext = Context#context{data_link_monitor_ref = NetworkMonitorRef, network_pid = NetworkPid},
+    ?LOGGER:info("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, NetworkPid]),
+    {noreply, NewContext};
+
+%case Transport Core crashed. restart it
+handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{transport_monitor_ref = Monitor_Ref} = Context)  ->
+    ?LOGGER:info("[~p]: TRANSPORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
+    TransportPid = ?TRANSPORT:start(Context#context.transport_properties),
+    bind_levels(?TRANSPORT, TransportPid, ?NETWORK, Context#context.network_pid),
+    TransportMonitorRef = erlang:monitor(process, TransportPid),
+    NewContext = Context#context{transport_monitor_ref = TransportMonitorRef, transport_pid = TransportPid},
+    ?LOGGER:info("[~p]: TRANSPORT restartes with pid: ~p.~n",[?MODULE, TransportPid]),
     {noreply, NewContext};
 
 handle_info(Request, Context)  ->
@@ -149,6 +174,6 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-bind_levels(LoadNgCorePid, DataLinkPid)->
-    ?LOAD_NG_CORE:updateBottomLevelPid(LoadNgCorePid, DataLinkPid),
-    ?DATA_LINK:updateUpperLevelPid(DataLinkPid, LoadNgCorePid).
+bind_levels(UpperLevelModule, UpperLevelPid, BottomLevelModule, BottomLevelPid)->
+    UpperLevelModule:updateBottomLevelPid(UpperLevelPid, BottomLevelPid),
+    BottomLevelModule:updateUpperLevelPid(BottomLevelPid, UpperLevelPid).

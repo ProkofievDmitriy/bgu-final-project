@@ -8,13 +8,13 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, send/2, enable/1, disable/1]).
+-export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
 -export([active/3, active/2, idle/3]).
 
--record(state, {routing_set,rreq_handling_set, self_address, address_length, bottom_level_pid, net_traversal_time, reporting_unit}).
+-record(state, {routing_set,rreq_handling_set, self_address, address_length, bottom_level_pid, upper_level_pid, net_traversal_time, reporting_unit}).
 -record(load_ng_message, {medium, type, source, destination, tlv, payload}).
 -record(routing_set_entry, {medium, destination, next_hop, link_cost, last_used}).
 -record(rreq_handling_set_entry, {rreq_id, destination, created_time}).
@@ -31,6 +31,9 @@ stop(Ref)->
 
 updateBottomLevelPid(FsmPid, BottomLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevelPid, BottomLevelPid}).
+
+updateUpperLevelPid(FsmPid, UpperLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
 send(FsmPid, {Destination, Data})->
     %default sync event timeout 5000ms
@@ -70,8 +73,10 @@ init(Properties) ->
     AddressLength = proplists:get_value(address_length, Properties),
     SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
     ReportingUnit = proplists:get_value(reporting_unit, Properties),
-    RoutingSet_Id = ets:new(routing_set, [set, public]),
+
+    RoutingSet_Id = ets:new(routing_set, [set, public]), %% data entry format : {Destination , {Medium, NextHop}}
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
+
     {ok, active, #state{
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
@@ -103,7 +108,7 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
         {error, ErrorMessage} ->
             {reply, {error, ErrorMessage}, active, StateData};
         Hop ->
-            Payload = prepare_payload(Destination, ?DATA, Data),
+            Payload = prepare_payload(Destination, ?DATA, Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
             case Payload of
                 {error, ErrorMessage} ->
                    {reply, {error, ErrorMessage}, active, StateData};
@@ -170,6 +175,13 @@ handle_sync_event({updateBottomLevelPid, BottomLevelPid}, _From, StateName, Stat
     ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
     NewState = StateData#state{bottom_level_pid = BottomLevelPid},
     ?LOGGER:debug("[~p]: updateBottomLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+	{reply, ok, StateName, NewState};
+
+
+handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{upper_level_pid = UpperLevelPid},
+    ?LOGGER:debug("[~p]: updateUpperLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
 
@@ -253,9 +265,14 @@ prepare_payload(Destination, MessageType, Data)->
 %----------------------------------------------------------------------------
 % DATA QUERIES
 %----------------------------------------------------------------------------
+update_routing_set(RoutingSetId, Destination, NextHop, Medium)->
+    Result = ets:insert(RoutingSetId, {Destination, {Medium, NextHop}}),
+    ?LOGGER:info("[~p]: Routing Set updated with : {~p, {~p, ~p}} , Result : ~p .~n", [?MODULE, Destination, Medium, NextHop, Result]),
+    Result.
+
 
 query_find_next_hop(Destination, RoutingSetId)->
-    Query = ets:fun2ms(fun({{Medium, Address},_Value}) when Address =:= Destination -> {Medium, Address} end),
+    Query = ets:fun2ms(fun({Address, NextHop}) when Address =:= Destination -> NextHop end),
     NextHop = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     Result = case NextHop of
         [Hop|[]] -> {ok, Hop};
@@ -266,6 +283,12 @@ query_find_next_hop(Destination, RoutingSetId)->
             {error, "UNEXPECTED RESULTS ERROR"}
     end,
     Result.
+
+update_rreq_handling_set(RREQ_HandlingSet_Id, RREQ_Message)->
+
+
+
+ok.
 
 
 %----------------------------------------------------------------------------
