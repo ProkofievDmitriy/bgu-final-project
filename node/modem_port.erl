@@ -360,7 +360,7 @@ prepare_payload([Channel, _ | Rest]) ->
 
 
 pad_list(DestinationBinary, List) ->
-	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~p, List: ~p ~n", [?MODULE, DestinationBinary, List]),
+	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~p, List: ~w ~n", [?MODULE, DestinationBinary, List]),
     F = fun(Num, Acc) ->
 %	    ?LOGGER:debug("[~p]: fun in pad list: Acc: ~p, B: ~p ~n", [?MODULE, Acc, Num]),
 	    BinNum = <<Num:8>>,

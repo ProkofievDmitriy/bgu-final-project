@@ -58,14 +58,14 @@ init(Properties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~p~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, Message}}, Context) ->
-    ?LOGGER:debug("[~p]: Handle CAST Request(report), message: ~p, Context: ~w~n", [?MODULE, Message, Context]),
+    ?LOGGER:debug("[~p]: Handle CAST Request(report), message: ~p, Context: ~p~n", [?MODULE, Message, Context]),
     ReportMessage = prepare_message(Type, Message),
     ServerModule = Context#context.data_server_name,
     ServerModule:report(ReportMessage),
@@ -76,7 +76,7 @@ handle_cast({report, {Type, Message}}, Context) ->
 
 handle_cast(connect_to_data_server, Context) ->
 %TODO Pattern match in function definition to only not connected to server state
-    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server), Context: ~w ~n", [?MODULE, Context]),
+    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server), Context: ~p ~n", [?MODULE, Context]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
     test_connection(ServerNodeName),
     Ans = net_kernel:connect_node(ServerNodeName),
@@ -97,7 +97,7 @@ handle_cast(connect_to_data_server, Context) ->
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~p ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -111,7 +111,7 @@ handle_cast(Request, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~p~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 

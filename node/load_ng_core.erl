@@ -8,7 +8,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/2]).
+-export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3 ]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -57,9 +57,14 @@ disable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, disable).
 
 
-handle_incoming_message(FsmPid, BinaryData)->
-    <<Type:?MESSAGE_TYPE_LENGTH, Destination:?ADDRESS_LENGTH, Data/bitstring>> = BinaryData,
-    gen_fsm:send_event(FsmPid, {received_message, {Type, Destination, Data}}).
+handle_incoming_message(FsmPid, Medium, LoadNGPacket)->
+    ?LOGGER:debug("[~p]: handle_incoming_message : LoadNGPacket : ~w .~n", [?MODULE, LoadNGPacket]),
+    <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, DataLength:8, RestData/bitstring>> = LoadNGPacket,
+    DataLengthBits = DataLength * 8,
+    <<Data:DataLengthBits/bitstring, _Rest/bitstring>> = RestData,
+    ?LOGGER:debug("[~p]: handle_incoming_message : {Medium, Type, Source, Destination, BinaryDataLengthInBytes, Data} : {~p, ~p, ~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Type, Source, Destination, DataLength, Data]),
+
+    gen_fsm:send_event(FsmPid, {received_message, {Type, Medium, Source, Destination, Data}}).
 
 
 %% ====================================================================
@@ -120,7 +125,7 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
         {error, ErrorMessage} ->
             {reply, {error, ErrorMessage}, active, StateData};
         Hop ->
-            Payload = prepare_payload(Destination, ?DATA, Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
+            Payload = prepare_payload(StateData#state.self_address, Destination, ?DATA, Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
             case Payload of
                 {error, ErrorMessage} ->
                    {reply, {error, ErrorMessage}, active, StateData};
@@ -137,7 +142,12 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
 
 active({generate_rreq, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for Destination ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(Destination, ?RREQ, [StateData#state.rreq_seq_number, StateData#state.self_address]),
+
+    Originator = StateData#state.self_address,
+    HopCount = 0,
+    RREQSequenceNumber = StateData#state.rreq_seq_number,
+
+    Payload = prepare_payload(StateData#state.self_address, Destination, ?RREQ, [RREQSequenceNumber, Originator, HopCount]),
     case Payload of
         {error, ErrorMessage} ->
             ?LOGGER:err("[~p]: ACTIVE - Generating RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
@@ -151,15 +161,24 @@ active({generate_rreq, Destination}, StateData) ->
             {next_state, active, NewState}
     end;
 
-active({generate_rrep, Destination}, StateData) ->
+active({generate_rrep, {Destination, RREQSequenceNumber, HopCount}}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RREP for ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(Destination, ?RREP, []),
-    report_management_message(StateData#state.reporting_unit, Payload),
-    {next_state, active, StateData};
+    Payload = prepare_payload(StateData#state.self_address, Destination, ?RREP, [RREQSequenceNumber, StateData#state.self_address, HopCount]),
+    NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+    case Payload of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: ACTIVE - Generating RREP failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
+            %TODO handle error on a-synch events
+           {next_state, active, StateData};
+        _ ->
+            ?DATA_LINK:send(StateData#state.bottom_level_pid, {NextHop, Payload }),
+            report_management_message(StateData#state.reporting_unit, Payload),
+            {next_state, active, StateData}
+    end;
 
 active({generate_rerr, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Generating RRER for ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(Destination, ?RERR, []),
+    Payload = prepare_payload(StateData#state.self_address, Destination, ?RERR, []),
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
 
@@ -167,19 +186,44 @@ active({generate_rerr, Destination}, StateData) ->
 
 
 % Receive Messages Handlers
-active({received_message, {?DATA, Destination, Data}}, StateData) ->
+active({received_message, {?DATA, _Medium, _Source, Destination, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - DATA {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData};
 
-active({received_message, {?RREQ, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
+active({received_message, {?RREQ, Medium, Source, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : {Medium, Source, Destination, Data} : {~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Source, Destination, Data]),
+    case amIDestination(Destination, StateData#state.self_address) of
+        true ->
+            RREQMessageData = binary_to_list(Data),
+            RREQSequenceNumber = lists:nth(1, RREQMessageData),
+            Originator = lists:nth(2, RREQMessageData),
+            HopCount = lists:nth(3, RREQMessageData) + 1,
+            update_routing_set(StateData#state.routing_set, Originator, Source, Medium, HopCount),
+            generate_RREP({Originator, RREQSequenceNumber, HopCount});
+        false ->
+            ok
+    end,
     {next_state, active, StateData};
 
-active({received_message, {?RREP, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
+active({received_message, {?RREP, Medium, Source, Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED :  {Medium, Source, Destination, Data} : {~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Source, Destination, Data]),
+    case amIDestination(Destination, StateData#state.self_address) of
+            true ->
+                RREPMessageData = binary_to_list(Data),
+                RREQSequenceNumber = lists:nth(1, RREPMessageData),
+                Originator = lists:nth(2, RREPMessageData),
+                HopCount = lists:nth(3, RREPMessageData),
+                update_routing_set(StateData#state.routing_set, Originator, Source, Medium, HopCount);
+            false ->
+                NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+                %TODO Handle error if no next hop found - generate RERR to source
+                Payload = prepare_payload(StateData#state.self_address, Destination, ?RREP, Data),
+                ?DATA_LINK:send(StateData#state.bottom_level_pid, {NextHop, Payload}),
+                report_management_message(StateData#state.reporting_unit, Payload)
+        end,
     {next_state, active, StateData};
 
-active({received_message, {?RERR, Destination, Data}}, StateData) ->
+active({received_message, {?RERR, _Medium, _Source, Destination, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
     {next_state, active, StateData}.
 
@@ -259,31 +303,38 @@ get_next_hop(Destination, State)->
     Result.
 
 
-
-prepare_payload(Destination, MessageType, Data)->
+% build LoadNG Packet : <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, BinaryDataLengthInBytes:8, Data:BinaryDataLengthInBytes>>
+prepare_payload(Source, Destination, MessageType, Data)->
     %TODO Remove Headers - meaningless
     BinaryDestination = <<Destination:?ADDRESS_LENGTH>>,
+    BinarySource = <<Source:?ADDRESS_LENGTH>>,
     BinaryMessageType = <<MessageType:?MESSAGE_TYPE_LENGTH>>,
     BinaryData = list_to_binary(Data),
-    BinaryDataLengthInBits = bit_size(BinaryData),
-    ?LOGGER:debug("[~p]: prepare_payload BinaryDestination: ~p , BinaryMessageType: ~p, BinaryData: ~p, BinaryDataLengthInBits: ~p.~n", [?MODULE, BinaryDestination, BinaryMessageType, BinaryData ,BinaryDataLengthInBits]),
-    if (BinaryDataLengthInBits =< ?MAX_DATA_LENGTH) ->
-            Payload = <<BinaryMessageType/bitstring, BinaryDestination/bitstring, BinaryData/bitstring>>,
+    BinaryDataLengthInBytes = byte_size(BinaryData),
+    ?LOGGER:debug("[~p]: prepare_payload : MessageType: ~p, Source: ~p , Destination: ~p, DataLengthInBytes: ~p, Data: ~p.~n", [?MODULE, BinaryMessageType, BinarySource, BinaryDestination, BinaryDataLengthInBytes ,BinaryData]),
+    if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
+            Payload = <<BinaryMessageType/bitstring, BinarySource/bitstring, BinaryDestination/bitstring, BinaryDataLengthInBytes:8 , BinaryData/bitstring>>,
             ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
         true ->
-            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: bit_size: ~p ~n", [?MODULE, BinaryDataLengthInBits]),
+            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: bit_size: ~p ~n", [?MODULE, BinaryDataLengthInBytes]),
             {error, "Binary Data Length exceeded"}
     end.
 
 
-
+amIDestination(Destination, SelfAddress)->
+    case Destination of
+        SelfAddress ->
+            true;
+        _Else ->
+            false
+    end.
 
 %----------------------------------------------------------------------------
 % DATA QUERIES
 %----------------------------------------------------------------------------
-update_routing_set(RoutingSetId, Destination, NextHop, Medium)->
-    Result = ets:insert(RoutingSetId, {Destination, {Medium, NextHop}}),
+update_routing_set(RoutingSetId, Destination, NextHop, Medium, HopCount)->
+    Result = ets:insert(RoutingSetId, {Destination, {Medium, NextHop, HopCount}}),
     ?LOGGER:info("[~p]: Routing Set updated with : {~p, {~p, ~p}} , Result : ~p .~n", [?MODULE, Destination, Medium, NextHop, Result]),
     Result.
 
@@ -292,7 +343,7 @@ query_find_next_hop(Destination, RoutingSetId)->
     Query = ets:fun2ms(fun({Address, NextHop}) when Address =:= Destination -> NextHop end),
     NextHop = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     Result = case NextHop of
-        [Hop|[]] -> {ok, Hop};
+        [{Medium, Hop, _HopCount}|[]] -> {ok, {Medium, Hop}};
         [] ->
             {?EMPTY_QUERY_RESULT, "NOT FOUND"};
         _ ->
@@ -302,10 +353,9 @@ query_find_next_hop(Destination, RoutingSetId)->
     Result.
 
 update_rreq_handling_set(RREQ_HandlingSet_Id, RREQ_Message_Metadata)->
-
-
-
-ok.
+    Result = ets:insert(RREQ_HandlingSet_Id, {RREQ_Message_Metadata, [] }),
+    ?LOGGER:info("[~p]: RREQ Handling Set updated with RREQ_Message_Metadata : ~w, Result : ~p .~n", [?MODULE, RREQ_Message_Metadata, Result]),
+    Result.
 
 
 %----------------------------------------------------------------------------

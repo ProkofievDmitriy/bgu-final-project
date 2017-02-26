@@ -43,10 +43,14 @@ start() ->
         io:format("Globalprops: ~w ...~n", [GlobalProperties]),
         internal_start([{node_name, local_1}|GlobalProperties]).
 
-start([NodeName|_Tail]) ->
+start(ScriptPropertiesList) ->
+        NodeName = lists:nth(1, ScriptPropertiesList),
+        ApplicationMode = list_to_atom(lists:nth(2, ScriptPropertiesList)),
         GlobalProperties = read_props(),
-        io:format("Globalprops: ~w ...~n", [GlobalProperties]),
-        internal_start([{node_name, NodeName}|GlobalProperties]).
+        io:format("ApplicationMode: ~p , NodeName: ~p.~n", [ApplicationMode, NodeName]),
+        NewGlobalProps = injectProperties(GlobalProperties, ?APPLICATION_PROPERTIES, {role, ApplicationMode}),
+        io:format("NewGlobalProps: ~p ...~n", [NewGlobalProps]),
+        internal_start([{node_name, NodeName}|NewGlobalProps]).
 
 internal_start(Properties) when is_list(Properties)->
 %TODO change global name to node name.
@@ -195,6 +199,13 @@ read_props() ->
      {?REPORT_UNIT_PROPERTIES, ReportUnitProperties},
      {?PROTOCOL_PROPERTIES, ProtocolProperties}
     ].
+
+injectProperties(GlobalProperties, DestinationPropertiesListName, {Key, Value})->
+    DestinationPropertiesList = proplists:get_value(DestinationPropertiesListName, GlobalProperties),
+    NewList = proplists:delete(Key,  DestinationPropertiesList),
+    NewGlobalList = proplists:delete(DestinationPropertiesListName,  GlobalProperties),
+    [{DestinationPropertiesListName, [{Key,Value} | NewList] } | NewGlobalList].
+
 
 get_node_number(NodeName)->
 %    NodeNameAsList = atom_to_list(NodeName),

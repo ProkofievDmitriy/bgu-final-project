@@ -37,11 +37,11 @@
 -define(BROADCAST_ADDRESS, 0).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
--define(ADDRESS_LENGTH, 6). % number of bits to store address
--define(MESSAGE_TYPE_LENGTH, 4). % number of bits to store address
+-define(ADDRESS_LENGTH, 7). % number of bits to store address
+-define(MESSAGE_TYPE_LENGTH, 3). % number of bits to store address
 -define(SESSION_MANAGEMENT_LENGTH, 8). % number of bits to store address
 -define(MAX_FRAME_LENGTH, 60 * 8). % number of bits to store address
--define(MAX_DATA_LENGTH, ?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 2 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_TYPE_LENGTH)). % number of bits to store address
+-define(MAX_DATA_LENGTH, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 3 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_TYPE_LENGTH)) / 8). % number of BYTES for data
 -define(NET_TRAVERSAL_TIME, 1000).
 
 
@@ -66,7 +66,7 @@
 
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
--define(MESSAGE_SEND_INTERVAL, 5000). % 15 seconds interval between messages
+-define(MESSAGE_SEND_INTERVAL, 50). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},

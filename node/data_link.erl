@@ -7,7 +7,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
--export([idle/3, dual/3, dual/2, plc_only/3, rf_only/3]).
+-export([idle/3, dual/3, dual/2, plc_only/3, rf_only/3, plc_only/2, rf_only/2]).
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -111,7 +111,7 @@ dual({send, {Hop, Data}}, _From, StateData) ->
 % Async dual events
 dual({received_message, {Medium, Target, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
-    handle_message(Target, StateData, Data),
+    handle_message(Medium, Target, StateData, Data),
     {next_state, dual, StateData}.
 
 
@@ -138,10 +138,14 @@ plc_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
-    if Medium == ?PLC ->
-            ?MODEM_PORT:send(Medium, Payload),
+    case Medium of
+        ?PLC ->
+            ?MODEM_PORT:send(?PLC, Payload),
 	        {reply, ok, plc_only, StateData};
-	    true ->
+        ?RF_PLC ->
+            ?MODEM_PORT:send(?PLC, Payload),
+	        {reply, ok, plc_only, StateData};
+	    _Else ->
 	        {reply, {error, not_active_medium}, plc_only, StateData}
 	 end.
 
@@ -149,7 +153,7 @@ plc_only({received_message, {Medium, Target, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
     case Medium of
         ?PLC ->
-            handle_message(Target, StateData, Data);
+            handle_message(Medium, Target, StateData, Data);
         _Else ->
             ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
     end,
@@ -177,18 +181,22 @@ rf_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: RF_ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
-    if Medium == ?RF ->
-            ?MODEM_PORT:send(Medium, Payload),
-	        {reply, ok, plc_only, StateData};
-	    true ->
-	        {reply, {error, not_active_medium}, plc_only, StateData}
+    case Medium of
+        ?RF ->
+            ?MODEM_PORT:send(?RF, Payload),
+	        {reply, ok, rf_only, StateData};
+        ?RF_PLC ->
+            ?MODEM_PORT:send(?RF, Payload),
+	        {reply, ok, rf_only, StateData};
+	    _Else ->
+	        {reply, {error, not_active_medium}, rf_only, StateData}
 	 end.
 
 rf_only({received_message, {Medium, Target, Data}}, StateData) ->
      ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
      case Medium of
          ?PLC ->
-             handle_message(Target, StateData, Data);
+             handle_message(Medium, Target, StateData, Data);
          _Else ->
              ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
      end,
@@ -259,11 +267,11 @@ isValidTarget(Target, SelfAddress)->
             false
          end.
 
-handle_message(Target, StateData, Data)->
+handle_message(Medium, Target, StateData, Data)->
     case isValidTarget(Target, StateData#state.self_address) of
         true ->
             ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to network layer~n", [?MODULE]),
-            ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Data);
+            ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Medium, Data);
         Else ->
             ?LOGGER:debug("[~p]: handle_message : target is NOT valid - IGNORING incoming message ~n", [?MODULE])
     end.
