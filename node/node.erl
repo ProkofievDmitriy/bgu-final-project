@@ -86,7 +86,7 @@ init(GlobalProperties) ->
 
 	%initialize reporting-unit
 	ReportUnitProperties = proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties),
-	ReportUnitPid = ?REPORT_UNIT:start(ReportUnitProperties),
+	ReportUnitPid = ?REPORT_UNIT:start([{node_name, NodeName} | ReportUnitProperties]),
 	ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
 	?LOGGER:debug("[~p]: Report Unit: ~p started with pid: ~p and monitored by node: ~p.~n", [?MODULE, ?REPORT_UNIT, ReportUnitPid ,NodeName]),
 	?REPORT_UNIT:connect_to_data_server(),

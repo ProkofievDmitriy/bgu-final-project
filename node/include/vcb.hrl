@@ -19,7 +19,8 @@
 -define(RREQ, 0).
 -define(RREP, 1).
 -define(RERR, 2).
--define(DATA, 3).
+-define(RACK, 3).
+-define(DATA, 4).
 
 
 %QLC Atoms

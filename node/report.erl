@@ -22,7 +22,7 @@
 %   Records
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--record(context, {data_server_name, data_server_ip, connected_to_server}).
+-record(context, {node_name, data_server_name, data_server_ip, connected_to_server}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API Functions Implementation
@@ -51,7 +51,13 @@ init(Properties) ->
 	?LOGGER:debug("[~p]: Starting REPORT with props: ~w~n", [?MODULE, Properties]),
     DataServerName = proplists:get_value(data_server_name, Properties),
     DataServerIp = proplists:get_value(data_server_ip, Properties),
-    {ok, #context{data_server_name = DataServerName, data_server_ip = DataServerIp, connected_to_server = false }}.
+    NodeName = proplists:get_value(node_name, Properties),
+    {ok, #context{
+        node_name = NodeName,
+        data_server_name = DataServerName,
+        data_server_ip = DataServerIp,
+        connected_to_server = false
+         }}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -66,7 +72,7 @@ handle_call(Request, From, Context) ->
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, Message}}, Context) ->
     ?LOGGER:debug("[~p]: Handle CAST Request(report), message: ~p, Context: ~p~n", [?MODULE, Message, Context]),
-    ReportMessage = prepare_message(Type, Message),
+    ReportMessage = prepare_message(Type, Message, Context),
     ServerModule = Context#context.data_server_name,
     ServerModule:report(ReportMessage),
     ?LOGGER:debug("[~p]: Request(report), ServerModule: ~p~n", [?MODULE, ServerModule]),
@@ -125,8 +131,13 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-prepare_message(Type, Message)->
-    {Type, [{message, Message}]}.
+prepare_message(Type, Message , Context)->
+    {
+        Type, [
+            {node_name, Context#context.node_name},
+            {message, Message}
+        ]
+    }.
 
 test_connection(Address)->
    case net_adm:ping(Address) of
