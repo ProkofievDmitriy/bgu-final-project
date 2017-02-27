@@ -32,10 +32,10 @@ start(Properties)->
 data_concentration_loop()->
 	receive
 		stop ->
-		    ?LOGGER:info("Received stop message. Exiting data concentration server App~n"),
+		    ?LOGGER:info("[~p]: Received stop message. Exiting data concentration server App~n", [?MODULE]),
 		    normal;
-		{Source, Data}->
-	        ?LOGGER:info("Received message from ~p, data: ~p~n", [Source, Data]),
+		Message ->
+	        ?LOGGER:info("[~p]: Received message : ~p.~n", [?MODULE, Message]),
             data_concentration_loop()
 	end.
 

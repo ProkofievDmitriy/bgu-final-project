@@ -28,6 +28,9 @@
 -record(load_ng_message, {medium, type, source, destination, tlv, payload}).
 -record(routing_set_entry, {medium, destination, next_hop, link_cost, last_used}).
 -record(rreq_handling_set_entry, {rreq_id, destination, created_time}).
+
+-record(management_message, {originator, hop_count, rreq_seq_number}).
+-record(load_ng_packet, {medium, type, source, destination, data}).
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -57,14 +60,10 @@ disable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, disable).
 
 
-handle_incoming_message(FsmPid, Medium, LoadNGPacket)->
-    ?LOGGER:debug("[~p]: handle_incoming_message : LoadNGPacket : ~w .~n", [?MODULE, LoadNGPacket]),
-    <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, DataLength:8, RestData/bitstring>> = LoadNGPacket,
-    DataLengthBits = DataLength * 8,
-    <<Data:DataLengthBits/bitstring, _Rest/bitstring>> = RestData,
-    ?LOGGER:debug("[~p]: handle_incoming_message : {Medium, Type, Source, Destination, BinaryDataLengthInBytes, Data} : {~p, ~p, ~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Type, Source, Destination, DataLength, Data]),
-
-    gen_fsm:send_event(FsmPid, {received_message, {Type, Medium, Source, Destination, Data}}).
+handle_incoming_message(FsmPid, Medium, Payload)->
+    ?LOGGER:preciseDebug("[~p]: handle_incoming_message : LoadNGPacket : ~w .~n", [?MODULE, Payload]),
+    LoadNGPacket = deserializePayload(Payload),
+    gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}}).
 
 
 %% ====================================================================
@@ -186,45 +185,48 @@ active({generate_rerr, Destination}, StateData) ->
 
 
 % Receive Messages Handlers
-active({received_message, {?DATA, _Medium, _Source, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DATA {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
+active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~p .~n", [?MODULE, Packet]),
+    ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
     {next_state, active, StateData};
 
-active({received_message, {?RREQ, Medium, Source, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : {Medium, Source, Destination, Data} : {~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Source, Destination, Data]),
-    case amIDestination(Destination, StateData#state.self_address) of
+active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : Packet : ~p .~n", [?MODULE, Packet]),
+    case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
         true ->
-            RREQMessageData = binary_to_list(Data),
-            RREQSequenceNumber = lists:nth(1, RREQMessageData),
-            Originator = lists:nth(2, RREQMessageData),
-            HopCount = lists:nth(3, RREQMessageData) + 1,
-            update_routing_set(StateData#state.routing_set, Originator, Source, Medium, HopCount),
+            RREQSequenceNumber = Packet#load_ng_packet.data#management_message.rreq_seq_number,
+            %TODO validate RREQ sequence number
+
+            Originator = Packet#load_ng_packet.data#management_message.originator,
+            HopCount = Packet#load_ng_packet.data#management_message.hop_count,
+            update_routing_set(StateData#state.routing_set, Originator, Packet#load_ng_packet.source, Packet#load_ng_packet.medium, HopCount),
             generate_RREP({Originator, RREQSequenceNumber, HopCount});
         false ->
             ok
     end,
     {next_state, active, StateData};
 
-active({received_message, {?RREP, Medium, Source, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED :  {Medium, Source, Destination, Data} : {~p, ~p, ~p, ~w} .~n", [?MODULE, Medium, Source, Destination, Data]),
-    case amIDestination(Destination, StateData#state.self_address) of
+active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : Packet : ~p .~n", [?MODULE, Packet]),
+    case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
             true ->
-                RREPMessageData = binary_to_list(Data),
-                RREQSequenceNumber = lists:nth(1, RREPMessageData),
-                Originator = lists:nth(2, RREPMessageData),
-                HopCount = lists:nth(3, RREPMessageData),
-                update_routing_set(StateData#state.routing_set, Originator, Source, Medium, HopCount);
+                RREQSequenceNumber = Packet#load_ng_packet.data#management_message.rreq_seq_number,
+                %TODO remove from handling RREQ
+
+                Originator = Packet#load_ng_packet.data#management_message.originator,
+                HopCount = Packet#load_ng_packet.data#management_message.hop_count,
+                update_routing_set(StateData#state.routing_set, Originator, Packet#load_ng_packet.source, Packet#load_ng_packet.medium, HopCount);
             false ->
-                NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+                NextHop = get_next_hop(Packet#load_ng_packet.destination, StateData), % {Medium, NextHopAddress}
                 %TODO Handle error if no next hop found - generate RERR to source
-                Payload = prepare_payload(StateData#state.self_address, Destination, ?RREP, Data),
+                Payload = prepare_payload(StateData#state.self_address, Packet#load_ng_packet.destination, ?RREP, Packet#load_ng_packet.data),
                 ?DATA_LINK:send(StateData#state.bottom_level_pid, {NextHop, Payload}),
                 report_management_message(StateData#state.reporting_unit, Payload)
         end,
     {next_state, active, StateData};
 
-active({received_message, {?RERR, _Medium, _Source, Destination, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - RERR RECEIVED : {Dest, Data} : {~p, ~w} .~n", [?MODULE, Destination, Data]),
+active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - RERR : Packet : ~p .~n", [?MODULE, Packet]),
     {next_state, active, StateData}.
 
 
@@ -320,6 +322,36 @@ prepare_payload(Source, Destination, MessageType, Data)->
             ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: bit_size: ~p ~n", [?MODULE, BinaryDataLengthInBytes]),
             {error, "Binary Data Length exceeded"}
     end.
+
+deserializePayload(Payload)->
+    <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, DataLength:8, RestData/bitstring>> = Payload,
+    DataLengthBits = DataLength * 8,
+    <<Data:DataLengthBits/bitstring, _Rest/bitstring>> = RestData,
+    Packet = #load_ng_packet{
+%        medium = Medium,
+        type = Type,
+        source = Source,
+        destination = Destination
+    },
+    ?LOGGER:preciseDebug("[~p]: deserializePayload : Packet : ~p ~n", [?MODULE, Packet]),
+    deserializeMessage(Packet, Data).
+
+
+deserializeMessage(#load_ng_packet{type = ?DATA} = Packet, Data)->
+    Packet#load_ng_packet{data=Data};
+
+deserializeMessage(#load_ng_packet{} = Packet, Data)->
+    RREQMessageData = binary_to_list(Data),
+    RREQSequenceNumber = lists:nth(1, RREQMessageData),
+    Originator = lists:nth(2, RREQMessageData),
+    HopCount = lists:nth(3, RREQMessageData) + 1,
+    RREQMessage = #management_message{
+        originator = Originator,
+        rreq_seq_number = RREQSequenceNumber,
+        hop_count= HopCount
+    },
+    Packet#load_ng_packet{data = RREQMessage}.
+
 
 
 amIDestination(Destination, SelfAddress)->

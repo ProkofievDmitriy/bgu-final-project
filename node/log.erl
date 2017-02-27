@@ -9,9 +9,12 @@
 print(Level, LevelMessage, Message, Params) ->
     IsValidModule = isValidModule(Params),
     if
-        (Level >= ?CURRENT_LOG_LEVEL) and IsValidModule == false ->
-            {Hours, Minutes, Seconds} = erlang:time(),
-            io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+        IsValidModule ->
+            if (Level >= ?CURRENT_LOG_LEVEL) ->
+                {Hours, Minutes, Seconds} = erlang:time(),
+                io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                true -> ok
+            end;
         true -> ok
     end.
 
@@ -44,4 +47,4 @@ warn(Message) ->
 
 isValidModule([])-> false;
 isValidModule(Params)->
-    lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).
+    not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).

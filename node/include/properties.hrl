@@ -1,7 +1,5 @@
-%-define(MODULES_TO_LOG, ["load_ng_core", "report"]).
-%-define(MODULES_TO_FILTER, [log,protocol_interface,report,load_ng_core,data_link,load_ng,modem_port,simple_app, node, transport]).
+%-define(MODULES_TO_FILTER, [modem_port]).
 -define(MODULES_TO_FILTER, []).
-%-define(MODULES_TO_LOG, [report,load_ng_core,data_link]).
 
 
 

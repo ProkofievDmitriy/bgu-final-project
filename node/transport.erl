@@ -7,7 +7,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
--export([idle/3, disable/3]).
+-export([idle/3, disable/3, idle/2, disable/2]).
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -61,19 +61,20 @@ init(Properties) ->
 %% ============================================================================================
 
 %% =========================================== IDLE =========================================
-idle(received_message, _From, StateData) ->
+idle({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-     {reply, ok, idle, StateData};
+     {next_state, idle, StateData};
 
-idle(disable, _From, StateData) ->
+idle(disable, StateData) ->
     %TODO truncate sessions management state
     ?LOGGER:debug("[~p]: IDLE - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
-    {reply, ok, disable, StateData};
+    {next_state, disable, StateData};
 
-idle(enable, _From, StateData) ->
+idle(enable, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
-     {reply, ok, idle, StateData};
+     {next_state, idle, StateData}.
 
+%Synchronous event call
 idle({send, {Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~p}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
      {reply, ok, idle, StateData}.
@@ -81,18 +82,20 @@ idle({send, {Destination, Data}}, _From, StateData) ->
 
 %% =========================================== DISABLE =========================================
 %% Pass all message as is - no session management enabled
-disable(received_message, _From, StateData) ->
+disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-     {reply, ok, disable, StateData};
+    StateData#state.upper_level_pid ! binary:bin_to_list(Message),
+    {next_state, disable, StateData};
 
-disable(disable, _From, StateData) ->
+disable(disable, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
-    {reply, ok, disable, StateData};
+    {next_state, disable, StateData};
 
-disable(enable, _From, StateData) ->
+disable(enable, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
-     {reply, ok, idle, StateData};
+     {next_state, idle, StateData}.
 
+%Synchronous event call
 disable({send, {Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~p}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
     ?NETWORK:send(StateData#state.bottom_level_pid, {Destination, Data}),

@@ -318,45 +318,48 @@ prepare_payload([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel
 prepare_payload([Channel, _ | Rest]) ->
 %    Size = lists:flatlength(bin_to_list(Rest)),
     Size = byte_size(Rest),
-    BinaryZero = <<0:8>>,
-	Result = case Size of
-		S1 when S1 =< 14 ->
-		    X = 20 - Size - 4 - 2,
-            if X > 0 ->
-                PAD = lists:seq(1,X);
-                true -> PAD = []
-            end,
+
+	PAD = getPaddingList(Size),
+	Result = case PAD of
+	    too_large ->
+            ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~p.~n", [?MODULE, Size]),
+	        too_large;
+        List ->
             L = pad_list(Rest, PAD),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
-%            LCRC = crc_to_list(CRC),
+            BinaryZero = <<0:8>>,
             ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
-            <<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>;
+            binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>)
+    end,
+	?LOGGER:debug("[~p]: prepare_payload: Result: ~p~n", [?MODULE, Result]),
+	Result.
+
+getPaddingList(Size)->
+Result = case Size of
+		S1 when S1 =< 14 ->
+		    X = 20 - Size - 4 - 2,
+            if X > 0 ->
+                    lists:seq(1,X);
+                true ->
+                    []
+            end;
 		S2 when S2 =< 34 ->
 		    X = 40 - Size - 4 - 2,
 		    if X > 0 ->
-		        PAD = lists:seq(1,X);
-		        true -> PAD = []
-            end ,
-            L = Rest ++ PAD,
-            CRC = erlang:crc32(L),
-            LCRC = crc_to_list(CRC),
-            [Channel] ++ [0] ++ L ++ LCRC;
+		        lists:seq(1,X);
+		        true -> []
+            end;
 		S2 when S2 =< 60 ->
 		    X = 20 - Size - 4 - 2,
 		    if X > 0 ->
-		        PAD = lists:seq(1,X);
-		        true -> PAD = []
-            end,
-            L = Rest ++ PAD,
-            CRC = erlang:crc32(L),
-            LCRC = crc_to_list(CRC),
-            [Channel] ++ [0] ++ L ++ LCRC;
+		        lists:seq(1,X);
+		        true -> []
+            end;
 		_ -> too_large
 	end,
-	?LOGGER:debug("[~p]: prepare_payload: Result: ~p~n", [?MODULE, Result]),
-	binary:bin_to_list(Result).
+	Result.
 
 
 pad_list(DestinationBinary, List) ->

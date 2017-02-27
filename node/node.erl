@@ -179,7 +179,7 @@ handle_info(Request, Context)  ->
 
 terminate(Reason, Context) ->
     %TODO Proper termination of module with all consequences
-    ?LOGGER:debug("[~p]: STUB terminating, Reason ~p, State ~w.~n", [?MODULE, Reason, Context]),
+    ?LOGGER:debug("[~p]: STUB terminating, Reason ~p, State ~p.~n", [?MODULE, Reason, Context]),
     ok.
 
 code_change(_OldVsn, Context, _Extra) -> {ok, Context}.

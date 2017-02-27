@@ -39,9 +39,4 @@ hand_shake(ApplicationPid) -> gen_server:call(?MODULE, {hand_shake, ApplicationP
 %hand_shake(ApplicationPid) -> gen_server:call({local, ?MODULE}, {hand_shake, ApplicationPid}).
 
 
-%response function to application
-forward_to_application(ApplicationPid, ErrorMessage)->
-    ApplicationPid ! {error, ErrorMessage}.
 
-forward_to_application(ApplicationPid, Source, Message)->
-    ApplicationPid ! {success, {Source, Message}}.
