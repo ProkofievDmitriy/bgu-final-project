@@ -38,7 +38,8 @@
 %% ====================================================================
 
 start(Params) ->
-	{ok,PID} = gen_fsm:start(?MODULE, Params, []),
+    Timeout = proplists:get_value(timeout, Params),
+	{ok,PID} = gen_fsm:start(?MODULE, Params, [{timeout, Timeout}]),
 	PID.
 
 stop(Ref)->
@@ -99,7 +100,7 @@ init(Properties) ->
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
 
 
-    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS / 10, remove_not_valid_routes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
 
     {ok, active, #state{
         routing_set = RoutingSet_Id,
@@ -151,9 +152,9 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
 active(remove_not_valid_routes, StateData)->
-    ?LOGGER:debug("[~p]: ACTIVE - remove_not_valid_routes .~n", [?MODULE]),
+    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes .~n", [?MODULE]),
 
-    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS / 10, remove_not_valid_routes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
     {next_state, active, StateData};
 
 active({generate_rreq, Destination}, StateData) ->
@@ -344,12 +345,13 @@ get_next_hop(Destination, State)->
         {?EMPTY_QUERY_RESULT, _Message} ->
             ?LOGGER:debug("[~p]: get_next_hop NO HOP FOUND for destination: ~p : ~p.~n", [?MODULE, Destination, NextHop]),
             generate_RREQ(Destination),
+            StartTime = get_current_millis(),
             receive after 2 * State#state.net_traversal_time ->
                 NextHop = query_find_next_hop(Destination, State#state.routing_set),
                 case NextHop of
                     {ok, Hop} -> Hop;
                     _ ->
-                        ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED.~n", [?MODULE]),
+                        ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
                         {error, "TIME OUT EXCEEDED"}
                 end
             end;

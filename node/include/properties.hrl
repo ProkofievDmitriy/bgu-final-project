@@ -33,7 +33,8 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 10000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 30000).
+-define(REMOVE_NOT_VALID_ROUTES_TIMER, 5000).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
 -define(ADDRESS_LENGTH, 7). % number of bits to store address
@@ -41,19 +42,22 @@
 -define(SESSION_MANAGEMENT_LENGTH, 8). % number of bits to store address
 -define(MAX_FRAME_LENGTH, 60 * 8). % number of bits to store address
 -define(MAX_DATA_LENGTH, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 3 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_TYPE_LENGTH)) / 8). % number of BYTES for data
--define(NET_TRAVERSAL_TIME, 1000).
+-define(NET_TRAVERSAL_TIME, 10000).
+-define(TIMEOUT, ?NET_TRAVERSAL_TIME * 3).
 
 
 -define(NETWORK_PROP_LIST, [{address_length, ?ADDRESS_LENGTH},
                                  {net_traversal_time, ?NET_TRAVERSAL_TIME},
-                                 {reporting_unit, ?REPORT_UNIT}
+                                 {reporting_unit, ?REPORT_UNIT},
+                                 {timeout, ?TIMEOUT}
                                 ]).
 -define(DATA_LINK_PROPS_LIST, [{default_state, plc_only}]).
--define(TRANSPORT_PROPS_LIST, [{default_state, disable}]).
+-define(TRANSPORT_PROPS_LIST, [{default_state, disable}, {timeout, ?TIMEOUT}]).
 
 -define(PROTOCOL_PROPS_LIST, [{?NETWORK_PROPERTIES, ?NETWORK_PROP_LIST},
                               {?DATA_LINK_PROPERTIES, ?DATA_LINK_PROPS_LIST},
-                              {?TRANSPORT_PROPERTIES, ?TRANSPORT_PROPS_LIST}
+                              {?TRANSPORT_PROPERTIES, ?TRANSPORT_PROPS_LIST},
+                              {timeout, ?TIMEOUT}
                              ]).
 
 %%% REPORTING UNIT PROPERTIES

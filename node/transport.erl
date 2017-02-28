@@ -14,7 +14,8 @@
 
 
 start(Params) ->
-	{ok,PID} = gen_fsm:start(?MODULE, Params, []),
+    Timeout = proplists:get_value(timeout, Params),
+    {ok,PID} = gen_fsm:start(?MODULE, Params, [{timeout, Timeout}]),
 	PID.
 
 stop(FsmPid)->
@@ -29,7 +30,7 @@ disable(FsmPid)->
 
 %Managing events
 send(FsmPid, {Destination, Data})->
-    gen_fsm:sync_send_event(FsmPid, {send, {Destination, Data}}).
+    gen_fsm:sync_send_event(FsmPid, {send, {Destination, Data}}, ?NET_TRAVERSAL_TIME * 3).
 
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).

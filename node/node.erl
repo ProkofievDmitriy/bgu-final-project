@@ -72,7 +72,7 @@ stop() ->
 %   Callback Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(GlobalProperties) ->
-	process_flag(trap_exit, true),
+%	process_flag(trap_exit, true),
 	group_leader(whereis(user),self()), %this process is a group leader for this node
 
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
@@ -108,7 +108,7 @@ init(GlobalProperties) ->
     ?LOGGER:info("[~p]: Node: ~p, is up.~n", [?MODULE, NodeName]),
 
     %TODO : Remove in production
-    loadTestData(),
+%    loadTestData(),
 
 
     {ok, #context{
