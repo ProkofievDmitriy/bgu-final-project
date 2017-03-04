@@ -27,9 +27,9 @@
 -define(ISG_SERVER, ?MODULE).
 -define(REFRESH_TIME, 60*3).
 -define(MAX_NO_UPDATE_TIME,5).
--define(UP, up).
--define(DOWN, down).
-
+-define( LOG_DIR,"logger/").
+-define( TEMP_DETS_FILE_DIR, ?LOG_DIR).
+-define( TEMP_DETS_FILE, "temp_dets").
 %% API
 -export([start/0, stop/0]).
 
@@ -46,7 +46,7 @@
 
 -record(counters, {numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
 
--record(state, {counters, nodes_list, data_db, management_db ,file_version}).
+-record(state, {counters, nodes_list, db ,file_version}).
 
 %%%===================================================================
 %%% API
@@ -79,7 +79,9 @@ stop() ->
 %% @private
 %% @doc
 %% Initializes the server
-%%
+%%  The initialization process includes:
+%%      Creating DETS file for temporary storage of data.
+%%      
 %% @spec init(Args) -> {ok, State} |
 %%                     {ok, State, Timeout} |
 %%                     ignore |
@@ -96,6 +98,7 @@ init([]) ->
     %%Current_File_Version = get_file_version(),
     %%Node_DB = get_nodes_id_from_file(Current_File_Version),
 
+  {_,DB} = dets:open_file(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]),
 
 	%%PRO_DB = init_db(protocol),
     %%MANAGMENT_DB = init_db(management),
@@ -108,7 +111,7 @@ init([]) ->
     %%Self = self(),
     %%net_kernel:monitor_nodes(true),
    
-    {ok, #state{counters = Counters, nodes_list = 0, management_db = 0}}.
+    {ok, #state{counters = Counters, nodes_list = 0, db = DB}}.
 
 
 
@@ -218,16 +221,20 @@ handle_cast({node_terminated, ID},  State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a data message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast( {{data_message, received_message}, [UTIME, Source, Destination]}, State = #state{counters = Counters}) ->
-	NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
+handle_cast( {{data_message, received_message}, [UTIME, Source, Destination]}, State = #state{db = DB, counters = Counters}) ->
+  NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
+  dets:insert(DB, {UTIME, "data_message", "received_message",Source,Destination}),
+
 	io:format("stats_server got report about: Incoming msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = NumberOfDataMsgReceived + 1}}};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a data message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, sent_message}, [UTIME, Source, Destination]}, State = #state{counters = Counters}) ->
+handle_cast({{data_message, sent_message}, [UTIME, Source, Destination]}, State = #state{db = DB, counters = Counters}) ->
 	NumberOfDataMsgSent = Counters#counters.numberOfDataMsgSent,
+  dets:insert(DB, {UTIME, "data_message", "sent_message",Source,Destination}),
+
 	io:format("stats_server got report about: Sent msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = NumberOfDataMsgSent + 1}}};
 
@@ -236,7 +243,8 @@ handle_cast({{data_message, sent_message}, [UTIME, Source, Destination]}, State 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a management message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast( {{management_message, received_message}, [UTIME, Source, Destination]}, State = #state{counters = Counters}) ->
+handle_cast( {{management_message, received_message}, [UTIME, Source, Destination]}, State = #state{db = DB, counters = Counters}) ->
+  dets:insert(DB, {UTIME, "management_message", "received_message",Source,Destination}),
 	NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
 	io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgReceived = NumberOfManagementMsgReceived + 1}}};
@@ -244,9 +252,9 @@ handle_cast( {{management_message, received_message}, [UTIME, Source, Destinatio
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a management message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, sent_message}, [UTIME, Source, Destination]}, State = #state{counters = Counters}) ->
-	NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
-
+handle_cast({{management_message, sent_message}, [UTIME, Source, Destination]}, State = #state{db = DB, counters = Counters}) ->
+  dets:insert(DB, {UTIME, "management_message", "sent_message",Source,Destination}),
+  NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
 	io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgSent = NumberOfManagementMsgSent + 1}}};
 
@@ -300,6 +308,9 @@ handle_cast(Msg, State) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 
 
+handle_info(timer,State)->
+  io:format("Timer event ~n"),
+  erlang:send_after(?update_screen_time,self(),timer);
 
 
 handle_info(Info, State) ->

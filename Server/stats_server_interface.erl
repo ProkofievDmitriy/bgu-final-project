@@ -27,7 +27,7 @@
 -define(STATS_SERVER, stats_server).
 
 %% API
--export([received_data_message/2, sent_data_message/2, 
+-export([received_data_message/3, sent_data_message/3, 
 		 received_management_message/2, sent_management_message/2, 
 		 printStats/0]).
 
