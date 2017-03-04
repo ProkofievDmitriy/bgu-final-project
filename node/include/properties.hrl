@@ -30,8 +30,8 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 20000).
--define(REMOVE_NOT_VALID_ROUTES_TIMER, 1000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 40000).
+-define(REMOVE_NOT_VALID_ROUTES_TIMER, 5000).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
 -define(ADDRESS_LENGTH, 7). % number of bits to store address
@@ -58,7 +58,8 @@
                                 ]).
 -define(DATA_LINK_PROPS_LIST, [
 %                               {default_state, dual},
-                               {default_state, plc_only},
+%                               {default_state, plc_only},
+                               {default_state, rf_only},
                                {timeout, ?TIMEOUT}
                                ]).
 -define(TRANSPORT_PROPS_LIST, [{default_state, disable},
@@ -80,7 +81,7 @@
 
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
--define(MESSAGE_SEND_INTERVAL, 2). % in second
+-define(MESSAGE_SEND_INTERVAL, 5). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},

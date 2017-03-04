@@ -66,7 +66,7 @@ disable(FsmPid)->
 
 
 handle_incoming_message(FsmPid, Medium, Payload)->
-    ?LOGGER:preciseDebug("[~p]: handle_incoming_message : LoadNGPacket : ~w .~n", [?MODULE, Payload]),
+    ?LOGGER:temporaryInfo("[~p]: handle_incoming_message : Medium: ~p, LoadNGPacket : ~w .~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), Payload]),
     LoadNGPacket = deserializePayload(Payload),
     gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}}).
 

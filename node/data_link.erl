@@ -2,6 +2,7 @@
 -behaviour(gen_fsm).
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
+-include("./include/macros.hrl").
 
 -export([start/1, stop/1, send/2, updateUpperLevelPid/2, enable_plc/1, enable_rf/1, disable_plc/1, disable_rf/1, disable/1, enable/1, handle_incoming_message/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
@@ -47,9 +48,9 @@ updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
 handle_incoming_message(FsmPid, Packet)->
-    ?LOGGER:temporaryInfo("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
+    ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
     <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
-    ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
+    ?LOGGER:temporaryInfo("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
     gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
 
@@ -164,7 +165,7 @@ plc_only({send, {Hop, Data}}, _From, StateData) ->
              ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
             {reply, ErrorMessage, dual, StateData};
         _ ->
-            {reply, Result, dual, StateData}
+            {reply, Result, plc_only, StateData}
      end.
 
 plc_only({received_message, {Medium, Target, Data}}, StateData) ->
