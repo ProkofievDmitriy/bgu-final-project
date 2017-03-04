@@ -1,6 +1,6 @@
 -module(modem_port).
 -export([start/1, stop/0, init/2]).
--export([send/2, send/1, check/0, loop_send/3, extract_crc/1, prepare_payload/1, exemine_data/1]).
+-export([send/2, send/1, check/0, extract_crc/1, prepare_payload/1, examine_data/1]).
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 
@@ -52,7 +52,8 @@ stop()->
     of
         Result -> Result
     catch
-        _:Reason -> ?LOGGER:err("[~p]: stop failed : ~p~n",[?MODULE, Reason])
+        _:Reason -> ?LOGGER:err("[~p]: stop failed : ~p~n",[?MODULE, Reason]),
+        Reason
     end.
 
 
@@ -78,19 +79,6 @@ send(Channel) ->
 
 %check if modem port is running
 check()-> ?MODEM_PORT ! check.
-
-
-loop_send( _Channel , N, _S) when N =:= 0 -> done;
-loop_send(Channel, N, S) -> 
-		receive after 500*S-> ?LOGGER:debug("[~p]: sending.....~n", [?MODULE]),
-		X = random:uniform(2),
-		if X == 1 -> Y = 16; true-> Y=36 end,
-		
-		Payload = [N rem 255] ++ lists:seq(15, 15+Y),
-		?LOGGER:debug("[~p]: loop_send: size of payload is:~p~n", [?MODULE, length(Payload)]),
-		send(Channel), 
-		loop_send(Channel, N-1, S) end.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%		Supervision			%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -136,11 +124,19 @@ call_port(Message)->
      of
         Result -> Result
     catch
-        _:Reason -> ?LOGGER:err("[~p]: call port failed : ~p~n",[?MODULE, Reason])
+        _:Reason ->
+            ?LOGGER:err("[~p]: call port failed : ~p~n",[?MODULE, Reason]),
+            Reason
     end.
 
 call_port_internal(Msg) ->
-  ?MODEM_PORT ! {call , Msg}.
+  ?MODEM_PORT ! {call , Msg},
+  receive
+    Result ->
+        Result
+  after ?TIMEOUT ->
+        {error, timeout_in_modem_port}
+  end.
 	
 %initiate modem_port. register it's name, compile c port's program, config pins of controller, open port to c program, and call for loop function
 init(Super_PID, DataLinkFsmPid) ->
@@ -173,10 +169,13 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
     receive
 	%Caller wants to send Packet to c port
 	{call, Msg} ->
+            ?LOGGER:preciseDebug("[~p]: Received CALL MSG : ~p~n", [?MODULE, Msg]),
 			MSG = prepare_payload(Msg), % MSG = <<Channel:8, Rest/bitstring>>
 			if is_list(MSG) ->
-			    sendMsg(Port, MSG);
-			    true -> ?LOGGER:err("[~p]: error on message prepare : ~p~n", [?MODULE, MSG]),dont_send end,
+			    DataLinkFsmPid ! sendMsg(Port, MSG);
+			    true -> ?LOGGER:err("[~p]: error on message prepare : ~p~n", [?MODULE, MSG]),
+			    {error , dont_send}
+			end,
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
 			%loop(Port, OS_PID, Super_PID, Port_Errors + Error);
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
@@ -184,7 +183,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 	%c port sent data
 	{_Port2, {data, Data}} ->
 			?LOGGER:debug("[~p]: Received data from port: Data ~p~n", [?MODULE, Data]),
-			Ans = exemine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
+			Ans = examine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized
 				channel_error->	?LOGGER:debug("[~p]: got msg: ~p~n but didnt pass exemine reason:~p~n",[?MODULE, Data,Ans]);
@@ -220,8 +219,8 @@ extract_crc( LCRC, Rest,X) when X =:= 4 -> {LCRC, Rest};
 extract_crc( [H|T] , Rest, X) -> extract_crc(T, Rest ++ [H] , X-1). 
 	
 %check received data. returns 1 if data !not! at the rigth packet format. returns 0 if it is the rigth format.
-exemine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel_error;  
-exemine_data( [Channel, RSSI | Rest]) -> 
+examine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel_error;  
+examine_data( [Channel, RSSI | Rest]) -> 
 	{LCRC, L_NO_CRC} = extract_crc(Rest),
 	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
 	?LOGGER:preciseDebug("[~p]: CRC is:~p~n", [?MODULE, CRC]),
@@ -232,8 +231,8 @@ exemine_data( [Channel, RSSI | Rest]) ->
 		_Else ->   crc_error
 	end.
 
-exemine_data2(L) -> X = length(L), 
-	Ans = exemine_data(L),
+examine_data2(L) -> X = length(L), 
+	Ans = examine_data(L),
 	case Ans of
 		channel_error -> channel_error;
 		crc_error->
@@ -299,7 +298,7 @@ sendMSG2(Port, [H|T]) ->
 sendByte(Port, Byte, Type) -> P=self(),
  	?LOGGER:preciseDebug("[~p]: sendByte: Byte: ~p~n", [?MODULE, Byte]),
 	Port ! {P, {command, [Type,Byte]}},
-	sent.
+	{ok, sent}.
 
 
 close_all_port_processes([],_) -> done;
@@ -316,7 +315,6 @@ crc_to_list(N) ->
 
 prepare_payload([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
 prepare_payload([Channel, _ | Rest]) ->
-%    Size = lists:flatlength(bin_to_list(Rest)),
     Size = byte_size(Rest),
 
 	PAD = getPaddingList(Size),
@@ -326,18 +324,21 @@ prepare_payload([Channel, _ | Rest]) ->
 	        too_large;
         List ->
             L = pad_list(Rest, PAD),
+            ?LOGGER:temporaryInfo("[~p]: prepare_payload: PAD LIST SIZE: ~p, LISTS AFTER PADDING: ~p(~p).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
             BinaryZero = <<0:8>>,
             ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
-            binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>)
+            ListToSend = binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>),
+	        ?LOGGER:temporaryInfo("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	        ListToSend
     end,
-	?LOGGER:debug("[~p]: prepare_payload: Result: ~p~n", [?MODULE, Result]),
 	Result.
 
 getPaddingList(Size)->
-Result = case Size of
+    ?LOGGER:temporaryInfo("[~p]: getPaddingList: Size: ~p~n", [?MODULE, Size]),
+    Result = case Size of
 		S1 when S1 =< 14 ->
 		    X = 20 - Size - 4 - 2,
             if X > 0 ->
@@ -376,8 +377,8 @@ pad_list(DestinationBinary, List) ->
 
 backoff(Channel)  when Channel =:=1 ->
 	Wait = random:uniform(?BACKOFF_TIME),
-	?LOGGER:debug("[~p]: backoff - (~p)", [?MODULE, Wait]),
+	?LOGGER:preciseDebug("[~p]: backoff - (~p)", [?MODULE, Wait]),
 	receive after Wait -> ready end;
 backoff(Channel) ->
-    ?LOGGER:debug("[~p]: BACKOFF on channel ~p~n", [?MODULE, Channel]),
+    ?LOGGER:preciseDebug("[~p]: BACKOFF on channel ~p~n", [?MODULE, Channel]),
     plc_has_backoff.

@@ -33,7 +33,8 @@ stop() ->
     gen_server:call(?MODULE, stop).
 
 %send({Destination, Data})-> gen_server:call({local, ?MODULE}, {data_message, {Destination, Data}}).
-send({Destination, Data})-> gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?NET_TRAVERSAL_TIME * 3).
+send({Destination, Data})->
+    gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?TIMEOUT).
 
 
 hand_shake(ApplicationPid) -> gen_server:call(?MODULE, {hand_shake, ApplicationPid}).

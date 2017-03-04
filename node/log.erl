@@ -1,6 +1,6 @@
 -module(log).
 
--export([info/2, debug/2, preciseDebug/2, err/2, warn/2, info/1, debug/1, preciseDebug/1, err/1, warn/1]).
+-export([info/2, debug/2, preciseDebug/2, err/2, warn/2, info/1, debug/1, preciseDebug/1, err/1, warn/1, temporaryInfo/2, temporaryInfo/1]).
 
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
@@ -32,6 +32,11 @@ debug(Message) ->
 preciseDebug(Message, Params) ->
     print(-1, "[DEBUG+] ", Message, Params).
 preciseDebug(Message) ->
+    debug(Message, []).
+
+temporaryInfo(Message, Params) ->
+    print(4, "[TEMPORARY INFO] ", Message, Params).
+temporaryInfo(Message) ->
     debug(Message, []).
 
 err(Message, Params) ->

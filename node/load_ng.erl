@@ -28,6 +28,9 @@
                   network_monitor_ref,
                   network_properties,
                   modem_port_monitor_ref,
+                  modem_port_pid,
+                  modem_port_restart_timer_interval,
+                  modem_port_restart_timer_ref,
                   modem_port_properties,
                   transport_pid,
                   transport_monitor_ref,
@@ -84,6 +87,8 @@ init(Properties) ->
         transport_monitor_ref = TransportMonitorRef,
         transport_properties = TransportProperties,
         modem_port_monitor_ref = ModemPortMonitorRef,
+        modem_port_pid = ModemPortPid,
+        modem_port_restart_timer_interval = 30000,
         modem_port_properties = ModemPortProperties
 
     }}.
@@ -93,7 +98,7 @@ init(Properties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~p, ~p}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
@@ -154,7 +159,21 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{transport_m
     bind_levels(?TRANSPORT, TransportPid, ?NETWORK, Context#context.network_pid),
     TransportMonitorRef = erlang:monitor(process, TransportPid),
     NewContext = Context#context{transport_monitor_ref = TransportMonitorRef, transport_pid = TransportPid},
-    ?LOGGER:info("[~p]: TRANSPORT restartes with pid: ~p.~n",[?MODULE, TransportPid]),
+    ?LOGGER:info("[~p]: TRANSPORT restarted with pid: ~p.~n",[?MODULE, TransportPid]),
+    {noreply, NewContext};
+
+%case Transport Core crashed. restart it
+handle_info( {'DOWN', Monitor_Ref , process, Pid, Reason}, #context{modem_port_monitor_ref = Monitor_Ref} = Context) ->
+    ?LOGGER:info("[~p]: MODEM_PORT crashed, starting TIMER (~p)  to next restart ...~n",[?MODULE, Context#context.modem_port_restart_timer_interval]),
+    TimerRef = erlang:start_timer(Context#context.modem_port_restart_timer_interval, self(), {'DOWN', Monitor_Ref , process, Pid, Reason} ),
+    {noreply, Context#context{modem_port_restart_timer_ref = TimerRef}};
+
+handle_info( {timeout, TimerRef , {'DOWN', Monitor_Ref , process, _Pid, Reason}}, #context{modem_port_monitor_ref = Monitor_Ref, modem_port_restart_timer_ref = TimerRef} = Context) ->
+    ?LOGGER:info("[~p]: MODEM_PORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
+    ModemPortPid = ?MODEM_PORT:start(Context#context.data_link_pid),
+    ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
+    NewContext = Context#context{modem_port_monitor_ref = ModemPortMonitorRef, modem_port_pid = ModemPortPid},
+    ?LOGGER:info("[~p]: MODEM_PORT restarted with pid: ~p.~n",[?MODULE, ModemPortPid]),
     {noreply, NewContext};
 
 handle_info(Request, Context)  ->

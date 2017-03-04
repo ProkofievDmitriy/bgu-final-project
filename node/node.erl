@@ -52,12 +52,16 @@ start(ScriptPropertiesList) ->
         io:format("NewGlobalProps: ~p ...~n", [NewGlobalProps]),
         internal_start([{node_name, NodeName}|NewGlobalProps]).
 
+
 internal_start(Properties) when is_list(Properties)->
 %TODO change global name to node name.
+
     compile_resources(),
-%    NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
-%    NodeName = proplists:get_value(node_name, NodeProperties),
-    {ok,NodePID} = gen_server:start_link({global, ?MODULE}, ?MODULE, Properties, []),
+    NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
+    NodeName = proplists:get_value(node_name, Properties),
+    Timeout = proplists:get_value(timeout, NodeProperties),
+    ?LOGGER:info("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
+    {ok,NodePID} = gen_server:start_link({global, NodeName}, ?MODULE, Properties, [{timeout, Timeout}]),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
     NodePID.

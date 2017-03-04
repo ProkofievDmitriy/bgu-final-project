@@ -14,7 +14,8 @@
 
 
 start(Params) ->
-	{ok,PID} = gen_fsm:start(?MODULE, Params, []),
+    Timeout = proplists:get_value(timeout, Params),
+	{ok,PID} = gen_fsm:start(?MODULE, Params, [{timeout, Timeout}]),
 	PID.
 
 stop(FsmPid)->
@@ -40,14 +41,15 @@ enable(FsmPid)->
     gen_fsm:send_event(FsmPid, enable).
 %Managing events
 send(FsmPid, {Hop, Payload})->
-    gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}).
+    gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}, ?TIMEOUT).
 
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
 handle_incoming_message(FsmPid, Packet)->
+    ?LOGGER:temporaryInfo("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
     <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
-    ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
+    ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, Medium, RSSI, Target, Data]),
     gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
 
@@ -75,42 +77,52 @@ init(Properties) ->
 
 %% =========================================== IDLE =========================================
 idle(enable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Event(enable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - enable_plc , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, plc_only, StateData};
 
 idle(enable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Event(enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - (enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
     {reply, ok, rf_only, StateData};
 
 idle(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - (enable) , StateData: ~w~n", [?MODULE, StateData]),
+     {reply, ok, dual, StateData};
+
+idle(Event, _From, StateData) ->
+    ?LOGGER:debug("[~p]: IDLE - (~p) IGNORING EVENT, StateData: ~w~n", [?MODULE, Event, StateData]),
      {reply, ok, dual, StateData}.
 
 
 %% =========================================== DUAL =========================================
 dual(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, idle, StateData};
 
 dual(disable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, rf_only, StateData};
 
 dual(disable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, plc_only, StateData};
 
 dual({send, {Hop, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
-    ?MODEM_PORT:send(Medium, Payload),
-	{reply, ok, dual, StateData}.
+    Result = ?MODEM_PORT:send(Medium, Payload),
+    case Result of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+	        {reply, ErrorMessage, dual, StateData};
+	    _ ->
+	        {reply, Result, dual, StateData}
+	end.
 
 
 % Async dual events
 dual({received_message, {Medium, Target, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+    ?LOGGER:debug("[~p]: DUAL - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
     handle_message(Medium, Target, StateData, Data),
     {next_state, dual, StateData}.
 
@@ -118,19 +130,19 @@ dual({received_message, {Medium, Target, Data}}, StateData) ->
 
 %% =========================================== PLC ONLY =========================================
 plc_only(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (disable) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, idle, StateData};
 
 plc_only(disable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Event(disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, idle, StateData};
 
 plc_only(enable_rf, _From, StateData) ->
-     ?LOGGER:debug("[~p]: PLC_ONLY - Event(enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+     ?LOGGER:debug("[~p]: PLC_ONLY - (enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
     {reply, ok, dual, StateData};
 
 plc_only(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (enable) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, dual, StateData};
 
 
@@ -138,67 +150,79 @@ plc_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
-    case Medium of
+    Result = case Medium of
         ?PLC ->
-            ?MODEM_PORT:send(?PLC, Payload),
-	        {reply, ok, plc_only, StateData};
+            ?MODEM_PORT:send(?PLC, Payload);
         ?RF_PLC ->
-            ?MODEM_PORT:send(?PLC, Payload),
-	        {reply, ok, plc_only, StateData};
+            ?MODEM_PORT:send(?PLC, Payload);
 	    _Else ->
-	        {reply, {error, not_active_medium}, plc_only, StateData}
-	 end.
+	        {error, not_active_medium}
+	 end,
+
+     case Result of
+         {error, ErrorMessage} ->
+             ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+            {reply, ErrorMessage, dual, StateData};
+        _ ->
+            {reply, Result, dual, StateData}
+     end.
 
 plc_only({received_message, {Medium, Target, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
     case Medium of
         ?PLC ->
             handle_message(Medium, Target, StateData, Data);
         _Else ->
-            ?LOGGER:debug("[~p]: PLC_ONLY - Event(received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
+            ?LOGGER:debug("[~p]: PLC_ONLY - (received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
     end,
     {next_state, plc_only, StateData}.
 
 
 %% =========================================== RF ONLY =========================================
 rf_only(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (disable) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, idle, StateData};
 
 rf_only(disable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Event(disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, idle, StateData};
 
 rf_only(enable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Event(enable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (enable_plc) , StateData: ~w~n", [?MODULE, StateData]),
      {reply, ok, dual, StateData};
 
 rf_only(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (enable) , StateData: ~w~n", [?MODULE, StateData]),
     {reply, ok, dual, StateData};
 
 rf_only({send, {Hop, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - Request(send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
-    case Medium of
+    Result = case Medium of
         ?RF ->
-            ?MODEM_PORT:send(?RF, Payload),
-	        {reply, ok, rf_only, StateData};
+            ?MODEM_PORT:send(?RF, Payload);
         ?RF_PLC ->
-            ?MODEM_PORT:send(?RF, Payload),
-	        {reply, ok, rf_only, StateData};
+            ?MODEM_PORT:send(?RF, Payload);
 	    _Else ->
-	        {reply, {error, not_active_medium}, rf_only, StateData}
-	 end.
+	        {error, not_active_medium}
+	 end,
+
+     case Result of
+         {error, ErrorMessage} ->
+             ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+            {reply, ErrorMessage, dual, StateData};
+        _ ->
+            {reply, Result, rf_only, StateData}
+     end.
 
 rf_only({received_message, {Medium, Target, Data}}, StateData) ->
-     ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
+     ?LOGGER:debug("[~p]: RF_ONLY - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
      case Medium of
-         ?PLC ->
+         ?RF ->
              handle_message(Medium, Target, StateData, Data);
          _Else ->
-             ?LOGGER:debug("[~p]: RF_ONLY - Event(received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
+             ?LOGGER:debug("[~p]: RF_ONLY - (received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
      end,
      {next_state, rf_only, StateData}.
 
@@ -250,7 +274,7 @@ preparePayload(Address, Data)->
     BinaryNextHopAddress = <<Address:?ADDRESS_LENGTH>>,
     Payload = <<BinaryNextHopAddress/bitstring, Data/bitstring>>,
     if (bit_size(Payload) =< ?MAX_FRAME_LENGTH) ->
-            ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
+            ?LOGGER:preciseDebug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
         true ->
             ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: byte_size : ~p, bit_size: ~p ~n", [?MODULE, byte_size(Payload), bit_size(Payload)]),

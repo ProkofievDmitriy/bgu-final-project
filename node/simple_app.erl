@@ -15,7 +15,7 @@ start(Properties)->
 	case Role of
 		smart_meter ->
 	        SendInterval = proplists:get_value(send_message_interval, Properties),
-            PID = spawn(fun()->smart_meter_loop(SendInterval, 1000) end),
+            PID = spawn(fun()->smart_meter_loop(SendInterval, 1000, "1") end),
             ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
             register(?APPLICATION_NAME, PID),
             PID;
@@ -35,38 +35,39 @@ data_concentration_loop()->
 		    ?LOGGER:info("[~p]: Received stop message. Exiting data concentration server App~n", [?MODULE]),
 		    normal;
 		Message ->
-	        ?LOGGER:info("[~p]: Received message : ~p.~n", [?MODULE, Message]),
+            ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(Message), Message]),
             data_concentration_loop()
 	end.
 
 
 
-smart_meter_loop(SendInterval, FalseLoops) ->
+smart_meter_loop(SendInterval, FalseLoops, Data) ->
     receive
         stop ->
 		    ?LOGGER:info("[~p]: Received stop message. Exiting ... ~n", [?MODULE]),
             normal;
          Message ->
-            ?LOGGER:info("[~p]: Received message: ~p  ~n", [?MODULE, Message]),
+            ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(Message), Message]),
             ok
         after ?MESSAGE_SEND_INTERVAL ->
             case FalseLoops rem 1000 of
                 0 ->
                 Destination = 1,
-                Data = "some message",
                 ?LOGGER:info("[~p]: Sending Message ~p~n" ,[?MODULE, {Destination, Data}]),
                 Result = ?PROTOCOL:send({Destination, Data}),
                 case Result of
                         {error, Message} ->
                             ?LOGGER:info("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);
-                        sent ->
-                            ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE]);
+                        {ok, sent} ->
+                            ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE]),
+                            smart_meter_loop(SendInterval, FalseLoops + 1 , Data ++ [0]);
+
                         SomeResult ->
                             ?LOGGER:info("[~p]: Some unexpected result received: ~p~n" ,[?MODULE, SomeResult])
                 end;
                 _Else -> ok
             end,
-            smart_meter_loop(SendInterval, FalseLoops + 1)
+            smart_meter_loop(SendInterval, FalseLoops + 1 , Data)
     end.
 
 
