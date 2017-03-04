@@ -61,6 +61,7 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
                         {ok, sent} ->
                             ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE]),
                             smart_meter_loop(SendInterval, FalseLoops + 1 , Data ++ [0]);
+%                            smart_meter_loop(SendInterval, FalseLoops + 1 , Data);
 
                         SomeResult ->
                             ?LOGGER:info("[~p]: Some unexpected result received: ~p~n" ,[?MODULE, SomeResult])

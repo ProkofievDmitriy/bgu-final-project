@@ -23,7 +23,7 @@
 -define(PORTS_ERRORS_LIMIT, 10).
 -define(PORTS_CRASH_LIMIT, 2).
 
--define(BACKOFF_TIME, 250 ). 	%max backoff time
+-define(BACKOFF_TIME, 500 ). 	%max backoff time
 
 %C program detailes defines
 -define(PROGRAM_PATH, "./c-port/").
