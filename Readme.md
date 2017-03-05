@@ -11,7 +11,7 @@ some_function() -> other_function().
 ```
 ###Routing Set Entry Record
 ```erlang
--record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}).
+-record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 ```
 
 ---
