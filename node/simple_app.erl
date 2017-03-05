@@ -53,7 +53,7 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
             case FalseLoops rem 1000 of
                 0 ->
                 Destination = 1,
-                ?LOGGER:info("[~p]: Sending Message ~p~n" ,[?MODULE, {Destination, Data}]),
+                ?LOGGER:info("[~p]: Sending Message length = ~p, Message: ~p ~n" ,[?MODULE, length(Data), {Destination, Data}]),
                 Result = ?PROTOCOL:send({Destination, Data}),
                 case Result of
                         {error, Message} ->
@@ -70,5 +70,3 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
             end,
             smart_meter_loop(SendInterval, FalseLoops + 1 , Data)
     end.
-
-

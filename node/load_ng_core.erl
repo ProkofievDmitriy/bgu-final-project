@@ -1,5 +1,6 @@
 -module(load_ng_core).
 -behaviour(gen_fsm).
+
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
@@ -28,11 +29,18 @@
                 }).
 
 -record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}).
--record(rreq_handling_set_entry, {r_seq_number, destination, originator}).
--record(pending_acknowledgement, {next_hop, originator, r_seq_number, ack_received, ack_timeout}).
+-record(rreq_handling_set_entry, {r_seq_number, destination, originator, valid_time}).
+-record(pending_acknowledgement_entry, {next_hop, originator, r_seq_number, ack_received, ack_timeout}).
 
--record(management_message, {originator, hop_count, r_seq_number}).
--record(load_ng_packet, {medium, type, source, destination, data}).
+
+-record(load_ng_packet, {medium, type, source, originator, destination, data}).
+
+-record(rreq_message, {originator, destination, hop_count, r_seq_number}).
+-record(rrep_message, {originator, destination, ackrequired, hop_count, r_seq_number}).
+-record(rack_message, {originator, destination, hop_count, r_seq_number}).
+-record(rerr_message, {originator, destination, unreachable_address, r_seq_number, error_code}).
+
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -77,18 +85,19 @@ handle_incoming_message(FsmPid, Medium, Payload)->
 generate_RREQ(Destination)->
     gen_fsm:send_event(self(), {generate_rreq, Destination}).
 
-generate_RREP(Destination)->
-    gen_fsm:send_event(self(), {generate_rrep, Destination}).
+generate_RREP(MetaData)->
+    gen_fsm:send_event(self(), {generate_rrep, MetaData}).
 
-generate_RERR(Destination)->
-    gen_fsm:send_event(self(), {generate_rerr, Destination}).
+generate_RERR(MetaData)->
+    gen_fsm:send_event(self(), {generate_rerr, MetaData}).
 
-generate_RACK(Destination)->
-    gen_fsm:send_event(self(), {generate_rack, Destination}).
+generate_RACK(MetaData)->
+    gen_fsm:send_event(self(), {generate_rack, MetaData}).
 
-%% ============================================================================================
-%% =========================================== Init ==========================================
-%% ============================================================================================
+
+%% ====================================================================
+%% Init
+%% ====================================================================
 init(Properties) ->
     ?LOGGER:info("[~p]: Starting FSM with params: ~w.~n", [?MODULE, Properties]),
     NetTraversalTime = proplists:get_value(net_traversal_time, Properties),
@@ -101,7 +110,8 @@ init(Properties) ->
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
 
 
-    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_expired_routes),
+    gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
 
     {ok, active, #state{
         routing_set = RoutingSet_Id,
@@ -111,8 +121,7 @@ init(Properties) ->
         address_length = AddressLength,
         reporting_unit = ReportingUnit,
         self_address = SelfAddress,
-%        r_seq_number = 0
-        r_seq_number = 245
+        r_seq_number = 0
     }}.
 
 %% ============================================================================================
@@ -138,7 +147,7 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
         {error, ErrorMessage} ->
             {reply, {error, ErrorMessage}, active, StateData};
         Hop ->
-            Payload = prepare_payload(StateData#state.self_address, Destination, ?DATA, Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
+            Payload = prepare_payload(StateData#state.self_address, StateData#state.self_address, Destination, ?DATA, Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
             case Payload of
                 {error, ErrorMessage} ->
                    {reply, {error, ErrorMessage}, active, StateData};
@@ -146,85 +155,133 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
                     Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
                     report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
                     {reply, Result, active, StateData}
-            end
+            end;
+        Else ->
+            ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
+            {reply, Else, active, StateData}
     end.
 
 
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
-active(remove_not_valid_routes, StateData)->
+active(remove_expired_routes, StateData)->
     ExpiredRoutes = query_expired_routes(StateData#state.routing_set),
-    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
-
+    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
     lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, ExpiredRoutes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_expired_routes),
+    {next_state, active, StateData};
 
-    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
+active(remove_expired_rreq, StateData)->
+    ExpiredRREQ = query_expired_rreq(StateData#state.rreq_handling_set),
+    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~p.~n", [?MODULE, length(ExpiredRREQ)]),
+    lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
+    gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
     {next_state, active, StateData};
 
 active({generate_rreq, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Generating RREQ for Destination ~p.~n", [?MODULE, Destination]),
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREQ for Destination ~p.~n", [?MODULE, Destination]),
 
     Originator = StateData#state.self_address,
     HopCount = 0,
     RREQSequenceNumber = StateData#state.r_seq_number,
 
-    Payload = prepare_payload(StateData#state.self_address, Destination, ?RREQ, [RREQSequenceNumber, Originator, HopCount]),
+    Payload = prepare_payload(StateData#state.self_address, StateData#state.self_address, Destination, ?RREQ, [RREQSequenceNumber, Originator, HopCount]),
     case Payload of
         {error, ErrorMessage} ->
-            ?LOGGER:err("[~p]: ACTIVE - Generating RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
-           {next_state, active, StateData};
+            ?LOGGER:err("[~p]: ACTIVE - GENERATING RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
+            {next_state, active, StateData};
         _ ->
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
-            add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set, {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
+            add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
+                                              {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
             report_management_message(StateData#state.reporting_unit, Payload),
-            NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem 256}, % increase RREQ Sequence number
+            NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem ?SEQUENCE_NUMBER_MAX_VALUE}, % increase RREQ Sequence number
             {next_state, active, NewState}
     end;
 
 active({generate_rrep, {Destination, RREQSequenceNumber, HopCount}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Generating RREP for ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(StateData#state.self_address, Destination, ?RREP, [RREQSequenceNumber, StateData#state.self_address, HopCount]),
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREP for ~p.~n", [?MODULE, Destination]),
+    Payload = prepare_payload(StateData#state.self_address, StateData#state.self_address, Destination, ?RREP, [RREQSequenceNumber, StateData#state.self_address, 0, ?ACK_REQUIRED]),
     Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
     case Result of
-        {ok, NextHop} ->
+        {ok, {_Key, NextHop}} ->
             case Payload of
                 {error, ErrorMessage} ->
-                    ?LOGGER:err("[~p]: ACTIVE - Generating RREP failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RREP failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
                 _ ->
-                    ?LOGGER:info("[~p]: ACTIVE - Generating RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
+                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
                     ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_management_message(StateData#state.reporting_unit, Payload)
+                    report_management_message(StateData#state.reporting_unit, Payload),
+                    if ?ACK_REQUIRED -> %false by default - further implementations
+                        add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
+                                                                 StateData#state.self_address,
+                                                                 RREQSequenceNumber,
+                                                                 StateData#state.pending_acknowledgements_set); %{next_hop, originator, r_seq_number, ack_received, ack_timeout}
+                        true ->
+                            ok
+                    end
             end;
         Error ->
-            ?LOGGER:err("[~p]: ACTIVE - FAILED Generating RREP : ~w.~n", [?MODULE, Error])
+            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RREP : ~w.~n", [?MODULE, Error])
     end,
     {next_state, active, StateData};
 
 
-active({generate_rerr, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Generating RRER for ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(StateData#state.self_address, Destination, ?RERR, []),
-    report_management_message(StateData#state.reporting_unit, Payload),
+active({generate_rerr, {Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}}, StateData) ->
+    Payload = prepare_payload(StateData#state.self_address,
+                              StateData#state.self_address,
+                              Destination,
+                              ?RERR,
+                              [R_SEQ_NUMBER, StateData#state.self_address, UnreacheableAddress, ErrorCode]),
+    Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
+    case Result of
+        {ok, {_Key, NextHop}} ->
+            case Payload of
+                {error, ErrorMessage} ->
+                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+                _ ->
+                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
+                    ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    report_management_message(StateData#state.reporting_unit, Payload)
+                end;
+        Error ->
+            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RRER : ~w.~n", [?MODULE, Error])
+        end,
     {next_state, active, StateData};
 
 active({generate_rack, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Generating RACK for ~p.~n", [?MODULE, Destination]),
-    Payload = prepare_payload(StateData#state.self_address, Destination, ?RACK, []),
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RACK for ~p.~n", [?MODULE, Destination]),
+    Payload = prepare_payload(StateData#state.self_address, StateData#state.self_address, Destination, ?RACK, []),
     report_management_message(StateData#state.reporting_unit, Payload),
     {next_state, active, StateData};
 
 
 
 
-% Receive Messages Handlers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                     Receive Messages Handlers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
+    update_routing_set_entry(Packet, StateData), % route maintanace
     case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
         true ->
             ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data);
         false ->
-            forward_packet(Packet, StateData)
+            Result = forward_packet(Packet, StateData),
+            case Result of
+                {ok, sent, _Some } ->
+                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]);
+                {error, Error, FailedHop} ->
+                    ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR , generating RERR towards ~p.~n", [?MODULE, Packet#load_ng_packet.source]),
+                    generate_RERR({Packet#load_ng_packet.originator,
+                                   FailedHop#routing_set_entry.r_seq_number,
+                                   ?RERR_HOST_UNREACHABLE,
+                                   Packet#load_ng_packet.destination});
+               Else ->
+                   ?LOGGER:critical("[~p]: ACTIVE - DATA received message  - Enexpected error: ~p .~n", [?MODULE, Else])
+               end
     end,
     {next_state, active, StateData};
 
@@ -234,16 +291,16 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
     if  IsValidPacket ->
         %install reverse route
         add_new_entry_to_routing_set(StateData#state.routing_set,
-                                     Packet#load_ng_packet.data#management_message.originator,
+                                     Packet#load_ng_packet.data#rreq_message.originator,
                                      Packet#load_ng_packet.source,
                                      Packet#load_ng_packet.medium,
-                                     Packet#load_ng_packet.data#management_message.hop_count,
-                                     Packet#load_ng_packet.data#management_message.r_seq_number),
+                                     Packet#load_ng_packet.data#rreq_message.hop_count,
+                                     Packet#load_ng_packet.data#rreq_message.r_seq_number),
         case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
             true ->
-                RREQSequenceNumber = Packet#load_ng_packet.data#management_message.r_seq_number,
-                Originator = Packet#load_ng_packet.data#management_message.originator,
-                HopCount = Packet#load_ng_packet.data#management_message.hop_count,
+                RREQSequenceNumber = Packet#load_ng_packet.data#rreq_message.r_seq_number,
+                Originator = Packet#load_ng_packet.data#rreq_message.originator,
+                HopCount = Packet#load_ng_packet.data#rreq_message.hop_count,
                 generate_RREP({Originator, RREQSequenceNumber, HopCount});
             false -> % this router is not a destination, forwarding message
                 forward_packet(Packet, StateData)
@@ -258,64 +315,47 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
     IsValidPacket = isValidForProcessing(?RREP, Packet, StateData),
     if IsValidPacket ->
+        %TODO Remove rreq handling entry
         %install forward route
         add_new_entry_to_routing_set(StateData#state.routing_set,
-                                     Packet#load_ng_packet.data#management_message.originator,
+                                     Packet#load_ng_packet.originator,
                                      Packet#load_ng_packet.source,
                                      Packet#load_ng_packet.medium,
-                                     Packet#load_ng_packet.data#management_message.hop_count,
-                                     Packet#load_ng_packet.data#management_message.r_seq_number),
+                                     Packet#load_ng_packet.data#rrep_message.hop_count,
+                                     Packet#load_ng_packet.data#rrep_message.r_seq_number),
         case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
                 true ->
-                    %TODO Remove rreq handling entry
                     %TODO generate RACK
                     ok;
                 false ->
                     forward_packet(Packet, StateData)
         end;
         true ->
-          ?LOGGER:debug("[~p]: ACTIVE - RREP NOT VALID, Packet DROPPED.~n", [?MODULE]),
-          ok
+          ?LOGGER:debug("[~p]: ACTIVE - RREP NOT VALID, Packet DROPPED.~n", [?MODULE])
         end,
     {next_state, active, StateData};
 
 active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RERR : Packet : ~w .~n", [?MODULE, Packet]),
-    isValidForProcessing(?RERR, Packet, StateData),
-
-    case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
-                true ->
-                    RREQSequenceNumber = Packet#load_ng_packet.data#management_message.r_seq_number,
-                    %TODO validate RERR
-
-                    Originator = Packet#load_ng_packet.data#management_message.originator,
-                    HopCount = Packet#load_ng_packet.data#management_message.hop_count,
-    %                add_new_entry_to_routing_set(StateData#state.routing_set, Originator, Packet#load_ng_packet.source, Packet#load_ng_packet.medium, HopCount, RREQSequenceNumber),
-                    %TODO Update BIDIRECTIONAL LINK
-                    generate_RREP({Originator, RREQSequenceNumber, HopCount});
-                false ->
-                    ok
-            end,
+    Result = remove_and_get_broken_link(Packet, StateData#state.routing_set),
+    if Packet#load_ng_packet.originator =/= StateData#state.self_address ->
+        case Result of
+            {ok , RemovedEntry} ->
+                forward_packet(Packet, StateData, RemovedEntry);
+            {error , Message} ->
+                ?LOGGER:err("[~p]: ACTIVE - RERR  - ERROR: ~p .~n", [?MODULE, Message]);
+            Else ->
+                ?LOGGER:critical("[~p]: ACTIVE - RERR  - Enexpected error: ~p .~n", [?MODULE, Else]),
+                ok
+        end;
+        true ->
+            ok
+    end,
     {next_state, active, StateData};
 
 active({received_message, #load_ng_packet{type = ?RACK} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RACK : Packet : ~p .~n", [?MODULE, Packet]),
-    case amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address) of
-            true ->
-                RREQSequenceNumber = Packet#load_ng_packet.data#management_message.r_seq_number,
-                %TODO validate RACK
-
-                Originator = Packet#load_ng_packet.data#management_message.originator,
-                HopCount = Packet#load_ng_packet.data#management_message.hop_count,
-%                add_new_entry_to_routing_set(StateData#state.routing_set, Originator, Packet#load_ng_packet.source, Packet#load_ng_packet.medium, HopCount, RREQSequenceNumber),
-                %TODO Update BIDIRECTIONAL LINK
-                generate_RREP({Originator, RREQSequenceNumber, HopCount});
-            false ->
-                ok
-        end,
-        {next_state, active, StateData}.
-
-
+    {next_state, active, StateData}.
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
 %% ============================================================================================
@@ -393,32 +433,50 @@ get_next_hop(Destination, State)->
 
 
 % build LoadNG Packet : <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, BinaryDataLengthInBytes:8, Data:BinaryDataLengthInBytes>>
-prepare_payload(Source, Destination, MessageType, Data)->
+prepare_payload(Source, Originator, Destination, MessageType, Data)->
     %TODO Remove Headers - meaningless
     BinaryDestination = <<Destination:?ADDRESS_LENGTH>>,
     BinarySource = <<Source:?ADDRESS_LENGTH>>,
+    BinaryOriginator = <<Originator:?ADDRESS_LENGTH>>,
     BinaryMessageType = <<MessageType:?MESSAGE_TYPE_LENGTH>>,
     BinaryData = list_to_binary(Data),
     BinaryDataLengthInBytes = byte_size(BinaryData),
-    ?LOGGER:debug("[~p]: prepare_payload : MessageType: ~p, Source: ~p , Destination: ~p, DataLengthInBytes: ~p~n", [?MODULE, BinaryMessageType, BinarySource, BinaryDestination, BinaryDataLengthInBytes]),
+    ?LOGGER:debug("[~p]: prepare_payload : MessageType: ~p, Source: ~p , Destination: ~p, DataLengthInBytes: ~p~n", [?MODULE,
+                                                                                                                     BinaryMessageType,
+                                                                                                                     BinarySource,
+                                                                                                                     BinaryDestination,
+                                                                                                                     BinaryDataLengthInBytes]),
     if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
-            Payload = <<BinaryMessageType/bitstring, BinarySource/bitstring, BinaryDestination/bitstring, BinaryDataLengthInBytes:?DATA_LENGTH_SIZE , BinaryData/bitstring>>,
+            Payload = <<BinaryMessageType/bitstring,
+                        BinarySource/bitstring,
+                        BinaryOriginator/bitstring,
+                        BinaryDestination/bitstring,
+                        BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
+                        BinaryData/bitstring>>,
             ?LOGGER:preciseDebug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
         true ->
-            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE, BinaryDataLengthInBytes, ?MAX_DATA_LENGTH]),
+            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
+                                                                                                                      BinaryDataLengthInBytes,
+                                                                                                                      ?MAX_DATA_LENGTH]),
             {error, "Binary Data Length exceeded"}
     end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Packet deserialization utilities %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 deserializePayload(Payload)->
-    <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, DataLength:?DATA_LENGTH_SIZE, RestData/bitstring>> = Payload,
+    <<Type:?MESSAGE_TYPE_LENGTH,
+      Source:?ADDRESS_LENGTH,
+      Originator:?ADDRESS_LENGTH,
+      Destination:?ADDRESS_LENGTH,
+      DataLength:?DATA_LENGTH_SIZE,
+      RestData/bitstring>> = Payload,
     DataLengthBits = DataLength * 8, % number of bytes
     <<Data:DataLengthBits/bitstring, _Rest/bitstring>> = RestData,
     Packet = #load_ng_packet{
         type = Type,
         source = Source,
+        originator = Originator,
         destination = Destination
     },
     ?LOGGER:preciseDebug("[~p]: deserializePayload : Packet : ~w ~n", [?MODULE, Packet]),
@@ -428,19 +486,73 @@ deserializePayload(Payload)->
 deserializeMessage(#load_ng_packet{type = ?DATA} = Packet, Data)->
     Packet#load_ng_packet{data=Data};
 
-deserializeMessage(Packet, Data)->
-    ?LOGGER:preciseDebug("[~p]: deserializePayload : Packet : ~w ~n", [?MODULE, Packet]),
+deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage RREQ : Packet : ~w ~n", [?MODULE, Packet]),
     RREQMessageData = binary_to_list(Data),
     RREQSequenceNumber = lists:nth(1, RREQMessageData),
     Originator = lists:nth(2, RREQMessageData),
     HopCount = lists:nth(3, RREQMessageData) + 1,
-    ManagementMessage = #management_message{
-        originator = Originator,
-        r_seq_number = RREQSequenceNumber,
-        hop_count= HopCount
-    },
-    Packet#load_ng_packet{data = ManagementMessage}.
 
+    RREQMessage = #rreq_message{
+        originator = Originator,
+        destination = Packet#load_ng_packet.destination,
+        hop_count = HopCount,
+        r_seq_number = RREQSequenceNumber
+    },
+
+    Packet#load_ng_packet{data = RREQMessage};
+
+deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage RREP : Packet : ~w ~n", [?MODULE, Packet]),
+    RREPMessageData = binary_to_list(Data),
+    RREPSequenceNumber = lists:nth(1, RREPMessageData),
+    Originator = lists:nth(2, RREPMessageData),
+    HopCount = lists:nth(3, RREPMessageData) + 1,
+    AckRequired = lists:nth(4, RREPMessageData),
+
+    RREPMessage = #rrep_message{
+        originator = Originator,
+        destination = Packet#load_ng_packet.destination,
+        hop_count = HopCount,
+        r_seq_number = RREPSequenceNumber,
+        ackrequired = AckRequired
+    },
+
+    Packet#load_ng_packet{data = RREPMessage};
+
+deserializeMessage(#load_ng_packet{type = ?RERR} = Packet, Data)->
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage RERR : Packet : ~w ~n", [?MODULE, Packet]),
+    RERRMessageData = binary_to_list(Data),
+    RERRSequenceNumber = lists:nth(1, RERRMessageData),
+    Originator = lists:nth(2, RERRMessageData),
+    UnreacheableAddress = lists:nth(3, RERRMessageData),
+    ErrorCode = lists:nth(4, RERRMessageData),
+
+    RERRMessage = #rerr_message{
+        originator = Originator,
+        destination = Packet#load_ng_packet.destination,
+        unreachable_address = UnreacheableAddress,
+        r_seq_number = RERRSequenceNumber,
+        error_code = ErrorCode
+    },
+
+    Packet#load_ng_packet{data = RERRMessage};
+
+deserializeMessage(#load_ng_packet{type = ?RACK} = Packet, Data)->
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage RACK : Packet : ~w ~n", [?MODULE, Packet]),
+    RACKMessageData = binary_to_list(Data),
+    RACKSequenceNumber = lists:nth(1, RACKMessageData),
+    Originator = lists:nth(2, RACKMessageData),
+    HopCount = lists:nth(3, RACKMessageData) + 1,
+
+    RACKMessage = #rreq_message{
+        originator = Originator,
+        destination = Packet#load_ng_packet.destination,
+        hop_count = HopCount,
+        r_seq_number = RACKSequenceNumber
+    },
+
+    Packet#load_ng_packet{data = RACKMessage}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 amIDestination(Destination, SelfAddress)->
@@ -452,19 +564,37 @@ amIDestination(Destination, SelfAddress)->
     end.
 
 isValidForProcessing(Type, Packet, State) when Type =:= ?RREP ->
-    isValidForProcessing(?RREQ, Packet, State);
+    isValidForProcessing(Packet#load_ng_packet.data#rrep_message.originator,
+                         Packet#load_ng_packet.destination,
+                         Packet#load_ng_packet.data#rrep_message.r_seq_number,
+                         State);
+
+isValidForProcessing(Type, Packet, State) when Type =:= ?RERR ->
+    isValidForProcessing(Packet#load_ng_packet.data#rerr_message.originator,
+                         Packet#load_ng_packet.destination,
+                         Packet#load_ng_packet.data#rerr_message.r_seq_number,
+                         State);
+
+isValidForProcessing(Type, Packet, State) when Type =:= ?RACK ->
+    isValidForProcessing(Packet#load_ng_packet.data#rack_message.originator,
+                         Packet#load_ng_packet.destination,
+                         Packet#load_ng_packet.data#rack_message.r_seq_number,
+                         State);
 
 isValidForProcessing(Type, Packet, State) when Type =:= ?RREQ ->
-    if Packet#load_ng_packet.data#management_message.originator =:= State#state.self_address -> false; %this router is the originator of request
+    isValidForProcessing(Packet#load_ng_packet.data#rreq_message.originator,
+                         Packet#load_ng_packet.destination,
+                         Packet#load_ng_packet.data#rreq_message.r_seq_number,
+                         State).
+
+isValidForProcessing(Originator, Destination, R_SEQ_NUMBER, State)->
+    if  Originator =:= State#state.self_address -> false; %this router is the originator of request
        true ->
-            case contains_is_rreq_handling_set(State#state.rreq_handling_set,
-                                         {Packet#load_ng_packet.data#management_message.r_seq_number,
-                                          Packet#load_ng_packet.destination,
-                                          Packet#load_ng_packet.data#management_message.originator}) of %preventing flooding - RREQ will be not flooded , single retransmit
+            case contains_is_rreq_handling_set(State#state.rreq_handling_set, {R_SEQ_NUMBER, Destination, Originator}) of %preventing flooding - RREQ will be not flooded , single retransmit
                 false ->
-                    case query_find_next_hop(Packet#load_ng_packet.data#management_message.originator, State#state.routing_set) of
+                    case query_find_next_hop(Originator, State#state.routing_set) of
                       {ok, Entry } -> %found next hop (route exists)
-                        IsGreater = is_sequence_number_grater(Packet#load_ng_packet.data#management_message.r_seq_number, Entry#routing_set_entry.r_seq_number),
+                        IsGreater = is_sequence_number_grater(R_SEQ_NUMBER, Entry#routing_set_entry.r_seq_number),
                         if IsGreater ->
                             true;
                             true ->
@@ -476,37 +606,42 @@ isValidForProcessing(Type, Packet, State) when Type =:= ?RREQ ->
                             true
                     end;
                 true ->
-                    ?LOGGER:info("[~p]: isValidForProcessing : RREQ ALREADY HANDLED.~n", [?MODULE]),
+                    ?LOGGER:info("[~p]: isValidForProcessing : RREQ TIMEOUT EXPIRED.~n", [?MODULE]),
                     false
                 end
     end.
-
 %broadcast forwarding
 forward_packet(#load_ng_packet{type = ?RREQ} = Packet, StateData) -> % only RREQ forwarded to BROADCAST_ADDRESS
     ?LOGGER:info("[~p]: forward_packet : RREQ in BROADCAST.~n", [?MODULE]),
-    Payload = prepare_payload(StateData#state.self_address, Packet#load_ng_packet.destination, ?RREQ, Packet#load_ng_packet.data),
-    Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
+    Payload = prepare_payload(StateData#state.self_address,
+                              Packet#load_ng_packet.originator,
+                              Packet#load_ng_packet.destination,
+                              ?RREQ,
+                              Packet#load_ng_packet.data),
+    {Status, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
     report_management_message(StateData#state.reporting_unit, Payload),
-    Result;
+    {Status, Message, {?RF_PLC, ?BROADCAST_ADDRESS}};
 
 %unicast forwarding
 forward_packet(Packet, StateData) ->
-    QueryResult = query_find_next_hop(Packet#load_ng_packet.destination, StateData#state.routing_set), % {Medium, NextHopAddress}
-    case QueryResult of
-        {ok, NextHop} ->
-            ?LOGGER:info("[~p]: forward_packet : to ~p, in UNICAST. Packet: ~p.~n", [?MODULE, NextHop, Packet]),
-            Payload = prepare_payload(StateData#state.self_address, Packet#load_ng_packet.destination, ?RREP, Packet#load_ng_packet.data),
-            Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
-            report_management_message(StateData#state.reporting_unit, Payload),
-            Result;
+    {Status, NextHop} = query_find_next_hop(Packet#load_ng_packet.destination, StateData#state.routing_set), % {Medium, NextHopAddress}
+    case Status of
+        ok ->
+            forward_packet(Packet, StateData, NextHop);
         Else ->
-            {error, message_not_forwarded}
+            {error, failed_to_forward_message, NextHop}
     end.
 
-increment_hop_count(LoadNGPacket)->
-    Data = LoadNGPacket#load_ng_packet.data,
-    HopCount = Data#management_message.hop_count,
-    LoadNGPacket#load_ng_packet{ data = Data#management_message{ hop_count = HopCount + 1}}.
+forward_packet(Packet, StateData, NextHop) ->
+    ?LOGGER:info("[~p]: forward_packet : to ~p, in UNICAST. Packet: ~p.~n", [?MODULE, NextHop, Packet]),
+    Payload = prepare_payload(StateData#state.self_address,
+                              Packet#load_ng_packet.originator,
+                              Packet#load_ng_packet.destination,
+                              Packet#load_ng_packet.type,
+                              Packet#load_ng_packet.data),
+    {SendStatus, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
+    report_management_message(StateData#state.reporting_unit, Payload),
+    {SendStatus, Message, NextHop}.
 
 
 %----------------------------------------------------------------------------
@@ -533,7 +668,9 @@ query_find_next_hop(Destination, RoutingSetId)->
     NextHop = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     Result = case NextHop of
         [Entry|[]] -> {ok, Entry};
-        [_Entry|_Rest] -> {ok, get_route_set_entry_with_highest_seq_num(NextHop)};
+        [_Entry|_Rest] ->
+            {_Key, WithHighestSeqNum} = get_route_set_entry_with_highest_seq_num(NextHop),
+            {ok, WithHighestSeqNum};
         [] ->
             ?LOGGER:preciseDebug("[~p]: query_find_next_hop  NOT FOUND.~n", [?MODULE]),
             {?EMPTY_QUERY_RESULT, "NOT FOUND"};
@@ -543,6 +680,20 @@ query_find_next_hop(Destination, RoutingSetId)->
     end,
     Result.
 
+add_new_entry_to_pending_acknowledgments(NextHop, Originator, RREQSequenceNumber, PendingAckSetId)-> %{next_hop, originator, r_seq_number, ack_received, ack_timeout}
+    Entry = #pending_acknowledgement_entry{
+        next_hop = NextHop,
+        originator = Originator,
+        r_seq_number = RREQSequenceNumber,
+        ack_received = false,
+        ack_timeout = get_current_millis() + ?NET_TRAVERSAL_TIME * 2
+    },
+    Result = ets:insert(PendingAckSetId, {get_current_millis(), Entry}),
+    ?LOGGER:info("[~p]: Pending Acknowledges Set updated with entry : ~w , Result : ~p .~n", [?MODULE, Entry, Result]),
+    ?LOGGER:preciseDebug("[~p]: PendingAckSet: ~n  ~p .~n", [?MODULE, ets:tab2list(PendingAckSetId)]),
+
+    Result.
+
 query_expired_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid_time < CurrentMillis -> {Key, Entry} end),
@@ -550,8 +701,15 @@ query_expired_routes(RoutingSetId)->
     ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
     Result.
 
+query_expired_rreq(RREQ_HandlingSet_Id)->
+    CurrentMillis = get_current_millis(),
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#rreq_handling_set_entry.valid_time < CurrentMillis -> {Key, Entry} end),
+    Result = qlc:eval(ets:table(RREQ_HandlingSet_Id, [{traverse, {select, Query}}])),
+    ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
+    Result.
+
 add_new_entry_to_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Originator})->
-    Entry = #rreq_handling_set_entry{r_seq_number = SeqNumber, destination = Destination, originator = Originator},
+    Entry = #rreq_handling_set_entry{r_seq_number = SeqNumber, destination = Destination, originator = Originator, valid_time = get_current_millis() + ?NET_TRAVERSAL_TIME * 2},
     Result = ets:insert(RREQ_HandlingSet_Id, {get_current_millis(), Entry}),
     ?LOGGER:info("[~p]: RREQ Handling Set updated with entry : ~w, Result : ~p .~n", [?MODULE, Entry, Result]),
     ?LOGGER:preciseDebug("[~p]: RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(RREQ_HandlingSet_Id)]),
@@ -574,6 +732,52 @@ contains_is_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Orig
             {error, "UNEXPECTED RESULTS ERROR in contains_is_rreq_handling_set"}
     end.
 
+update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.destination -> {Key, Entry} end),
+    QueryResult = qlc:eval(ets:table(StateData#state.routing_set, [{traverse, {select, Query}}])),
+    EntryToUpdate = case QueryResult of
+        [H|[]] -> {ok, H};
+        [_H|_T] -> {ok, get_route_set_entry_with_highest_seq_num(QueryResult)};
+        [] ->
+            {error, failed_updating_routing_set_entry_not_found };
+        _ ->
+            {error, failed_updating_routing_set_entry_unexpected_error}
+    end,
+
+    case EntryToUpdate of
+        {ok, {Key, Entry}} ->
+            ets:delete(StateData#state.routing_set, Key),
+            ets:insert(StateData#state.routing_set, Entry#routing_set_entry{valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}),
+            ?LOGGER:info("[~p]: update_routing_set_entry : ~p.~n", [?MODULE, Entry]),
+            ?LOGGER:preciseDebug("[~p]: RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]);
+        {error, Mesage} ->
+            ?LOGGER:err("[~p]: update_routing_set_entry ErrorMessage: ~p.~n", [?MODULE, Mesage]),
+            {error, failed_updating_routing_set_entry}
+    end.
+
+remove_and_get_broken_link(Packet, StateData)->
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.data#rerr_message.unreachable_address),
+                                              (Entry#routing_set_entry.next_addr =:= Packet#load_ng_packet.source),
+                                              (Entry#routing_set_entry.r_seq_number =:= Packet#load_ng_packet.data#rerr_message.r_seq_number) ->  {Key, Entry} end),
+    QueryResult = qlc:eval(ets:table(StateData#state.routing_set, [{traverse, {select, Query}}])),
+    EntryToRemove = case QueryResult of
+        [H|[]] -> {ok, H};
+        [] ->
+            {error, failed_updating_routing_set_entry_not_found };
+        _ ->
+            {error, failed_updating_routing_set_entry_unexpected_error}
+    end,
+
+    case EntryToRemove of
+        {ok, {Key, Entry}} ->
+            ets:delete(StateData#state.routing_set, Key),
+            ?LOGGER:info("[~p]: BROKEN LINK REMOVED : ~p.~n", [?MODULE, Entry]),
+            ?LOGGER:preciseDebug("[~p]: RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
+            {ok, Entry};
+        {error, Mesage} ->
+            ?LOGGER:err("[~p]: remove_broken_link_and_forward ErrorMessage: ~p.~n", [?MODULE, Mesage]),
+            {error, failed_updating_routing_set_entry}
+    end.
 
 
 %----------------------------------------------------------------------------
@@ -606,7 +810,7 @@ report_routing_set(ReportingUnit, RoutingSetId)->
 % UTILS Functions
 %----------------------------------------------------------------------------
 is_sequence_number_grater(S1, S2) ->
-    MAXVALUE = 255,
+    MAXVALUE = ?SEQUENCE_NUMBER_MAX_VALUE - 1,
     Result = (((S2 < S1) and (S1 - S2 =< MAXVALUE/2)) or ((S1 < S2) and (S2 - S1 > MAXVALUE/2))),
     ?LOGGER:preciseDebug("[~p]: is_sequence_number_grater  ~p > ~p ? result : ~p .~n", [?MODULE, S1, S2, Result]),
     Result.
@@ -620,10 +824,10 @@ get_current_millis() ->
 find_in_list(ComparatorFunction, [H|T])->
     lists:foldl(ComparatorFunction, H, T).
 
-max_by_seq_num_route_set_entry_comparator(Entry1, Entry2)->
+max_by_seq_num_route_set_entry_comparator({Key1, Entry1}, {Key2, Entry2})->
     case is_sequence_number_grater(Entry1#routing_set_entry.r_seq_number, Entry2#routing_set_entry.r_seq_number) of
-        true -> Entry1;
-        false -> Entry2
+        true -> {Key1, Entry1};
+        false -> {Key2, Entry2}
     end.
 
 get_route_set_entry_with_highest_seq_num(Entries) ->

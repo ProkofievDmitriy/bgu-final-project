@@ -22,6 +22,11 @@
 -define(RACK, 3).
 -define(DATA, 4).
 
+%RERR CODES
+-define(RERR_GENERAL_ERROR, 0).
+-define(RERR_ACK_FAILED, 1).
+-define(RERR_HOST_UNREACHABLE, 2).
+
 
 %QLC Atoms
 -define(EMPTY_QUERY_RESULT, empty_result).

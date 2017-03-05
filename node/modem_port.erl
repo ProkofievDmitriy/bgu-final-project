@@ -64,12 +64,12 @@ stop_internal() ->
 
 
 %send Packet via channel Channel, with payload Payload.
-% Channel : 1 - RF , 2 - PLC , 3 RF + PLC 
+% Channel : 1 - RF , 2 - PLC , 3 RF + PLC
 send(Channel, Payload) ->
 	?LOGGER:debug("[~p]: send: channel: ~p, payload ~p ~n", [?MODULE, Channel, Payload]),
 		MSG = [Channel] ++ [0] ++ Payload,
     call_port(MSG).
-%main use. user wants to sent a packet (list of bytes - integer of range [0,255])   
+%main use. user wants to sent a packet (list of bytes - integer of range [0,255])
 send(Packet) when is_list(Packet) ->
 	call_port(Packet);
 %user wants to sent some packet via channel Channel
@@ -90,9 +90,9 @@ supervise() ->
 		stop -> ?MODEM_PORT ! {stop, normal}, exit(normal);
 		%modem port terminated normaly, allow it and exit supervisor with normal reason
 		 {'DOWN', _Ref, process, _Pid, normal} -> ?LOGGER:debug("[~p]: terminated normally~n", [?MODULE]), 1;%exit(normal);
-		%modem port terminated for unknown reason, return 1 for incrementing port's crashes 
+		%modem port terminated for unknown reason, return 1 for incrementing port's crashes
 		 {'DOWN', _Ref, process, _Pid, port_terminated} -> ?LOGGER:debug("[~p]: terminated because of some error11~n", [?MODULE]), 1;
-		%modem port terminated due to too many errors (unsent packets or damaged packets), return 1 for incrementing port's crashes 
+		%modem port terminated due to too many errors (unsent packets or damaged packets), return 1 for incrementing port's crashes
 		 {'DOWN', _Ref, process, _Pid, port_errors} -> ?LOGGER:debug("[~p]: terminated because of port errors22~n", [?MODULE]), 1;
 	   	{'DOWN', _Ref, process, _Pid, Else} ->?LOGGER:debug("[~p]: terminated unknown reason: ~p.~n", [?MODULE, Else]), 1
 	end.
@@ -137,7 +137,7 @@ call_port_internal(Msg) ->
   after ?TIMEOUT ->
         {error, timeout_in_modem_port}
   end.
-	
+
 %initiate modem_port. register it's name, compile c port's program, config pins of controller, open port to c program, and call for loop function
 init(Super_PID, DataLinkFsmPid) ->
 	P = self(),
@@ -155,7 +155,7 @@ init(Super_PID, DataLinkFsmPid) ->
 	random:seed(X),
     ?LOGGER:debug("[~p]: done init~n", [?MODULE]),
     loop(Port, OS_PID, Super_PID, 0, DataLinkFsmPid).
-    
+
 %if number of errors between erlang port to c port passed limit, terminate c program and modem_port (with port_errors reason).
 loop(_, OS_PID ,_,Port_Errors, DataLinkFsmPid) when Port_Errors =:= ?PORTS_ERRORS_LIMIT ->
 	?LOGGER:debug("[~p]: too many port errors. terminate myself!!!!~n", [?MODULE]),
@@ -179,7 +179,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
 			%loop(Port, OS_PID, Super_PID, Port_Errors + Error);
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
-			
+
 	%c port sent data
 	{_Port2, {data, Data}} ->
 			?LOGGER:debug("[~p]: Received data from port: Data ~p~n", [?MODULE, Data]),
@@ -192,7 +192,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 				_List -> ?DATA_LINK:handle_incoming_message(DataLinkFsmPid, Ans) %(channel , rssi, payload)
 			end,
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
-			
+
 	%Something want to stop erlang's port run
 	{stop, Reason} ->
         ?LOGGER:debug("[~p]: Received stop : Reason: ~p~n", [?MODULE, Reason]),
@@ -205,7 +205,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 	%c port terminates unexpectedly
 	{'EXIT', _Port, Reason} ->
 		?LOGGER:debug("[~p]: got exit from c port. reason is:~p.~n", [?MODULE, Reason]),
-	   close_c_port_program(OS_PID), exit(port_terminated) 
+	   close_c_port_program(OS_PID), exit(port_terminated)
     end.
 
 
@@ -216,11 +216,11 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 extract_crc(List) ->
 	extract_crc(List, [],  lists:flatlength(List)).
 extract_crc( LCRC, Rest,X) when X =:= 4 -> {LCRC, Rest};
-extract_crc( [H|T] , Rest, X) -> extract_crc(T, Rest ++ [H] , X-1). 
-	
+extract_crc( [H|T] , Rest, X) -> extract_crc(T, Rest ++ [H] , X-1).
+
 %check received data. returns 1 if data !not! at the rigth packet format. returns 0 if it is the rigth format.
-examine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel_error;  
-examine_data( [Channel, RSSI | Rest]) -> 
+examine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel_error;
+examine_data( [Channel, RSSI | Rest]) ->
 	{LCRC, L_NO_CRC} = extract_crc(Rest),
 	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
 	?LOGGER:preciseDebug("[~p]: CRC is:~p~n", [?MODULE, CRC]),
@@ -231,7 +231,7 @@ examine_data( [Channel, RSSI | Rest]) ->
 		_Else ->   crc_error
 	end.
 
-examine_data2(L) -> X = length(L), 
+examine_data2(L) -> X = length(L),
 	Ans = examine_data(L),
 	case Ans of
 		channel_error -> channel_error;
@@ -247,8 +247,8 @@ examine_data2(L) -> X = length(L),
 			end;
 		_List -> Ans
 	end.
-			
-			
+
+
 
 
 
@@ -263,12 +263,12 @@ compile_c_port() ->
 		_STR = os:cmd(S),
 		_STR2 = os:cmd("chmod 777 " ++ ?PROGRAM_NAME).
 
-extract_os_pid(Port) ->  
+extract_os_pid(Port) ->
     L = erlang:port_info(Port),
     F = fun({ATOM, _VAL}) -> ATOM=:=os_pid end,
     [{os_pid, OS_PID}] = lists:filter(F,L),
     OS_PID.
-    
+
 close_c_port_program(OS_PID)->
 		os:cmd("kill "++integer_to_list(OS_PID)),
 		?LOGGER:debug("[~p]: closed c program for real~n", [?MODULE]).
@@ -290,7 +290,7 @@ sendMSG2(Port, [H|[]]) ->
 	sendByte(Port, H, ?END_BYTE);
 
 
-sendMSG2(Port, [H|T]) -> 
+sendMSG2(Port, [H|T]) ->
 	sendByte(Port, H, ?REG_BYTE),
 	sendMSG2(Port, T).
 
@@ -303,9 +303,9 @@ sendByte(Port, Byte, Type) -> P=self(),
 
 close_all_port_processes([],_) -> done;
 close_all_port_processes([H|T] , L2) ->
-	case H of 
+	case H of
 		10 -> os:cmd("kill " ++ L2);
-		32 -> os:cmd("kill " ++ L2), 
+		32 -> os:cmd("kill " ++ L2),
 				close_all_port_processes(T,[]);
 		Else -> close_all_port_processes(T, L2 ++ [Else])
 	end.
@@ -331,8 +331,8 @@ prepare_payload([Channel, _ | Rest]) ->
             ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
             ListToSend = binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>),
-	        ?LOGGER:temporaryInfo("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
-	        ListToSend
+	          ?LOGGER:temporaryInfo("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	          ListToSend
     end,
 	Result.
 
