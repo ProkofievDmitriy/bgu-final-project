@@ -6,8 +6,11 @@
 >TODO
 >
 >
-```erlang
-some_function() -> other_function().
+```bash
+cd final-project/node
+scripts/start_node.sh 132.73.199.156 node_1 data_concentration_server plc_only
+scripts/start_node.sh 132.73.199.232 node_10 data_concentration_server dual
+scripts/start_node.sh 132.73.199.200 node_4 smart_meter rf_only
 ```
 ###Routing Set Entry Record
 ```erlang
