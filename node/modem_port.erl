@@ -169,7 +169,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
     receive
 	%Caller wants to send Packet to c port
 	{call, Msg} ->
-            ?LOGGER:preciseDebug("[~p]: Received CALL MSG : ~p~n", [?MODULE, Msg]),
+            ?LOGGER:preciseDebug("[~p]: Received CALL MSG : ~w~n", [?MODULE, Msg]),
 			MSG = prepare_payload(Msg), % MSG = <<Channel:8, Rest/bitstring>>
 			if is_list(MSG) ->
 			    DataLinkFsmPid ! sendMsg(Port, MSG);
@@ -182,7 +182,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 
 	%c port sent data
 	{_Port2, {data, Data}} ->
-			?LOGGER:debug("[~p]: Received data from port: Data ~p~n", [?MODULE, Data]),
+			?LOGGER:debug("[~p]: Received data from port: Data ~w~n", [?MODULE, Data]),
 			Ans = examine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized
@@ -281,7 +281,7 @@ close_c_port_program(OS_PID)->
 sendMsg(Port, MSG) ->
 	[H|T] = MSG,
 	backoff(H),
-	?LOGGER:debug("[~p]: sendMsg: MSG is: ~p~n", [?MODULE, MSG]),
+	?LOGGER:debug("[~p]: sendMsg: MSG is: ~w~n", [?MODULE, MSG]),
 	sendByte(Port, H, ?START_BYTE),
 	sendMSG2(Port, T).
 
@@ -353,7 +353,7 @@ getPaddingList(Size)->
 		        true -> []
             end;
 		S2 when S2 =< 60 ->
-		    X = 20 - Size - 4 - 2,
+		    X = 60 - Size - 4 - 2,
 		    if X > 0 ->
 		        lists:seq(1,X);
 		        true -> []

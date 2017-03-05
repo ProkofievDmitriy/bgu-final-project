@@ -52,7 +52,7 @@ handle_incoming_message(FsmPid, Message)->
 %% =========================================== Init ==========================================
 %% ============================================================================================
 init(Properties) ->
-    ?LOGGER:info("[~p]: Starting FSM with params: ~p.~n", [?MODULE, Properties]),
+    ?LOGGER:info("[~p]: Starting FSM with params: ~w.~n", [?MODULE, Properties]),
     StartState = proplists:get_value(default_state, Properties),
 
     {ok, StartState, #state{}}.
@@ -77,7 +77,7 @@ idle(enable, StateData) ->
 
 %Synchronous event call
 idle({send, {Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~p}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
      {reply, ok, idle, StateData}.
 
 
@@ -85,7 +85,7 @@ idle({send, {Destination, Data}}, _From, StateData) ->
 %% Pass all message as is - no session management enabled
 disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-    StateData#state.upper_level_pid ! binary:bin_to_list(Message),
+    StateData#state.upper_level_pid ! Message,
     {next_state, disable, StateData};
 
 disable(disable, StateData) ->
@@ -98,7 +98,7 @@ disable(enable, StateData) ->
 
 %Synchronous event call
 disable({send, {Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~p}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
+    ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
     Result = ?NETWORK:send(StateData#state.bottom_level_pid, {Destination, Data}),
      {reply, Result, disable, StateData}.
 

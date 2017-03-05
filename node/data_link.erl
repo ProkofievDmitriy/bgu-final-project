@@ -174,7 +174,7 @@ plc_only({received_message, {Medium, Target, Data}}, StateData) ->
         ?PLC ->
             handle_message(Medium, Target, StateData, Data);
         _Else ->
-            ?LOGGER:debug("[~p]: PLC_ONLY - (received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
+            ?LOGGER:warn("[~p]: PLC_ONLY - (received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
     end,
     {next_state, plc_only, StateData}.
 
@@ -223,7 +223,7 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
          ?RF ->
              handle_message(Medium, Target, StateData, Data);
          _Else ->
-             ?LOGGER:debug("[~p]: RF_ONLY - (received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
+             ?LOGGER:warn("[~p]: RF_ONLY - (received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
      end,
      {next_state, rf_only, StateData}.
 

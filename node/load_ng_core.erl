@@ -28,7 +28,7 @@
                 r_seq_number
                 }).
 
--record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}).
+-record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 -record(rreq_handling_set_entry, {r_seq_number, destination, originator, valid_time}).
 -record(pending_acknowledgement_entry, {next_hop, originator, r_seq_number, ack_received, ack_timeout}).
 
@@ -110,10 +110,11 @@ init(Properties) ->
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
 
 
-    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_expired_routes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
+    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
     gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
 
-    {ok, active, #state{
+    State = #state{
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
         pending_acknowledgements_set = PendingAcknowledgmentsSetId,
@@ -122,7 +123,9 @@ init(Properties) ->
         reporting_unit = ReportingUnit,
         self_address = SelfAddress,
         r_seq_number = 0
-    }}.
+    },
+
+    {ok, active, State}.
 
 %% ============================================================================================
 %% =========================================== SYNC States Transitions ========================
@@ -157,7 +160,7 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
                    {reply, {error, ErrorMessage}, active, StateData};
                 _ ->
                     Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                    report_data_message(StateData#state.reporting_unit, ?SEND_MESSAGE, Payload),
+                    report_data_message_sent(Payload, StateData),
                     {reply, Result, active, StateData}
             end;
         Else ->
@@ -169,11 +172,18 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
-active(remove_expired_routes, StateData)->
+active(remove_not_valid_routes, StateData)->
+    NotValidRoutes = query_not_valid_routes(StateData#state.routing_set),
+    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
+    lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
+    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
+    {next_state, active, StateData};
+
+active(update_expired_routes, StateData)->
     ExpiredRoutes = query_expired_routes(StateData#state.routing_set),
-    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
-    lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, ExpiredRoutes),
-    gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_expired_routes),
+    ?LOGGER:preciseDebug("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
+    lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
+    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
     {next_state, active, StateData};
 
 active(remove_expired_rreq, StateData)->
@@ -203,7 +213,7 @@ active({generate_rreq, Destination}, StateData) ->
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
             add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
                                               {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
-            report_management_message(StateData#state.reporting_unit, Payload),
+            report_management_message(Payload, StateData),
             NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem ?SEQUENCE_NUMBER_MAX_VALUE}, % increase RREQ Sequence number
             {next_state, active, NewState}
     end;
@@ -225,7 +235,7 @@ active({generate_rrep, {Destination, RREQSequenceNumber, HopCount}}, StateData) 
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
                     ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_management_message(StateData#state.reporting_unit, Payload),
+                    report_management_message(Payload, StateData),
                     if ?ACK_REQUIRED -> %false by default - further implementations
                         add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
                                                                  StateData#state.self_address,
@@ -256,7 +266,7 @@ active({generate_rerr, {Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddres
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
                     ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_management_message(StateData#state.reporting_unit, Payload)
+                    report_management_message(Payload, StateData)
                 end;
         Error ->
             ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RRER : ~w.~n", [?MODULE, Error])
@@ -270,7 +280,7 @@ active({generate_rack, Destination}, StateData) ->
                               Destination,
                               ?RACK,
                               []),
-    report_management_message(StateData#state.reporting_unit, Payload),
+    report_management_message(Payload, StateData),
     {next_state, active, StateData};
 
 
@@ -289,15 +299,16 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
             Result = forward_packet(Packet, StateData),
             case Result of
                 {ok, sent, _Some } ->
-                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]);
-                {error, Error, FailedHop} ->
+                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
+                    report_data_message_received(Packet, StateData);
+                {error, Error, #routing_set_entry{} = FailedHop} ->
                     ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
                     generate_RERR({Packet#load_ng_packet.originator,
                                    FailedHop#routing_set_entry.r_seq_number,
                                    ?RERR_HOST_UNREACHABLE,
                                    Packet#load_ng_packet.destination});
                Else ->
-                   ?LOGGER:critical("[~p]: ACTIVE - DATA received message  - Enexpected error: ~p .~n", [?MODULE, Else])
+                   ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
                end
     end,
     {next_state, active, StateData};
@@ -320,7 +331,8 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
                 HopCount = Packet#load_ng_packet.data#rreq_message.hop_count,
                 generate_RREP({Originator, RREQSequenceNumber, HopCount});
             false -> % this router is not a destination, forwarding message
-                forward_packet(Packet, StateData)
+                forward_packet(Packet, StateData),
+                report_management_message(Packet, StateData)
         end;
         true ->
             ?LOGGER:debug("[~p]: ACTIVE - RREQ NOT VALID, Packet DROPPED.~n", [?MODULE]),
@@ -345,7 +357,8 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
                     %TODO generate RACK
                     ok;
                 false ->
-                    forward_packet(Packet, StateData)
+                    forward_packet(Packet, StateData),
+                    report_management_message(Packet, StateData)
         end;
         true ->
           ?LOGGER:debug("[~p]: ACTIVE - RREP NOT VALID, Packet DROPPED.~n", [?MODULE])
@@ -358,7 +371,8 @@ active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
     if Packet#load_ng_packet.originator =/= StateData#state.self_address ->
         case Result of
             {ok , RemovedEntry} ->
-                forward_packet(Packet, StateData, RemovedEntry);
+                forward_packet(Packet, StateData, RemovedEntry),
+                report_management_message(Packet, StateData);
             {error , Message} ->
                 ?LOGGER:err("[~p]: ACTIVE - RERR  - ERROR: ~p .~n", [?MODULE, Message]);
             Else ->
@@ -502,7 +516,7 @@ deserializePayload(Payload)->
 
 
 deserializeMessage(#load_ng_packet{type = ?DATA} = Packet, Data)->
-    Packet#load_ng_packet{data=Data};
+    Packet#load_ng_packet{data=binary_to_list(Data)};
 
 deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
     ?LOGGER:preciseDebug("[~p]: deserializeMessage RREQ : Data : ~w ~n", [?MODULE, Data]),
@@ -658,7 +672,7 @@ forward_packet(#load_ng_packet{type = ?RREQ} = Packet, StateData) -> % only RREQ
                               ?RREQ,
                               get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
     {Status, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
-    report_management_message(StateData#state.reporting_unit, Payload),
+    report_management_message(Payload, StateData),
     {Status, Message, {?RF_PLC, ?BROADCAST_ADDRESS}};
 
 %unicast forwarding
@@ -667,9 +681,14 @@ forward_packet(Packet, StateData) ->
     case Status of
         ok ->
             {_Key, NextHop} = Result,
-            forward_packet(Packet, StateData, NextHop);
+            case NextHop#routing_set_entry.valid of
+                true ->
+                    forward_packet(Packet, StateData, NextHop);
+                false ->
+                    {error, hop_expired, NextHop}
+                end;
         ?EMPTY_QUERY_RESULT ->
-            {error, hop_not_found, Result}
+            {error, hop_not_found, Result};
         _Else ->
             {error, Result, Result}
     end.
@@ -682,7 +701,7 @@ forward_packet(Packet, StateData, NextHop) ->
                               Packet#load_ng_packet.type,
                               get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
     {SendStatus, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
-    report_management_message(StateData#state.reporting_unit, Payload),
+    report_management_message(Payload, StateData),
     {SendStatus, Message, NextHop}.
 
 
@@ -697,7 +716,8 @@ add_new_entry_to_routing_set(RoutingSetId, Destination, NextHop, Medium, HopCoun
         hop_count = HopCount,
         r_seq_number = SeqNumber,
         bidirectional = false,
-        valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS
+        valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS,
+        valid = true
     },
     Result = ets:insert(RoutingSetId, {get_current_millis(), Entry}),
     ?LOGGER:info("[~p]: Routing Set updated with entry : ~w , Result : ~p .~n", [?MODULE, Entry, Result]),
@@ -708,6 +728,9 @@ add_new_entry_to_routing_set(RoutingSetId, Destination, NextHop, Medium, HopCoun
 query_find_next_hop(Destination, RoutingSetId)->
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =:= Destination -> {Key, Entry} end),
     NextHop = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
+    ?LOGGER:dev("[~p]: query_find_next_hop: Routing Set: ~n  ~p .~n", [?MODULE, ets:tab2list(RoutingSetId)]),
+    ?LOGGER:dev("[~p]: query_find_next_hop: Destination: ~p .~n", [?MODULE, Destination]),
+
     Result = case NextHop of
         [Entry|[]] -> {ok, Entry};
         [_Entry|_Rest] ->
@@ -735,9 +758,16 @@ add_new_entry_to_pending_acknowledgments(NextHop, Originator, RREQSequenceNumber
 
     Result.
 
-query_expired_routes(RoutingSetId)->
+query_not_valid_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid_time < CurrentMillis -> {Key, Entry} end),
+    Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
+    ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
+    Result.
+
+
+query_expired_routes(RoutingSetId)->
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= false -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
     Result.
@@ -769,7 +799,7 @@ contains_is_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Orig
         [] ->
             false;
         Else ->
-            ?LOGGER:err("[~p]: contains_is_rreq_handling_set UNEXPECTED RESULTS: ~p.~n", [?MODULE, Else]),
+            ?LOGGER:critical("[~p]: contains_is_rreq_handling_set UNEXPECTED RESULTS: ~p.~n", [?MODULE, Else]),
             {error, "UNEXPECTED RESULTS ERROR in contains_is_rreq_handling_set"}
     end.
 
@@ -788,7 +818,7 @@ update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, h
     case EntryToUpdate of
         {ok, {Key, Entry}} ->
             ets:delete(StateData#state.routing_set, Key),
-            ets:insert(StateData#state.routing_set, Entry#routing_set_entry{valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}),
+            ets:insert(StateData#state.routing_set, {Key, Entry#routing_set_entry{valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}}),
             ?LOGGER:info("[~p]: update_routing_set_entry : ~p.~n", [?MODULE, Entry]),
             ?LOGGER:preciseDebug("[~p]: RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]);
         {error, Mesage} ->
@@ -829,23 +859,29 @@ remove_and_get_broken_link(Packet, StateData)->
 report_message(Type, ReportingUnit, Message)->
     case ReportingUnit of
         undefined ->
-            ?LOGGER:debug("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
+            ?LOGGER:err("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
         _ ->
            ReportingUnit:report(Type, Message)
     end.
 
-report_data_message(ReportingUnit, MessageType, Message)->
-    Data = [{?DATA_MESSAGE_TYPE, MessageType}, {data, Message}],
-    report_message(?DATA_MESSAGE, ReportingUnit, Data).
+report_data_message_sent(Packet, State)->
+    Data = [{?DATA_MESSAGE_TYPE, ?SEND_MESSAGE}, {data, Packet}],
+    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
 
+report_data_message_received(Packet, State)->
+    Data = [{?DATA_MESSAGE_TYPE, ?RECEIVED_MESSAGE}, {data, Packet}],
+    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
 
-report_management_message(ReportingUnit, Message)->
-    report_message(?MANAGEMENT_MESSAGE, ReportingUnit, Message).
+report_data_message_middle(Packet, State)->
+    Data = [{?DATA_MESSAGE_TYPE, ?MIDDLE_MESSAGE}, {data, Packet}],
+    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
 
-report_routing_set(ReportingUnit, RoutingSetId)->
-    RoutingSet =  ets:tab2list(RoutingSetId),
-    report_message(?ROUTING_SET, ReportingUnit, RoutingSet).
+report_management_message(State, Packet)->
+    report_message(?MANAGEMENT_MESSAGE, State#state.reporting_unit, Packet).
 
+report_routing_set(State)->
+    RoutingSet =  ets:tab2list(State#state.routing_set),
+    report_message(?ROUTING_SET, State#state.reporting_unit, RoutingSet).
 
 %----------------------------------------------------------------------------
 % UTILS Functions
