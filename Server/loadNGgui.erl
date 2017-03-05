@@ -10,7 +10,7 @@
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2]).
 
 -record(state, 
-	{frame,panel,nodesEts, log}).
+	{frame,panel,nodesEts, canvas, log, nodeChoice, numberOfNodes}).
 	 
 start() ->
     io:format("start 1 ~n"),
@@ -23,7 +23,7 @@ start() ->
 
 
 init(WxServer) ->
-    E = ets:new(tab,[set,named_table, public]),
+    NodesEts = ets:new(nodesEts,[set,named_table]),
 
 	io:format("init 1 ~n"),
 	
@@ -52,15 +52,23 @@ init(WxServer) ->
     ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Routes Table"}]),
     ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label,"Send message"}]),
     ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
-    %Win = wxWindow:new(Panel, ?wxID_ANY, [{size, {600,400}}]),
-    Win = wxPanel:new(Panel, [{size, {600,400}}]    ),
+    %Canvas = wxWindow:new(Panel, ?wxID_ANY, [{size, {600,400}}]),
+    Canvas = wxPanel:new(Panel, [{size, {600,600}}]    ),
 
     %% Radio Buttons:
     RadioButtonSizer = create_radio_buttons(Panel),
 
+    %% Node Choice:
+    NodeChoice = wxListBox:new(Panel, ?wxID_ANY, [{size,{150,100}},{style, ?wxLB_SINGLE}]),
+    wxListBox:connect(NodeChoice, command_listbox_selected),
+
+    %wxChoice:setToolTip(Choice, "Node:"),
+
+
     %% Add to sizers
 
     %% Management:
+    wxSizer:add(ManagementSz, NodeChoice),
     wxSizer:addSpacer(ManagementSz, 20),
     wxSizer:add(ManagementSz, ButtonDeleteTable),
     wxSizer:addSpacer(ManagementSz, 20),
@@ -73,13 +81,11 @@ init(WxServer) ->
 
 
     %% Nodes:
-    wxSizer:addSpacer(NodesSz, 100),
-    wxSizer:add(NodesSz, Win),
-    wxSizer:addSpacer(NodesSz, 100),
+    wxSizer:add(NodesSz, Canvas),
 
 
     %% LOGS:
-    Log = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{?X_SIZE,50}},
+    Log = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{?X_SIZE,100}},
                   {style, ?wxDEFAULT bor ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
     wxSizer:add(LogSz, Log, []),
 
@@ -107,7 +113,7 @@ init(WxServer) ->
 
     wxFrame:show(Frame),
 
-    {Frame,#state{frame=Frame,panel=Panel,nodesEts = E, log = Log}}. 
+    {Frame,#state{frame=Frame,panel=Panel,nodesEts = NodesEts, log = Log,canvas = Canvas, nodeChoice = NodeChoice, numberOfNodes = 0}}. 
 
 
 
@@ -143,6 +149,19 @@ handle_sync_event(_Event,_,State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{log = Log, nodesEts = NodesEts}) -> 
+    io:format("command_listbox_selected ~p~n",[Ex]),
+
+    DC = wxWindowDC:new(State#state.canvas),
+
+    switch_to_node(DC, Ex,ets:first(NodesEts), NodesEts),
+    wxWindowDC:destroy(DC),
+
+  %  wxTextCtrl:appendText(Log, "Selected node ID: " ++ NodeName ++"\n"),
+
+{noreply,State};
+
+
 handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"),
 {noreply,State}.	 
 	
@@ -155,10 +174,18 @@ handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({node_is_up,{Id,RF,PLC}}, State = #state{log = Log}) -> 
-    wxTextCtrl:appendText(Log, "New node is up: ID~n"),
-    io:format("loadNGgui.erl: node_is_up: ID=~p RF:~p PLC: ~p~n",[Id,RF,PLC]),
-    ets:insert(State#state.nodesEts,{Id,{{RF,PLC},{5,5}}}),
+handle_cast({node_is_up,{NodeName}}, State = #state{log = Log, nodeChoice = NodeChoice, numberOfNodes = NodeNumber}) -> 
+    io:format("loadNGgui.erl: node_is_up: ID=~p~n",[NodeName]),
+    wxTextCtrl:appendText(Log, "New node is up ID: " ++ NodeName ++"\n"),
+    wxListBox:insertItems(NodeChoice,[NodeName],0),
+    ets:insert(State#state.nodesEts,{NodeName,{NodeNumber, {0,0},[]}}),
+    {noreply, State#state{numberOfNodes = NodeNumber + 1 }};
+
+handle_cast({update_state,{NodeName,{{PLC,RF},RoutingSet}}}, State = #state{log = Log}) -> 
+    io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeName]),
+    wxTextCtrl:appendText(Log, "Node ID: " ++ NodeName ++" updated\n"),
+    [{NodeName,{NodeNumber,_,_}}] = ets:lookup(State#state.nodesEts,NodeName),
+    ets:insert(State#state.nodesEts,{NodeName,{NodeNumber,{PLC,RF},RoutingSet}}),
     {noreply, State};
 
 handle_cast({printNodes}, State) -> 
@@ -249,3 +276,19 @@ create_radio_buttons(Panel) ->
     wx:foreach(Fun, Buttons),
 
     RadioButtonSizer.
+
+switch_to_node(_, _,'$end_of_table', _) -> ok;
+switch_to_node(DC, Node,Node, NodesEts) ->
+    wxDC:drawCircle(DC, {300, 200}, 15),
+    [{Node,{NodeNumber, {PLC,RF},RoutingSet}}] = ets:lookup(NodesEts,Node),
+
+    switch_to_node(DC, Node,ets:next(NodesEts,Node),NodesEts);
+
+switch_to_node(DC, Node,Key, NodesEts) ->
+    [{Key,{NodeNumber, {_PLC,_RF},_RoutingSet}}] = ets:lookup(NodesEts,Key),
+    wxDC:drawCircle(DC, {50, 40*NodeNumber + 20}, 15),
+    
+    switch_to_node(DC, Node,ets:next(NodesEts,Key),NodesEts).
+
+
+
