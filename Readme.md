@@ -17,8 +17,8 @@ some_function() -> other_function().
 ---
 #####MAC - STATIC IP in University WiFi Network: fist 10 addreses defined static IP's
 |Node    |MAC Address             |IP Address|           |Validated|
-|-----|--------------------|---------------------|
-|server|6c:f0:49:ee:d7:9f	|132.72.110.192	(132.72.110.150 - last check)|
+|-----|--------------------|---------------------|---------------------|
+|server|6c:f0:49:ee:d7:9f	|132.72.110.192	(132.72.110.150 - last check)|		|
 |1	|78:4b:87:a3:07:48|	132.73.199.156|     Valid|
 |2	|78:4b:87:a6:b7:31|	132.73.199.164|		|
 |3	|78:4b:87:a5:05:1b|	132.73.199.188|		|
