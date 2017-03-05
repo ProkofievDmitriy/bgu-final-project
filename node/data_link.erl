@@ -50,7 +50,7 @@ updateUpperLevelPid(FsmPid, UpperLevelPid)->
 handle_incoming_message(FsmPid, Packet)->
     ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
     <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
-    ?LOGGER:temporaryInfo("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
+    ?LOGGER:dev("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
     gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
 

@@ -89,17 +89,17 @@ supervise() ->
 	receive
 		stop -> ?MODEM_PORT ! {stop, normal}, exit(normal);
 		%modem port terminated normaly, allow it and exit supervisor with normal reason
-		 {'DOWN', _Ref, process, _Pid, normal} -> ?LOGGER:debug("[~p]: terminated normally~n", [?MODULE]), 1;%exit(normal);
+		 {'DOWN', _Ref, process, _Pid, normal} -> ?LOGGER:err("[~p]: terminated normally~n", [?MODULE]), 1;%exit(normal);
 		%modem port terminated for unknown reason, return 1 for incrementing port's crashes
-		 {'DOWN', _Ref, process, _Pid, port_terminated} -> ?LOGGER:debug("[~p]: terminated because of some error11~n", [?MODULE]), 1;
+		 {'DOWN', _Ref, process, _Pid, port_terminated} -> ?LOGGER:err("[~p]: terminated because of some error11~n", [?MODULE]), 1;
 		%modem port terminated due to too many errors (unsent packets or damaged packets), return 1 for incrementing port's crashes
-		 {'DOWN', _Ref, process, _Pid, port_errors} -> ?LOGGER:debug("[~p]: terminated because of port errors22~n", [?MODULE]), 1;
-	   	{'DOWN', _Ref, process, _Pid, Else} ->?LOGGER:debug("[~p]: terminated unknown reason: ~p.~n", [?MODULE, Else]), 1
+		 {'DOWN', _Ref, process, _Pid, port_errors} -> ?LOGGER:err("[~p]: terminated because of port errors22~n", [?MODULE]), 1;
+	   	{'DOWN', _Ref, process, _Pid, Else} ->?LOGGER:err("[~p]: terminated unknown reason: ~p.~n", [?MODULE, Else]), 1
 	end.
 
 %in case too many port crashes occured, terminate
 init_supervisor( _Caller_PID, Port_crash, _DataLinkFsmPid) when Port_crash =:= ?PORTS_CRASH_LIMIT ->
-	?LOGGER:debug("[~p]: modem_port:init_supervise: too many port crashes!!!! wow!!!! something is really not working~n", [?MODULE]),
+	?LOGGER:err("[~p]: modem_port:init_supervise: too many port crashes!!!! wow!!!! something is really not working~n", [?MODULE]),
 	exit(modem_not_available); %%optionally, tell Caller (using caller PID) that module is'nt functioning
 %spawn/respawn modem_port. create monitor ref. monitor the modem_port's terminations. if termination not normal, call itself with Port_crash counter incremented.
 init_supervisor( Caller_PID, Port_crash, DataLinkFsmPid) ->
@@ -324,20 +324,20 @@ prepare_payload([Channel, _ | Rest]) ->
 	        too_large;
         List ->
             L = pad_list(Rest, PAD),
-            ?LOGGER:temporaryInfo("[~p]: prepare_payload: PAD LIST SIZE: ~p, LISTS AFTER PADDING: ~p(~p).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
+            ?LOGGER:dev("[~p]: prepare_payload: PAD LIST SIZE: ~p, LISTS AFTER PADDING: ~p(~p).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
             BinaryZero = <<0:8>>,
             ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
             ListToSend = binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>),
-	          ?LOGGER:temporaryInfo("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	          ?LOGGER:dev("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
 	          ListToSend
     end,
 	Result.
 
 getPaddingList(Size)->
-    ?LOGGER:temporaryInfo("[~p]: getPaddingList: Size: ~p~n", [?MODULE, Size]),
+    ?LOGGER:dev("[~p]: getPaddingList: Size: ~p~n", [?MODULE, Size]),
     Result = case Size of
 		S1 when S1 =< 14 ->
 		    X = 20 - Size - 4 - 2,

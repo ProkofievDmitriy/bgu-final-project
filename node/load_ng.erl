@@ -170,6 +170,7 @@ handle_info( {'DOWN', Monitor_Ref , process, Pid, Reason}, #context{modem_port_m
 
 handle_info( {timeout, TimerRef , {'DOWN', Monitor_Ref , process, _Pid, Reason}}, #context{modem_port_monitor_ref = Monitor_Ref, modem_port_restart_timer_ref = TimerRef} = Context) ->
     ?LOGGER:info("[~p]: MODEM_PORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
+    ?MODEM_PORT:stop(),
     ModemPortPid = ?MODEM_PORT:start(Context#context.data_link_pid),
     ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
     NewContext = Context#context{modem_port_monitor_ref = ModemPortMonitorRef, modem_port_pid = ModemPortPid},

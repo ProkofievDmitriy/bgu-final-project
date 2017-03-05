@@ -46,9 +46,11 @@ start() ->
 start(ScriptPropertiesList) ->
         NodeName = lists:nth(1, ScriptPropertiesList),
         ApplicationMode = list_to_atom(lists:nth(2, ScriptPropertiesList)),
+        DataLinkStartState = list_to_atom(lists:nth(3, ScriptPropertiesList)),
         GlobalProperties = read_props(),
-        io:format("ApplicationMode: ~p , NodeName: ~p.~n", [ApplicationMode, NodeName]),
-        NewGlobalProps = injectProperties(GlobalProperties, ?APPLICATION_PROPERTIES, {role, ApplicationMode}),
+        io:format("ApplicationMode: ~p , NodeName: ~p, DataLinkStartState: ~p.~n", [ApplicationMode, NodeName, DataLinkStartState]),
+        NewGlobalProps2 = injectProperties(GlobalProperties, ?APPLICATION_PROPERTIES, {role, ApplicationMode}),
+        NewGlobalProps = injectProperties(NewGlobalProps2, ?PROTOCOL_PROPERTIES, ?DATA_LINK_PROPERTIES, {default_state, DataLinkStartState}),
         io:format("NewGlobalProps: ~p ...~n", [NewGlobalProps]),
         internal_start([{node_name, NodeName}|NewGlobalProps]).
 
@@ -191,7 +193,6 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 read_props() ->
     ApplicationProperties = ?APP_PROPS_LIST,
     NodeProperties = ?NODE_PROPS_LIST,
@@ -204,10 +205,23 @@ read_props() ->
      {?PROTOCOL_PROPERTIES, ProtocolProperties}
     ].
 
+injectProperties(GlobalProperties, FirstLevelPropertiesListName, SecondLevelPropsListName, {Key, Value})->
+    DestinationPropertiesList = proplists:get_value(FirstLevelPropertiesListName, GlobalProperties),
+    io:format("1 Level props: ~w~n", [DestinationPropertiesList]),
+
+    NewFirstLevelPropertiesList = injectProperties(DestinationPropertiesList, SecondLevelPropsListName, {Key, Value}),
+
+    io:format("Trying to delete: ~p , from: ~w...~n", [FirstLevelPropertiesListName, GlobalProperties]),
+    NewGlobalList = proplists:delete(FirstLevelPropertiesListName,  GlobalProperties),
+
+    [{FirstLevelPropertiesListName, NewFirstLevelPropertiesList} | NewGlobalList].
+
 injectProperties(GlobalProperties, DestinationPropertiesListName, {Key, Value})->
     DestinationPropertiesList = proplists:get_value(DestinationPropertiesListName, GlobalProperties),
-    NewList = proplists:delete(Key,  DestinationPropertiesList),
     NewGlobalList = proplists:delete(DestinationPropertiesListName,  GlobalProperties),
+
+    io:format("Trying to delete: ~p , from: ~w...~n", [Key, DestinationPropertiesList]),
+    NewList = proplists:delete(Key,  DestinationPropertiesList),
     [{DestinationPropertiesListName, [{Key,Value} | NewList] } | NewGlobalList].
 
 

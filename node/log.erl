@@ -1,7 +1,7 @@
 -module(log).
 
 -export([info/2, debug/2, preciseDebug/2, err/2, warn/2, info/1, debug/1,
-         preciseDebug/1, err/1, warn/1, temporaryInfo/2, temporaryInfo/1,
+         preciseDebug/1, err/1, warn/1, dev/2, dev/1,
          critical/1, critical/2]).
 
 -include("./include/properties.hrl").
@@ -36,9 +36,9 @@ preciseDebug(Message, Params) ->
 preciseDebug(Message) ->
     debug(Message, []).
 
-temporaryInfo(Message, Params) ->
-    print(5, "[TEMPORARY INFO] ", Message, Params).
-temporaryInfo(Message) ->
+dev(Message, Params) ->
+    print(5, "[DEVELOPMENT] ", Message, Params).
+dev(Message) ->
     debug(Message, []).
 
 critical(Message, Params) ->
