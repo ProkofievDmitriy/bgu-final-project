@@ -18,6 +18,7 @@
 %% %CopyrightEnd%
 
 -module(tests).
+-record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 
 %% Client API
 -export([start/0, stop_all/1]).
@@ -36,8 +37,15 @@ start() ->
     P3 = start_node(node3),
     receive after 50-> ok end,
     P4 = start_node(node4),
-    receive after 10000-> ok end,
-    P4! {routinSet,[{node1,plc},{node2,rf},{node3,rf}]},
+    receive after 1000-> ok end,
+    P4!plc_rf,
+    receive after 1000-> ok end,
+    P4! {routinSet,[
+            #routing_set_entry{dest_addr = node1, next_addr = node1, medium = plc, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
+            #routing_set_entry{dest_addr = node2, next_addr = node2, medium = rf, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
+            #routing_set_entry{dest_addr = node3, next_addr = node2, medium = other, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1}
+
+            ]},
     [P1,P2,P3,P4].
 
 stop_all([]) -> ok;
@@ -67,6 +75,6 @@ run_node(Node,PLC,RF,RoutingSet)->
         {routinSet,NewRoutingSet} -> run_node(Node,PLC,RF,NewRoutingSet)
 
 
-    after 5000->
+    after 1000->
         run_node(Node,PLC,RF,RoutingSet)
     end.

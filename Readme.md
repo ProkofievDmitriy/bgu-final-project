@@ -6,6 +6,13 @@
 >TODO
 >
 >
+```bash
+cd final-project/node
+scripts/start_node.sh 132.73.199.156 node_1 data_concentration_server plc_only
+scripts/start_node.sh 132.73.199.232 node_10 data_concentration_server dual
+scripts/start_node.sh 132.73.199.200 node_4 smart_meter rf_only
+```
+###Routing Set Entry Record
 ```erlang
 -record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 ```

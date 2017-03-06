@@ -11,7 +11,7 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2]).
 
 -record(state, 
 	{frame,panel,nodesEts, canvas, log, nodeChoice, numberOfNodes, configButtons}).
-	 
+-record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 start() ->
     io:format("start 1 ~n"),
     WxServer = wx:new(),
@@ -52,7 +52,7 @@ init(WxServer) ->
     ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Routes Table"}]),
     ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label,"Send message"}]),
     ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
-    Canvas = wxPanel:new(Panel, [{size, {600,600}}]    ),
+    Canvas = wxPanel:new(Panel, [{size, {600,600}}]),
 
     %% Radio Buttons:
     {RadioButtonSizer,ConfigButtons} = create_radio_buttons(Panel),
@@ -295,46 +295,35 @@ switch_to_node(DC, Node,Key, NodesEts) ->
 
 
 draw_routs(_, _,_,[]) -> ok;
-draw_routs(DC, SelectedNode, NodesEts,[{N,plc}|RoutingSet]) ->
-    io:format("draw_routs N: ~p~n~n",[N]),
-    [{N,{NodeNumber, _,_}}] = ets:lookup(NodesEts,N),
+draw_routs(DC, SelectedNode, NodesEts,[#routing_set_entry{dest_addr = Node1, next_addr = Node2, medium = Medium}|RoutingSet]) ->
+    io:format("draw_routs N: ~p~n~n",[Node1]),
+    StrNode1 = atom_to_list(Node1),    
+    [{StrNode1,{NodeNumber, _,_}}] = ets:lookup(NodesEts,StrNode1),
+    StrNode2 = atom_to_list(Node2),    
+    [{StrNode2,{NodeNumber2, _,_}}] = ets:lookup(NodesEts,StrNode2),
 
-
-    A = ets:lookup(NodesEts,N),
-    io:format("draw_routs A: ~p~n~n",[A]),
-    
-
-    Pen = wxPen:new({200,200,0,255}),
-    wxPen:setColour(Pen, ?wxBLUE),
-    wxDC:setPen(DC, Pen, [{width, 4}]),
-    wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20}),
-
-    draw_routs(DC, SelectedNode, NodesEts,RoutingSet);
-draw_routs(DC, SelectedNode, NodesEts,[{N,rf}|RoutingSet]) ->
-    io:format("draw_routs N: ~p~n~n",[N]),
-    A = ets:lookup(NodesEts,N),
-    io:format("draw_routs A: ~p~n~n",[A]),
-    
-    [{N,{NodeNumber, _,_}}] = ets:lookup(NodesEts,N),
+    case Medium of
+        plc ->
+            Colour = ?wxBLUE;
+        rf ->
+            Colour = ?wxRED;
+        _ ->
+            Colour = ?wxBLACK
+    end,
 
     Pen = wxPen:new({200,200,0,255}),
-    wxPen:setColour(Pen, ?wxRED),
-    wxDC:setPen(DC, Pen, [{width, 4}]),
-    wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20}),
-
-    draw_routs(DC, SelectedNode, NodesEts,RoutingSet);
-draw_routs(DC, SelectedNode, NodesEts,[{N1,{nei,N2}}|RoutingSet]) ->
-    io:format("draw_routs N: ~p,~p~n~n",[N1,N2]),
-
-    [{N,{NodeNumber1, _,_}}] = ets:lookup(NodesEts,N1),
-    [{N,{NodeNumber2, _,_}}] = ets:lookup(NodesEts,N2),
-
-
-    Pen = wxPen:new({200,200,0,255}),
-    wxPen:setColour(Pen, ?wxBLACK),
-    wxDC:setPen(DC, Pen, [{width, 4}]),
-    wxDC:drawLine(DC, {50, 40*NodeNumber1 + 20}, {50, 40*NodeNumber2 + 20}),
-
+    wxPen:setColour(Pen, Colour),
+    wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
+    wxDC:setPen(DC, Pen),
+    if 
+        (Node1 == Node2) -> wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20});
+        NodeNumber2 > NodeNumber ->
+                io:format("NodeNumber2 ~p > NodeNumber1 ~p~n",[NodeNumber2,NodeNumber]),
+                wxDC:drawArc(DC, {50, 40*NodeNumber + 20}, {50, 40*NodeNumber2 + 20},{50, 20*(NodeNumber2 + NodeNumber) + 20});
+        NodeNumber2 < NodeNumber ->
+                io:format("NodeNumber1 ~p > NodeNumber2 ~p~n",[NodeNumber,NodeNumber2]),
+                wxDC:drawArc(DC, {50, 40*NodeNumber2 + 20}, {50, 40*NodeNumber + 20},{50, 20*(NodeNumber + NodeNumber2) + 20})
+    end,
     draw_routs(DC, SelectedNode, NodesEts,RoutingSet).
 
 configButtonUpdate(0,0,[PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
