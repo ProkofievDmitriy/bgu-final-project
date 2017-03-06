@@ -28,13 +28,17 @@
 %%%===================================================================
 
 start() ->
-    net_kernel:connect_node('S@127.0.0.1'),
+    net_kernel:connect_node('G@127.0.0.1'),
     P1 = start_node(node1),
     receive after 50-> ok end,
     P2 = start_node(node2),
-    %start_node(node3),
-    %start_node(node4),
-    [P1,P2].
+    receive after 50-> ok end,
+    P3 = start_node(node3),
+    receive after 50-> ok end,
+    P4 = start_node(node4),
+    receive after 10000-> ok end,
+    P4! {routinSet,[{node1,plc},{node2,rf},{node3,rf}]},
+    [P1,P2,P3,P4].
 
 stop_all([]) -> ok;
 stop_all([P|List])->
@@ -50,7 +54,7 @@ start_node(Node)->
 
     Pid. 
 
-
+%% {otherNode,plc/rf/{nei,thru}}
 run_node(Node,PLC,RF,RoutingSet)->
     io:format("~p sending, PLC: ~p, RF: ~p RoutingSet: ~p~n", [Node,PLC,RF,RoutingSet]),
     loadNG_server_interface:update_state(Node, PLC,RF,RoutingSet),
@@ -60,7 +64,7 @@ run_node(Node,PLC,RF,RoutingSet)->
         rf -> run_node(Node,0,1,RoutingSet);
         plc -> run_node(Node,1,0,RoutingSet);
         no -> run_node(Node,0,0,RoutingSet);
-        {routinSet,NewRoutingSet} ->run_node(Node,PLC,RF,NewRoutingSet)
+        {routinSet,NewRoutingSet} -> run_node(Node,PLC,RF,NewRoutingSet)
 
 
     after 5000->

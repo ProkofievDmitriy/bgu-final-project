@@ -10,7 +10,7 @@
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2]).
 
 -record(state, 
-	{frame,panel,nodesEts, canvas, log, nodeChoice, numberOfNodes}).
+	{frame,panel,nodesEts, canvas, log, nodeChoice, numberOfNodes, configButtons}).
 	 
 start() ->
     io:format("start 1 ~n"),
@@ -52,11 +52,10 @@ init(WxServer) ->
     ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Routes Table"}]),
     ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label,"Send message"}]),
     ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
-    %Canvas = wxWindow:new(Panel, ?wxID_ANY, [{size, {600,400}}]),
     Canvas = wxPanel:new(Panel, [{size, {600,600}}]    ),
 
     %% Radio Buttons:
-    RadioButtonSizer = create_radio_buttons(Panel),
+    {RadioButtonSizer,ConfigButtons} = create_radio_buttons(Panel),
 
     %% Node Choice:
     NodeChoice = wxListBox:new(Panel, ?wxID_ANY, [{size,{150,100}},{style, ?wxLB_SINGLE}]),
@@ -113,7 +112,7 @@ init(WxServer) ->
 
     wxFrame:show(Frame),
 
-    {Frame,#state{frame=Frame,panel=Panel,nodesEts = NodesEts, log = Log,canvas = Canvas, nodeChoice = NodeChoice, numberOfNodes = 0}}. 
+    {Frame,#state{frame=Frame,panel=Panel,nodesEts = NodesEts, log = Log,canvas = Canvas, nodeChoice = NodeChoice, numberOfNodes = 0, configButtons = ConfigButtons}}. 
 
 
 
@@ -149,12 +148,15 @@ handle_sync_event(_Event,_,State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{log = Log, nodesEts = NodesEts}) -> 
+handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{log = Log, nodesEts = NodesEts, configButtons = ConfigButtons}) -> 
     io:format("command_listbox_selected ~p~n",[Ex]),
 
     DC = wxWindowDC:new(State#state.canvas),
+    wxDC:clear(DC),
 
     switch_to_node(DC, Ex,ets:first(NodesEts), NodesEts),
+    [{Ex,{_, {PLC,RF},_}}] = ets:lookup(NodesEts,Ex),
+    configButtonUpdate(PLC,RF,ConfigButtons),
     wxWindowDC:destroy(DC),
 
   %  wxTextCtrl:appendText(Log, "Selected node ID: " ++ NodeName ++"\n"),
@@ -229,7 +231,7 @@ handle_call(Msg, _From, State) ->
 %%
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{frame=Frame}) ->
-  io:format("terminat, reason=~p ",[_Reason]),
+  io:format("terminate, reason=~p ",[_Reason]),
   wxWindow:destroy(Frame),
     ok.
 
@@ -255,19 +257,20 @@ printNodesEts(Node, Ets) ->
 
 
 
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%   Internal Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 create_radio_buttons(Panel) ->
     RadioButtonSizer = 
         wxStaticBoxSizer:new(?wxVERTICAL, Panel,
             [{label, "wxRadioButton"}]),
     Buttons =
-        [wxRadioButton:new(Panel, ?wxID_ANY, "RF OFF",
+        [wxRadioButton:new(Panel, ?wxID_ANY, "PLC OFF",
             [{style, ?wxRB_GROUP}]),
-        wxRadioButton:new(Panel, ?wxID_ANY, "RF ON", []),
-        wxRadioButton:new(Panel, ?wxID_ANY, "PLC OFF",
+        wxRadioButton:new(Panel, ?wxID_ANY, "PLC ON", []),
+        wxRadioButton:new(Panel, ?wxID_ANY, "RF OFF",
             [{style, ?wxRB_GROUP}]),
-        wxRadioButton:new(Panel, ?wxID_ANY, "PLC ON", [])],
+        wxRadioButton:new(Panel, ?wxID_ANY, "RF ON", [])],
 
     Fun =
         fun(Item) ->
@@ -275,13 +278,13 @@ create_radio_buttons(Panel) ->
         end,
     wx:foreach(Fun, Buttons),
 
-    RadioButtonSizer.
+    {RadioButtonSizer,Buttons}.
 
 switch_to_node(_, _,'$end_of_table', _) -> ok;
 switch_to_node(DC, Node,Node, NodesEts) ->
     wxDC:drawCircle(DC, {300, 200}, 15),
     [{Node,{NodeNumber, {PLC,RF},RoutingSet}}] = ets:lookup(NodesEts,Node),
-
+    draw_routs(DC, Node, NodesEts,RoutingSet),
     switch_to_node(DC, Node,ets:next(NodesEts,Node),NodesEts);
 
 switch_to_node(DC, Node,Key, NodesEts) ->
@@ -291,4 +294,53 @@ switch_to_node(DC, Node,Key, NodesEts) ->
     switch_to_node(DC, Node,ets:next(NodesEts,Key),NodesEts).
 
 
+draw_routs(_, _,_,[]) -> ok;
+draw_routs(DC, SelectedNode, NodesEts,[{N,plc}|RoutingSet]) ->
+    io:format("draw_routs N: ~p~n~n",[N]),
+    [{N,{NodeNumber, _,_}}] = ets:lookup(NodesEts,N),
 
+
+    A = ets:lookup(NodesEts,N),
+    io:format("draw_routs A: ~p~n~n",[A]),
+    
+
+    Pen = wxPen:new({200,200,0,255}),
+    wxPen:setColour(Pen, ?wxBLUE),
+    wxDC:setPen(DC, Pen, [{width, 4}]),
+    wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20}),
+
+    draw_routs(DC, SelectedNode, NodesEts,RoutingSet);
+draw_routs(DC, SelectedNode, NodesEts,[{N,rf}|RoutingSet]) ->
+    io:format("draw_routs N: ~p~n~n",[N]),
+    A = ets:lookup(NodesEts,N),
+    io:format("draw_routs A: ~p~n~n",[A]),
+    
+    [{N,{NodeNumber, _,_}}] = ets:lookup(NodesEts,N),
+
+    Pen = wxPen:new({200,200,0,255}),
+    wxPen:setColour(Pen, ?wxRED),
+    wxDC:setPen(DC, Pen, [{width, 4}]),
+    wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20}),
+
+    draw_routs(DC, SelectedNode, NodesEts,RoutingSet);
+draw_routs(DC, SelectedNode, NodesEts,[{N1,{nei,N2}}|RoutingSet]) ->
+    io:format("draw_routs N: ~p,~p~n~n",[N1,N2]),
+
+    [{N,{NodeNumber1, _,_}}] = ets:lookup(NodesEts,N1),
+    [{N,{NodeNumber2, _,_}}] = ets:lookup(NodesEts,N2),
+
+
+    Pen = wxPen:new({200,200,0,255}),
+    wxPen:setColour(Pen, ?wxBLACK),
+    wxDC:setPen(DC, Pen, [{width, 4}]),
+    wxDC:drawLine(DC, {50, 40*NodeNumber1 + 20}, {50, 40*NodeNumber2 + 20}),
+
+    draw_routs(DC, SelectedNode, NodesEts,RoutingSet).
+
+configButtonUpdate(0,0,[PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
+configButtonUpdate(0,1,[PlcOff,_,_,RfOn])->selectRadio(PlcOff,RfOn);
+configButtonUpdate(1,0,[_,PlcOn,RfOff,_])->selectRadio(PlcOn,RfOff);
+configButtonUpdate(1,1,[_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn).
+
+selectRadio(Plc,Rf) -> wxRadioButton:setValue(Plc,true), wxRadioButton:setValue(Rf,true).
+    
