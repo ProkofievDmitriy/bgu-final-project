@@ -4,7 +4,8 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/2, updateUpperLevelPid/2, enable_plc/1, enable_rf/1, disable_plc/1, disable_rf/1, disable/1, enable/1, handle_incoming_message/2]).
+-export([start/1, stop/1, send/2, updateUpperLevelPid/2, enable_plc/1, enable_rf/1, disable_plc/1, disable_rf/1, disable/1, enable/1,
+         handle_incoming_message/2, get_status/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -53,6 +54,8 @@ handle_incoming_message(FsmPid, Packet)->
     ?LOGGER:dev("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
     gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
+get_status(FsmPid) ->
+    gen_fsm:sync_send_all_state_event(FsmPid, get_status).
 
 
 %% ====================================================================
@@ -78,15 +81,15 @@ init(Properties) ->
 
 %% =========================================== IDLE =========================================
 idle(enable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - enable_plc , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - enable_plc ~n", [?MODULE]),
      {reply, ok, plc_only, StateData};
 
 idle(enable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - (enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - (enable_rf) ~n", [?MODULE]),
     {reply, ok, rf_only, StateData};
 
 idle(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - (enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - (enable) ~n", [?MODULE]),
      {reply, ok, dual, StateData};
 
 idle(Event, _From, StateData) ->
@@ -96,15 +99,15 @@ idle(Event, _From, StateData) ->
 
 %% =========================================== DUAL =========================================
 dual(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - (disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable) ~n", [?MODULE]),
      {reply, ok, idle, StateData};
 
 dual(disable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - (disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable_plc) ~n", [?MODULE]),
      {reply, ok, rf_only, StateData};
 
 dual(disable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - (disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: DUAL - (disable_rf) ~n", [?MODULE]),
      {reply, ok, plc_only, StateData};
 
 dual({send, {Hop, Data}}, _From, StateData) ->
@@ -131,24 +134,24 @@ dual({received_message, {Medium, Target, Data}}, StateData) ->
 
 %% =========================================== PLC ONLY =========================================
 plc_only(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - (disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (disable) ~n", [?MODULE]),
      {reply, ok, idle, StateData};
 
 plc_only(disable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - (disable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (disable_plc) ~n", [?MODULE]),
      {reply, ok, idle, StateData};
 
 plc_only(enable_rf, _From, StateData) ->
-     ?LOGGER:debug("[~p]: PLC_ONLY - (enable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+     ?LOGGER:debug("[~p]: PLC_ONLY - (enable_rf) ~n", [?MODULE]),
     {reply, ok, dual, StateData};
 
 plc_only(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - (enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - (enable) ~n", [?MODULE]),
      {reply, ok, dual, StateData};
 
 
 plc_only({send, {Hop, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = case Medium of
@@ -181,23 +184,23 @@ plc_only({received_message, {Medium, Target, Data}}, StateData) ->
 
 %% =========================================== RF ONLY =========================================
 rf_only(disable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - (disable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (disable) ~n", [?MODULE]),
      {reply, ok, idle, StateData};
 
 rf_only(disable_rf, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - (disable_rf) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (disable_rf) ~n", [?MODULE]),
      {reply, ok, idle, StateData};
 
 rf_only(enable_plc, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - (enable_plc) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (enable_plc) ~n", [?MODULE]),
      {reply, ok, dual, StateData};
 
 rf_only(enable, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - (enable) , StateData: ~w~n", [?MODULE, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (enable)~n", [?MODULE]),
     {reply, ok, dual, StateData};
 
 rf_only({send, {Hop, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: RF_ONLY - (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    ?LOGGER:debug("[~p]: RF_ONLY - (send) to medium ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = case Medium of
@@ -232,10 +235,13 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
 %% ============================================================================================
 
 handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p~n", [?MODULE, StateName]),
     NewState = StateData#state{upper_level_pid = UpperLevelPid},
-    ?LOGGER:debug("[~p]: updateUpperLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
+
+handle_sync_event(get_status, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
+	{reply, [{medium_mode, StateName}], StateName, StateData};
 
 handle_sync_event(Event, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),

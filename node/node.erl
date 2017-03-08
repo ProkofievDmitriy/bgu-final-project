@@ -30,7 +30,8 @@
                   protocol_monitor_ref,
                   protocol_properties,
                   report_unit_monitor_ref,
-                  report_unit_properties
+                  report_unit_properties,
+                  node_status_timer
 
                   }).
 
@@ -91,8 +92,8 @@ init(GlobalProperties) ->
 	?LOGGER:debug("[~p]: Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [?MODULE, NodeName, NodeAddress, IP, MAC]),
 
 	%initialize reporting-unit
-	ReportUnitProperties = proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties),
-	ReportUnitPid = ?REPORT_UNIT:start([{node_name, NodeName} | ReportUnitProperties]),
+	ReportUnitProperties = [{node_name, NodeName} | proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties)],
+	ReportUnitPid = ?REPORT_UNIT:start(ReportUnitProperties),
 	ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
 	?LOGGER:debug("[~p]: Report Unit: ~p started with pid: ~p and monitored by node: ~p.~n", [?MODULE, ?REPORT_UNIT, ReportUnitPid ,NodeName]),
 	?REPORT_UNIT:connect_to_data_server(),
@@ -116,6 +117,8 @@ init(GlobalProperties) ->
     %TODO : Remove in production
 %    loadTestData(),
 
+    Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
+
 
     {ok, #context{
         node_properties = NodeProperties,
@@ -127,7 +130,8 @@ init(GlobalProperties) ->
         application_monitor_ref = Application_Monitor_Reference,
         application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
-        report_unit_properties = ReportUnitProperties
+        report_unit_properties = ReportUnitProperties,
+        node_status_timer = Timer
     }}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -175,7 +179,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application
 
 %case Report Unit crashed, restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:debug("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ?LOGGER:debug("[~p]: Report Unit crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     ReportUnitPid = ?REPORT_UNIT:start(Context#context.report_unit_properties),
     ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
     NewContext = Context#context{report_unit_monitor_ref = ReportUnitMonitorReference},
@@ -189,6 +193,12 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_mo
     Protocol_Monitor_Reference = erlang:monitor(process, ProtocolPid),
     NewContext = Context#context{application_monitor_ref = Protocol_Monitor_Reference},
     {noreply, NewContext};
+
+handle_info(send_node_status, Context)  ->
+    ?LOGGER:debug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
+    Status = ?PROTOCOL:get_status(),
+    ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
+	{noreply, Context};
 
 handle_info(Request, Context)  ->
     ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),

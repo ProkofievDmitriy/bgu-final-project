@@ -111,6 +111,13 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     ?TRANSPORT:updateUpperLevelPid(NewContext#context.transport_pid, NewContext#context.application_pid),
     {reply, self(), NewContext};
 
+handle_call(get_status, _From, Context) ->
+    ?LOGGER:info("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
+    %TODO implement hand_shake with application
+    NetworkStatus = ?NETWORK:get_status(Context#context.network_pid),
+    DataLinkStatus = ?DATA_LINK:get_status(Context#context.data_link_pid),
+    {reply, NetworkStatus ++ DataLinkStatus , Context};
+
 
 handle_call(Request, From, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),

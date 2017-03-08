@@ -10,11 +10,11 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3 ]).
+-export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1 ]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
--export([active/3, active/2, idle/3]).
+-export([active/3, active/2, idle/3, idle/2]).
 
 -record(state, {routing_set,
                 rreq_handling_set,
@@ -78,6 +78,9 @@ handle_incoming_message(FsmPid, Medium, Payload)->
     LoadNGPacket = deserializePayload(Payload),
     gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}}).
 
+get_status(FsmPid) ->
+    gen_fsm:sync_send_all_state_event(FsmPid, get_status).
+
 
 %% ====================================================================
 %% Internal events
@@ -134,17 +137,15 @@ idle(enable, _From, StateData)->
     {reply, ok, active, StateData};
 
 idle(Request, _From, StateData)->
-    ?LOGGER:debug("[~p]: IDLE - IGNORING Request(~p),  StateData: ~w~n", [?MODULE, Request, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - IGNORING SYNC EVENT(~p),  StateData: ~w~n", [?MODULE, Request, StateData]),
     {reply, {error, "LoadNG Core NOT ACTIVE, IGNORING EVENT"}, idle, StateData}.
 
 
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
-
-
 active({send_message, {Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) in idle state, Message: {~p, ~w},  StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
+    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
         {error, ErrorMessage} ->
@@ -172,16 +173,21 @@ active({send_message, {Destination, Data}}, _From, StateData) ->
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
+idle(Request, StateData)->
+    ?LOGGER:debug("[~p]: IDLE - IGNORING A-SYNC EVENT(~p),  StateData: ~w~n", [?MODULE, Request, StateData]),
+    {next_state, idle, StateData}.
+
+
 active(remove_not_valid_routes, StateData)->
     NotValidRoutes = query_not_valid_routes(StateData#state.routing_set),
-    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
+    ?LOGGER:dev("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
     lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
     {next_state, active, StateData};
 
 active(update_expired_routes, StateData)->
     ExpiredRoutes = query_expired_routes(StateData#state.routing_set),
-    ?LOGGER:preciseDebug("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
+    ?LOGGER:dev("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
     lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
     gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
     {next_state, active, StateData};
@@ -403,6 +409,13 @@ handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, State
     NewState = StateData#state{upper_level_pid = UpperLevelPid},
     ?LOGGER:debug("[~p]: updateUpperLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
+
+
+handle_sync_event(get_status, _From, StateName, State) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= true -> Entry end),
+    RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
+    {reply, [{routing_set, RoutingSet}], StateName, State};
 
 
 handle_sync_event(Event, _From, StateName, StateData) ->
@@ -859,7 +872,7 @@ remove_and_get_broken_link(Packet, StateData)->
 report_message(Type, ReportingUnit, Message)->
     case ReportingUnit of
         undefined ->
-            ?LOGGER:err("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
+            ?LOGGER:warn("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
         _ ->
            ReportingUnit:report(Type, Message)
     end.
@@ -876,12 +889,9 @@ report_data_message_middle(Packet, State)->
     Data = [{?DATA_MESSAGE_TYPE, ?MIDDLE_MESSAGE}, {data, Packet}],
     report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
 
-report_management_message(State, Packet)->
-    report_message(?MANAGEMENT_MESSAGE, State#state.reporting_unit, Packet).
-
-report_routing_set(State)->
-    RoutingSet =  ets:tab2list(State#state.routing_set),
-    report_message(?ROUTING_SET, State#state.reporting_unit, RoutingSet).
+report_management_message(Packet, State)->
+    Data = [{data, Packet}],
+    report_message(?MANAGEMENT_MESSAGE, State#state.reporting_unit, Data).
 
 %----------------------------------------------------------------------------
 % UTILS Functions

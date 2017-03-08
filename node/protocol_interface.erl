@@ -7,7 +7,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/1, hand_shake/1]).
+-export([start/2, stop/0, send/2, hand_shake/1, send_data_request/1, update_configuration/1, get_status/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -32,12 +32,17 @@ start(ProtocolModule, Properties) ->
 stop() ->
     gen_server:call(?MODULE, stop).
 
-send({Destination, Data})->
+send(Destination, Data)->
     gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?TIMEOUT).
 
+send_data_request(Destination)->
+    gen_server:call(?MODULE, {data_request_message, Destination}, ?TIMEOUT).
 
 hand_shake(ApplicationPid) ->
     gen_server:call(?MODULE, {hand_shake, ApplicationPid}).
 
 update_configuration(OptionsList)->
     gen_server:call(?MODULE, {update_configuration, OptionsList}).
+
+get_status()->
+    gen_server:call(?MODULE, get_status).

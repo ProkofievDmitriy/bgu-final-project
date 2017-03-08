@@ -13,15 +13,15 @@ scripts/start_node.sh 132.73.199.232 node_10 data_concentration_server dual
 scripts/start_node.sh 132.73.199.200 node_4 smart_meter rf_only
 
 local:
-erl -name node_1@192.168.14.6 -setcookie load_ng_project -run c c node -run node start node_1 smart_meter dual
+erl -name node_1@132.73.198.5 -setcookie load_ng_project -run c c node -run node start node_1 smart_meter dual
 
 stub_data_server:
-erl -name stub_data_server@192.168.14.6 -setcookie load_ng_project -run c c stub_data_server -run c c log -run stub_data_server start
+erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub_data_server -run c c log -run stub_data_server start
 
 
 ```
 
-###Report Messages Format
+###Report Messages Format (from node)
 ```erlang
 {data_message, [{data_message_type, send_message/received_message/middle_message},
 		        {report_time, 312731767}, %current time in millis
@@ -31,13 +31,13 @@ erl -name stub_data_server@192.168.14.6 -setcookie load_ng_project -run c c stub
                 {data, MessageData}			 
 		        ]}
 
-{management_message, [{message_type, ?RREQ/?RREP/?RERR/?RACK},
+{management_message, [{message_type, ?RREQ/?RREP/?RERR/?RACK}, %Should not be sent, not relevant to data server : Managment is Managment
 			          {report_time, 312731767}, %current time in millis
 			          {source, Source},
 			          {destination, Destination}				 
 	            	 ]}
 
-{routing_set, [{node_name, node_1/2/3/4/5/6.../31},
+{routing_set, [{node_name, node_1/2/3/4/5/6.../31}, 
                {report_time, 312731767},
                {data, RoutingSetRecordsAsList}
               ]}
@@ -54,7 +54,7 @@ erl -name stub_data_server@192.168.14.6 -setcookie load_ng_project -run c c stub
 ```
 
 
-###Report Messages Format
+###Configuration Messages Format (to node)
 ```erlang
 {update_configuration,  [{plc, on/off},{rf, on/off},{reset_node, reset}]
 
@@ -74,7 +74,7 @@ erl -name stub_data_server@192.168.14.6 -setcookie load_ng_project -run c c stub
 #####MAC - STATIC IP in University WiFi Network: fist 10 addreses defined static IP's
 |Node  |MAC Address         |     IP Address      |        Validated|
 |------|--------------------|---------------------|---------------------|
-|server|6c:f0:49:ee:d7:9f   |   132.72.110.192	(132.72.110.150 - last check)|		|
+|server|6c:f0:49:ee:d7:9f   |   NOT STATIC||
 |1     |78:4b:87:a3:07:48   |	132.73.199.156|Valid|
 |2     |78:4b:87:a6:b7:31   |	132.73.199.164||
 |3     |78:4b:87:a5:05:1b   |	132.73.199.188||

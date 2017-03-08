@@ -70,19 +70,27 @@ handle_call(Request, From, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({report, {Type, Message}}, Context) ->
-    ?LOGGER:debug("[~p]: Handle CAST Request(report), message: ~p, Context: ~p~n", [?MODULE, Message, Context]),
-    ReportMessage = prepare_message(Type, Message, Context),
-    ServerModule = Context#context.data_server_name,
-    ServerModule:report(ReportMessage),
-    ?LOGGER:debug("[~p]: Request(report), ServerModule: ~p~n", [?MODULE, ServerModule]),
+handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
+    ReportMessage = prepare_message(Type, DataList, Context),
+    ServerModuleInterface = Context#context.data_server_name,
+    ?LOGGER:debug("[~p]: Handle CAST Request(report), ServerModuleInterface: ~p, Message: ~w~n", [?MODULE, ServerModuleInterface, ReportMessage]),
+    try ServerModuleInterface:report(ReportMessage) of
+        _ -> {noreply, Context}
+    catch
+        Throw->
+            ?LOGGER:warn("[~p]: ServerModuleInterface: ~w unavailable: ~p.~n", [?MODULE, ServerModuleInterface, Throw]),
+            {noreply, Context#context{connected_to_server = false}}
+    end;
+
+handle_cast({report, _ }, #context{connected_to_server = false} = Context) ->
+    ?LOGGER:warn("[~p]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER .~n", [?MODULE]),
+    connect_to_data_server(),
     {noreply, Context};
 
 
-
-handle_cast(connect_to_data_server, Context) ->
+handle_cast(connect_to_data_server, #context{connected_to_server = false} = Context) ->
 %TODO Pattern match in function definition to only not connected to server state
-    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server), Context: ~p ~n", [?MODULE, Context]),
+    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server) ~n", [?MODULE]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
     test_connection(ServerNodeName),
     Ans = net_kernel:connect_node(ServerNodeName),
@@ -99,6 +107,11 @@ handle_cast(connect_to_data_server, Context) ->
             connect_to_data_server(),
             {noreply, Context}
     end;
+
+handle_cast(connect_to_data_server, #context{connected_to_server = true} = Context) ->
+    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server) IGNORED - ALREADY CONNECTED~n", [?MODULE]),
+    {noreply, Context};
+
 
 
 
@@ -131,13 +144,9 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-prepare_message(Type, Message , Context)->
-    {
-        Type, [
-            {node_name, Context#context.node_name},
-            {message, Message}
-        ]
-    }.
+prepare_message(Type, DataList , Context)->
+    {Type, [{node_name, list_to_atom(Context#context.node_name)}|DataList]}.
+
 
 test_connection(Address)->
    case net_adm:ping(Address) of

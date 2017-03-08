@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [report]).
+-define(MODULES_TO_FILTER, []).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
@@ -30,7 +30,8 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 200000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 20000).
+-define(NODE_STATUS_TIMER_INTERVAL, 20000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS * 2).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
@@ -75,7 +76,7 @@
 
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_name,stub_data_server},
-                                 {data_server_ip, "192.168.14.6"}
+                                 {data_server_ip, "132.73.198.5"}
 %                                 {data_server_ip, "127.0.0.1"}
                                 ]).
 

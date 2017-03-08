@@ -36,7 +36,8 @@
 %send report
 -define(MANAGEMENT_MESSAGE, management_message).
 -define(DATA_MESSAGE, data_message).
--define(ROUTING_SET, routing_sets).
+-define(ROUTING_SET, routing_set).
+-define(NODE_STATUS_REPORT, node_state).
 %receive
 -define(UPDATE_CONFIGURATION, update_configuration).
 -define(INITIATE_TRANSACTION, initiate_transaction).

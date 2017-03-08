@@ -38,7 +38,7 @@ test(Node)->
     test_connection(Node).
 
 
-report(Message)->gen_server:cast({global, ?MODULE}, {report, {Message}}).
+report(Message)->gen_server:call({global, ?MODULE}, {report, {Message}}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Callback Functions
@@ -53,8 +53,8 @@ init([]) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({report, {Message}}, From, Context) ->
-    io:format("[~p]: STUB Handle CALL Request(report) From: ~p, Message ~p, Context: ~w~n", [?MODULE, From, Message, Context]),
+handle_call({report, {Message}}, _From, Context) ->
+    io:format("[~p]: Request(report)  Message ~w~n", [?MODULE, Message]),
     {reply, ok, Context};
 
 handle_call(Request, From, Context) ->
@@ -65,6 +65,10 @@ handle_call(Request, From, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ handle_cast({report, {Message}}, Context) ->
+     io:format("[~p]: Request(report)  Message ~w~n", [?MODULE, Message]),
+     {noreply, Context};
+
 handle_cast(Request, Context) ->
     io:format("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
