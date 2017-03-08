@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [load_ng_core, load_ng, report]).
+-define(MODULES_TO_FILTER, [load_ng, report, node, transport]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 

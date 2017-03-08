@@ -180,24 +180,36 @@ idle(Request, StateData)->
 
 active(remove_not_valid_routes, StateData)->
     NotValidRoutes = query_not_valid_routes(StateData#state.routing_set),
-    ?LOGGER:dev("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
-    lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
-    {next_state, active, StateData};
+    case NotValidRoutes of
+        [] -> {next_state, active, StateData};
+        _ ->
+            ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
+            lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
+            {next_state, active, StateData}
+    end;
 
 active(update_expired_routes, StateData)->
     ExpiredRoutes = query_expired_routes(StateData#state.routing_set),
-    ?LOGGER:dev("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
-    lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
     gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
-    {next_state, active, StateData};
+    case ExpiredRoutes of
+        [] -> {next_state, active, StateData};
+        _ ->
+            ?LOGGER:preciseDebug("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
+            lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
+            {next_state, active, StateData}
+    end;
 
 active(remove_expired_rreq, StateData)->
     ExpiredRREQ = query_expired_rreq(StateData#state.rreq_handling_set),
-    ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~p.~n", [?MODULE, length(ExpiredRREQ)]),
-    lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
     gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
-    {next_state, active, StateData};
+    case ExpiredRREQ of
+        [] -> {next_state, active, StateData};
+        _ ->
+            ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~p.~n", [?MODULE, length(ExpiredRREQ)]),
+            lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
+            {next_state, active, StateData}
+    end;
 
 active({generate_rreq, Destination}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREQ for Destination ~p.~n", [?MODULE, Destination]),
@@ -654,7 +666,7 @@ isValidForProcessing(Originator, Destination, R_SEQ_NUMBER, State)->
                 false ->
                     case query_find_next_hop(Originator, State#state.routing_set) of
                       {ok, {_Key, Entry} } -> %found next hop (route exists)
-                        IsGreater = is_sequence_number_grater(R_SEQ_NUMBER, Entry#routing_set_entry.r_seq_number),
+                        IsGreater = compare_sequence_numbers(R_SEQ_NUMBER, Entry#routing_set_entry.r_seq_number),
                         if IsGreater ->
                             true;
                             true ->
@@ -775,21 +787,18 @@ query_not_valid_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid_time < CurrentMillis -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
-    ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
     Result.
 
 
 query_expired_routes(RoutingSetId)->
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= false -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
-    ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
     Result.
 
 query_expired_rreq(RREQ_HandlingSet_Id)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#rreq_handling_set_entry.valid_time < CurrentMillis -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RREQ_HandlingSet_Id, [{traverse, {select, Query}}])),
-    ?LOGGER:preciseDebug("[~p]: query_expired_routes query result : ~p .~n", [?MODULE, Result]),
     Result.
 
 add_new_entry_to_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Originator})->
@@ -804,7 +813,7 @@ contains_is_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Orig
     Result = qlc:eval(ets:table(RREQ_HandlingSet_Id, [{traverse, {select, Query}}])),
     case Result of
         [Entry|[]] ->
-            NewSeqNumberIsGreater = is_sequence_number_grater(SeqNumber, Entry#rreq_handling_set_entry.r_seq_number),
+            NewSeqNumberIsGreater = compare_sequence_numbers(SeqNumber, Entry#rreq_handling_set_entry.r_seq_number),
             if  NewSeqNumberIsGreater ->
                 false; % SeqNumber > Entry#rreq_handling_set_entry.r_seq_number
                 true -> true
@@ -827,13 +836,13 @@ update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, h
         _ ->
             {error, failed_updating_routing_set_entry_unexpected_error}
     end,
-
+    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
+    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry Destination: ~n  ~p .~n", [?MODULE, Packet#load_ng_packet.destination]),
     case EntryToUpdate of
         {ok, {Key, Entry}} ->
             ets:delete(StateData#state.routing_set, Key),
             ets:insert(StateData#state.routing_set, {Key, Entry#routing_set_entry{valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}}),
-            ?LOGGER:info("[~p]: update_routing_set_entry : ~p.~n", [?MODULE, Entry]),
-            ?LOGGER:preciseDebug("[~p]: RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]);
+            ?LOGGER:info("[~p]: update_routing_set_entry : ~p.~n", [?MODULE, Entry]);
         {error, Mesage} ->
             ?LOGGER:err("[~p]: update_routing_set_entry ErrorMessage: ~p.~n", [?MODULE, Mesage]),
             {error, failed_updating_routing_set_entry}
@@ -896,10 +905,10 @@ report_management_message(Packet, State)->
 %----------------------------------------------------------------------------
 % UTILS Functions
 %----------------------------------------------------------------------------
-is_sequence_number_grater(S1, S2) ->
+compare_sequence_numbers(S1, S2) ->
     MAXVALUE = ?SEQUENCE_NUMBER_MAX_VALUE - 1,
     Result = (((S2 < S1) and (S1 - S2 =< MAXVALUE/2)) or ((S1 < S2) and (S2 - S1 > MAXVALUE/2))),
-    ?LOGGER:preciseDebug("[~p]: is_sequence_number_grater  ~p > ~p ? result : ~p .~n", [?MODULE, S1, S2, Result]),
+    ?LOGGER:preciseDebug("[~p]: compare_sequence_numbers  ~p > ~p ? result : ~p .~n", [?MODULE, S1, S2, Result]),
     Result.
 
 
@@ -912,7 +921,7 @@ find_in_list(ComparatorFunction, [H|T])->
     lists:foldl(ComparatorFunction, H, T).
 
 max_by_seq_num_route_set_entry_comparator({Key1, Entry1}, {Key2, Entry2})->
-    case is_sequence_number_grater(Entry1#routing_set_entry.r_seq_number, Entry2#routing_set_entry.r_seq_number) of
+    case compare_sequence_numbers(Entry1#routing_set_entry.r_seq_number, Entry2#routing_set_entry.r_seq_number) of
         true -> {Key1, Entry1};
         false -> {Key2, Entry2}
     end.
