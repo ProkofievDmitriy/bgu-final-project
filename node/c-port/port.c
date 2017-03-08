@@ -186,21 +186,16 @@ int send_to_Modem(byte * buffer, short len){
 	char m[100];
 	int int_len = len & 0xff;
 	unsigned int a = len % 20, b = len/20;
-	short packet_size;
-	if(a == 0){
-    packet_size = b * 20;
-  }
-	else {
-    packet_size = (b + 1) * 20;
-  }
-	if(len > 40){
-    packet_size = 66;
-  }
-	if(len == 0){
+  if(len == 0 || !(len == 20 || len ==40 || len == 60)){
+    sprintf(m, "INVALID LENGTH OF PACKET: len is:%d , int_len is:%d\n", len, int_len);
+    writeToFile(m);
     return 0;
   }
-	sprintf(m, "sending Modem a Packet: len is:%d packet_size is:%d, whole buff is:\n", packet_size, int_len);
-    writeToFile(m);
+  size_t packet_size = len;
+
+
+	sprintf(m, "sending Modem a Packet: int_len is: %d, whole buff is:\n", int_len);
+  writeToFile(m);
 	writeToFile2(buffer, packet_size);
 	writeToFile("\n#1\n");
 	/*for(i=0; i<len;i++){
@@ -272,13 +267,13 @@ void show_buffer(byte *buffer, short len){
 /*check if the packet given is at goot format (first byte is CHANNEL), and if the payload (bytes 3-...) are equals (bad packet).
 return 1 if ok, 0 else*/
 int packet_ok(byte* buffer, int len){
-		if(buffer[0] != CHANNEL_RF && buffer[0] !=CHANNEL_PLC)
+		if(buffer[0] != CHANNEL_RF && buffer[0] != CHANNEL_PLC)
 			return FALSE;
 		if(buffer[0] == buffer[1]) return FALSE;
 		//if(buffer[len-1] == buffer[2] && buffer[5] == buffer[6])
 		//	return FALSE;
-		if(buffer[10] == buffer[11] &&  buffer[20] == buffer[21] && buffer[30] == buffer[31]) return FALSE;
-		return TRUE;
+		// if(buffer[10] == buffer[11] &&  buffer[20] == buffer[21] && buffer[30] == buffer[31]) return FALSE;
+		// return TRUE;
 }
 
 /* Set the O_NONBLOCK flag of desc if value is nonzero,

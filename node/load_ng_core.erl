@@ -817,7 +817,7 @@ contains_is_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Orig
     end.
 
 update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}
-    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.destination -> {Key, Entry} end),
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.destination),(Entry#routing_set_entry.valid =:= true) -> {Key, Entry} end),
     QueryResult = qlc:eval(ets:table(StateData#state.routing_set, [{traverse, {select, Query}}])),
     EntryToUpdate = case QueryResult of
         [H|[]] -> {ok, H};

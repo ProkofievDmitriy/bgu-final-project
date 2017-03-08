@@ -182,7 +182,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 
 	%c port sent data
 	{_Port2, {data, Data}} ->
-			?LOGGER:debug("[~p]: Received data from port: Data ~w~n", [?MODULE, Data]),
+			?LOGGER:debug("[~p]: Received data from port: length ~p,  Data ~w~n", [?MODULE, length(Data), Data]),
 			Ans = examine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized

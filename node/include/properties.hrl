@@ -1,11 +1,11 @@
--define(MODULES_TO_FILTER, []).
+-define(MODULES_TO_FILTER, [load_ng_core, load_ng, report]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
 
 
 %%% SYSTEM PROPERTIES
--define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 5 - TemoraryINFO, 4 - Critical
+-define(CURRENT_LOG_LEVEL, -1). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 5 - TemoraryINFO, 4 - Critical
 
 -define(LOGGER, log).
 -define(LOAD_NG, load_ng).
