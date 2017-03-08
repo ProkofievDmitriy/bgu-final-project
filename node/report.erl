@@ -29,7 +29,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start(Params) ->
-    {ok,PID} = gen_server:start_link({local, ?MODULE }, ?MODULE, Params, []),
+    {ok,PID} = gen_server:start({local, ?MODULE }, ?MODULE, Params, []),
     PID.
 
 stop() ->

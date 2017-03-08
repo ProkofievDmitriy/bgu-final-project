@@ -32,13 +32,12 @@ start(ProtocolModule, Properties) ->
 stop() ->
     gen_server:call(?MODULE, stop).
 
-%send({Destination, Data})-> gen_server:call({local, ?MODULE}, {data_message, {Destination, Data}}).
 send({Destination, Data})->
     gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?TIMEOUT).
 
 
-hand_shake(ApplicationPid) -> gen_server:call(?MODULE, {hand_shake, ApplicationPid}).
-%hand_shake(ApplicationPid) -> gen_server:call({local, ?MODULE}, {hand_shake, ApplicationPid}).
+hand_shake(ApplicationPid) ->
+    gen_server:call(?MODULE, {hand_shake, ApplicationPid}).
 
-
-
+update_configuration(OptionsList)->
+    gen_server:call(?MODULE, {update_configuration, OptionsList}).

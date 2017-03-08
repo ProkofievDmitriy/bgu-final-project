@@ -141,6 +141,19 @@ handle_call(Request, From, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+handle_cast({update_configuration, OptionsList}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w, Context: ~w ~n", [?MODULE, OptionsList, Context]),
+    ?PROTOCOL:update_configuration(OptionsList),
+    {noreply, Context};
+
+
+handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(initiate_transaction), Destination:~p, Data: ~p, Context: ~w ~n", [?MODULE, Destination, Data, Context]),
+    ?PROTOCOL:send({Destination, Data}),
+    {noreply, Context};
+
+
 handle_cast(Request, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
@@ -276,3 +289,14 @@ compile_resources() ->
 loadTestData()->
 
 ok.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%      node managment interface
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+update_configuration(NodeName, OptionsList)->
+    gen_server:cast(NodeName, {update_configuration, OptionsList}).
+
+initiate_transaction(NodeName, Destination, Data)->
+    gen_server:cast(NodeName, {initiate_transaction, {Destination, Data}}).
