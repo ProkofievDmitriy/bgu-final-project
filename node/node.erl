@@ -198,6 +198,9 @@ handle_info(send_node_status, Context)  ->
     ?LOGGER:debug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
     Status = ?PROTOCOL:get_status(),
     ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
+    % ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
+    % Server = global:whereis_name(loadNGgui),
+    % wx_object:cast(Server, {node_is_up,{Context#context.node_name}}),
 	{noreply, Context};
 
 handle_info(Request, Context)  ->

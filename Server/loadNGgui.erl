@@ -9,7 +9,7 @@
 -export([start/0, init/1, terminate/2,  code_change/3,
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2]).
 
--record(state, 
+-record(state,
 	{frame,panel,nodesEts, canvas, log, nodeChoice, numberOfNodes, configButtons}).
 -record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 start() ->
@@ -26,7 +26,7 @@ init(WxServer) ->
     NodesEts = ets:new(nodesEts,[set,named_table]),
 
 	io:format("init 1 ~n"),
-	
+
     Frame = wxFrame:new(WxServer, ?wxID_ANY, "LOADng", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
     io:format("Frame: ~p~n",[Frame]),
     Panel = wxPanel:new(Frame),
@@ -112,7 +112,7 @@ init(WxServer) ->
 
     wxFrame:show(Frame),
 
-    {Frame,#state{frame=Frame,panel=Panel,nodesEts = NodesEts, log = Log,canvas = Canvas, nodeChoice = NodeChoice, numberOfNodes = 0, configButtons = ConfigButtons}}. 
+    {Frame,#state{frame=Frame,panel=Panel,nodesEts = NodesEts, log = Log,canvas = Canvas, nodeChoice = NodeChoice, numberOfNodes = 0, configButtons = ConfigButtons}}.
 
 
 
@@ -137,9 +137,9 @@ init(WxServer) ->
 handle_sync_event(_Event,_,State) ->
 		%io:format("got _Event=~p in handle_sync_event~n",[_Event]),
 		{noreply, State}.
-	
 
-	
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -148,7 +148,7 @@ handle_sync_event(_Event,_,State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{log = Log, nodesEts = NodesEts, configButtons = ConfigButtons}) -> 
+handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{log = Log, nodesEts = NodesEts, configButtons = ConfigButtons}) ->
     io:format("command_listbox_selected ~p~n",[Ex]),
 
     DC = wxWindowDC:new(State#state.canvas),
@@ -165,38 +165,59 @@ handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}
 
 
 handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"),
-{noreply,State}.	 
-	
-	
+{noreply,State}.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Handling cast messages
-%% 
+%%
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({node_is_up,{NodeName}}, State = #state{log = Log, nodeChoice = NodeChoice, numberOfNodes = NodeNumber}) -> 
-    io:format("loadNGgui.erl: node_is_up: ID=~p~n",[NodeName]),
-    wxTextCtrl:appendText(Log, "New node is up ID: " ++ NodeName ++"\n"),
-    wxListBox:insertItems(NodeChoice,[NodeName],0),
-    ets:insert(State#state.nodesEts,{NodeName,{NodeNumber, {0,0},[]}}),
-    {noreply, State#state{numberOfNodes = NodeNumber + 1 }};
+handle_cast({node_is_up,{NodeNameAtom, Data}}, State = #state{log = Log, nodeChoice = NodeChoice, numberOfNodes = NodeNumber}) ->
+	NodeName = atom_to_list(NodeNameAtom),
+	RoutingSet = proplists:get_value(routing_set, Data),
+	MediumMode = proplists:get_value(medium_mode, Data),
+	Mode = case MediumMode of
+		plc_only -> {1,0};
+		rf_only -> {0,1};
+		dual -> {1,1};
+	 	idle -> {0,0} end,
+	Res = ets:lookup(State#state.nodesEts,NodeName),
+	case Res of
+		[] ->
+			io:format("loadNGgui.erl: node_is_up: ID=~p~n",[NodeName]),
+		    wxTextCtrl:appendText(Log, "New node is up ID: " ++ NodeName ++"\n"),
+		    wxListBox:insertItems(NodeChoice,[NodeName],0),
+		    ets:insert(State#state.nodesEts,{NodeName,{NodeNumber, Mode,RoutingSet}}),
+		    {noreply, State#state{numberOfNodes = NodeNumber + 1 }};
+		[{Name,{NodeNumber,_,_}}] ->
+			io:format("loadNGgui.erl: node updated: ID=~p~n",[Name]),
+			wxTextCtrl:appendText(Log, "Node ID: " ++ Name ++" updated\n"),
+			ets:insert(State#state.nodesEts,{Name,{NodeNumber,Mode,RoutingSet}}),
+			{noreply, State};
+		A ->
+			io:format ("RES ~p~n",[A]),
+			{noreply, State}
 
-handle_cast({update_state,{NodeName,{{PLC,RF},RoutingSet}}}, State = #state{log = Log}) -> 
+		end;
+
+handle_cast({update_state,{NodeName,{{PLC,RF},RoutingSet}}}, State = #state{log = Log}) ->
     io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeName]),
     wxTextCtrl:appendText(Log, "Node ID: " ++ NodeName ++" updated\n"),
     [{NodeName,{NodeNumber,_,_}}] = ets:lookup(State#state.nodesEts,NodeName),
     ets:insert(State#state.nodesEts,{NodeName,{NodeNumber,{PLC,RF},RoutingSet}}),
     {noreply, State};
 
-handle_cast({printNodes}, State) -> 
+handle_cast({printNodes}, State) ->
     io:format("loadNGgui.erl: print nodesEts:~n"),
     printNodesEts(ets:first(State#state.nodesEts), State#state.nodesEts),
     {noreply, State};
 
-handle_cast(_A, State) -> 
-	io:format("loadNGgui.erl: handle_info cast: MSG=~p~n",[_A]),	
+handle_cast(_A, State) ->
+	io:format("loadNGgui.erl: handle_info cast: MSG=~p~n",[_A]),
 	{noreply, State}.
 
 
@@ -235,7 +256,7 @@ terminate(_Reason, #state{frame=Frame}) ->
   wxWindow:destroy(Frame),
     ok.
 
-code_change(_, _, State) -> 
+code_change(_, _, State) ->
 	io:format("code_change ~n"),
 	{noreply, State}.
 
@@ -261,7 +282,7 @@ printNodesEts(Node, Ets) ->
 %%%   Internal Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 create_radio_buttons(Panel) ->
-    RadioButtonSizer = 
+    RadioButtonSizer =
         wxStaticBoxSizer:new(?wxVERTICAL, Panel,
             [{label, "wxRadioButton"}]),
     Buttons =
@@ -290,22 +311,24 @@ switch_to_node(DC, Node,Node, NodesEts) ->
 switch_to_node(DC, Node,Key, NodesEts) ->
     [{Key,{NodeNumber, {_PLC,_RF},_RoutingSet}}] = ets:lookup(NodesEts,Key),
     wxDC:drawCircle(DC, {50, 40*NodeNumber + 20}, 15),
-    
+
     switch_to_node(DC, Node,ets:next(NodesEts,Key),NodesEts).
 
 
 draw_routs(_, _,_,[]) -> ok;
 draw_routs(DC, SelectedNode, NodesEts,[#routing_set_entry{dest_addr = Node1, next_addr = Node2, medium = Medium}|RoutingSet]) ->
     io:format("draw_routs N: ~p~n~n",[Node1]),
-    StrNode1 = atom_to_list(Node1),    
+    % StrNode1 = atom_to_list(Node1),
+    StrNode1 = "node_" ++ integer_to_list(Node1),
     [{StrNode1,{NodeNumber, _,_}}] = ets:lookup(NodesEts,StrNode1),
-    StrNode2 = atom_to_list(Node2),    
+    StrNode2 = "node_" ++ integer_to_list(Node2),
+    % StrNode2 = atom_to_list(Node2),
     [{StrNode2,{NodeNumber2, _,_}}] = ets:lookup(NodesEts,StrNode2),
 
     case Medium of
-        plc ->
+        2 -> %PLC
             Colour = ?wxBLUE;
-        rf ->
+        1 -> %RF
             Colour = ?wxRED;
         _ ->
             Colour = ?wxBLACK
@@ -315,7 +338,7 @@ draw_routs(DC, SelectedNode, NodesEts,[#routing_set_entry{dest_addr = Node1, nex
     wxPen:setColour(Pen, Colour),
     wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
     wxDC:setPen(DC, Pen),
-    if 
+    if
         (Node1 == Node2) -> wxDC:drawLine(DC, {300, 200}, {50, 40*NodeNumber + 20});
         NodeNumber2 > NodeNumber ->
                 io:format("NodeNumber2 ~p > NodeNumber1 ~p~n",[NodeNumber2,NodeNumber]),
@@ -332,4 +355,3 @@ configButtonUpdate(1,0,[_,PlcOn,RfOff,_])->selectRadio(PlcOn,RfOff);
 configButtonUpdate(1,1,[_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn).
 
 selectRadio(Plc,Rf) -> wxRadioButton:setValue(Plc,true), wxRadioButton:setValue(Rf,true).
-    

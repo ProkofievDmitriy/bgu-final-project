@@ -1,11 +1,11 @@
--define(MODULES_TO_FILTER, [load_ng, report, node, transport]).
+-define(MODULES_TO_FILTER, [load_ng, node, transport]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
 
 
 %%% SYSTEM PROPERTIES
--define(CURRENT_LOG_LEVEL, -1). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 5 - TemoraryINFO, 4 - Critical
+-define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 5 - TemoraryINFO, 4 - Critical
 
 -define(LOGGER, log).
 -define(LOAD_NG, load_ng).
@@ -21,7 +21,7 @@
 %-define(NETWORK_DEVICE, "enp2s0").
 %-define(NETWORK_DEVICE, "wlp3s0").
 -define(NETWORK_DEVICE, "lo").
--define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?NETWORK, ?DATA_LINK, ?TRANSPORT, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION, stub_data_server]).
+-define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?NETWORK, ?DATA_LINK, ?TRANSPORT, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION, stub_data_server, loadNG_server_interface]).
 
 
 
@@ -31,7 +31,7 @@
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
 -define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 20000).
--define(NODE_STATUS_TIMER_INTERVAL, 20000).
+-define(NODE_STATUS_TIMER_INTERVAL, 2000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS * 2).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
@@ -75,8 +75,8 @@
                              ]).
 
 %%% REPORTING UNIT PROPERTIES
--define(REPORT_UNIT_PROPS_LIST, [{data_server_name,stub_data_server},
-                                 {data_server_ip, "132.73.198.5"}
+-define(REPORT_UNIT_PROPS_LIST, [{data_server_name,loadNG_server_interface},
+                                 {data_server_ip, "132.73.204.196"}
 %                                 {data_server_ip, "127.0.0.1"}
                                 ]).
 

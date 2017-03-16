@@ -74,7 +74,7 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
     ReportMessage = prepare_message(Type, DataList, Context),
     ServerModuleInterface = Context#context.data_server_name,
     ?LOGGER:debug("[~p]: Handle CAST Request(report), ServerModuleInterface: ~p, Message: ~w~n", [?MODULE, ServerModuleInterface, ReportMessage]),
-    try ServerModuleInterface:report(ReportMessage) of
+    try ServerModuleInterface:report(ReportMessage) of %{message_type, [{],{},{}]}
         _ -> {noreply, Context}
     catch
         Throw->
