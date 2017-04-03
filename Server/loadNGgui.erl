@@ -7,7 +7,7 @@
 -define(Y_SIZE, 840).
 
 -export([start/0, init/1, terminate/2,  code_change/3,
-handle_info/2,handle_cast/2, handle_call/3, handle_event/2]).
+handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]).
 
 -record(state,
 	{frame,panel, mapEts, nodesEts, canvas, log, nodeChoice, selectedNode = all, numberOfNodes, configButtons, locationInput}).
@@ -165,6 +165,7 @@ handle_sync_event(_Event,_,State) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+<<<<<<< Updated upstream
 handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString="Show Full Map"}}, State = #state{log = Log, mapEts = MapEts, nodesEts = NodesEts, configButtons = ConfigButtons}) ->
     io:format("command_listbox_selected Full~n"),
     SelectedNode = all,
@@ -177,6 +178,10 @@ handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString="Sh
     wxWindowDC:destroy(DC),
 
   %  wxTextCtrl:appendText(Log, "Selected node ID: " ++ NodeName ++"\n"),
+=======
+handle_event(#wx{event=#wxCommand{type = command_listbox_selected, cmdString=Ex}}, State = #state{nodesEts = NodesEts, configButtons = ConfigButtons}) -> 
+    io:format("command_listbox_selected ~p~n",[Ex]),
+>>>>>>> Stashed changes
 
 {noreply,State#state{selectedNode = SelectedNode}};
 
@@ -343,12 +348,21 @@ update_map(Ets, Node, [#routing_set_entry{dest_addr = NextNode, next_addr = Next
 
 
 
+<<<<<<< Updated upstream
 switch_to_node(_, _,'$end_of_table', _, _) -> ok;
 switch_to_node(DC, Node,Node, NodesEts, {XNodeLocation, YNodeLocation}) ->
     [{Node,{NodeNumber, {X,Y}, {PLC,RF},RoutingSet}}] = ets:lookup(NodesEts,Node),
     wxDC:drawCircle(DC, {X,Y}, 15),
     wxTextCtrl:setValue(XNodeLocation, integer_to_list(X)),
     wxTextCtrl:setValue(YNodeLocation, integer_to_list(Y)),
+=======
+switch_to_node(_, _,'$end_of_table', _) -> ok;
+switch_to_node(DC, Node,Node, NodesEts) ->
+    wxDC:drawCircle(DC, {300, 200}, 15),
+    [{Node,{_NodeNumber, {_PLC,_RF},RoutingSet}}] = ets:lookup(NodesEts,Node),
+    draw_routs(DC, Node, NodesEts,RoutingSet),
+    switch_to_node(DC, Node,ets:next(NodesEts,Node),NodesEts);
+>>>>>>> Stashed changes
 
 	wxDC:drawLabel(DC,atom_to_list(Node), {X-10,Y-10,X+50,Y+50}),
 
