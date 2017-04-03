@@ -99,10 +99,21 @@ init(Properties) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
     ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
-    Result = ?TRANSPORT:send(Context#context.transport_pid, {Destination, Data}),
+    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
+handle_call({data_request_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
+    {reply, Result, Context};
+
+handle_call({data_reply_message, {Destination, Data}}, From, Context=#context{messages_queue = MessagesQueue}) ->
+    ?LOGGER:info("[~p]: Handle CALL Request(data_message), Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(data_message), Result : ~p~n", [?MODULE, Result]),
+    {reply, Result, Context};
 
 handle_call({hand_shake, ApplicationPid}, From, Context) ->
     ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p, Context: ~w~n", [?MODULE, ApplicationPid, From, Context]),

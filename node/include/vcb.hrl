@@ -21,6 +21,8 @@
 -define(RERR, 2).
 -define(RACK, 3).
 -define(DATA, 4).
+-define(DREQ, 5).
+-define(DREP, 6).
 
 %RERR CODES
 -define(RERR_GENERAL_ERROR, 0).

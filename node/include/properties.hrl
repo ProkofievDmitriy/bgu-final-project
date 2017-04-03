@@ -21,7 +21,17 @@
 %-define(NETWORK_DEVICE, "enp2s0").
 %-define(NETWORK_DEVICE, "wlp3s0").
 -define(NETWORK_DEVICE, "lo").
--define(NODE_RESOURCES, [?LOGGER, ?PROTOCOL, ?REPORT_UNIT, ?NETWORK, ?DATA_LINK, ?TRANSPORT, ?LOAD_NG, ?MODEM_PORT, ?APPLICATION, stub_data_server, loadNG_server_interface]).
+-define(NODE_RESOURCES, [?LOGGER,
+                         ?PROTOCOL,
+                         ?REPORT_UNIT,
+                         ?NETWORK,
+                         ?DATA_LINK,
+                         ?TRANSPORT,
+                         ?LOAD_NG,
+                         ?MODEM_PORT,
+                         ?APPLICATION,
+                         stub_data_server,
+                         loadNG_server_interface]).
 
 
 

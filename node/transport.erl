@@ -29,8 +29,8 @@ disable(FsmPid)->
     gen_fsm:send_event(FsmPid, disable_plc).
 
 %Managing events
-send(FsmPid, {Destination, Data})->
-    gen_fsm:sync_send_event(FsmPid, {send, {Destination, Data}}, ?TIMEOUT).
+send(FsmPid, {Type, Destination, Data})->
+    gen_fsm:sync_send_event(FsmPid, {send, {Type, Destination, Data}}, ?TIMEOUT).
 
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
@@ -99,7 +99,7 @@ disable(enable, StateData) ->
 %Synchronous event call
 disable({send, {Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
-    Result = ?NETWORK:send(StateData#state.bottom_level_pid, {Destination, Data}),
+    Result = ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, Data}),
      {reply, Result, disable, StateData}.
 
 

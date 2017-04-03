@@ -59,9 +59,9 @@ updateBottomLevelPid(FsmPid, BottomLevelPid)->
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
-send(FsmPid, {Destination, Data})->
+send(FsmPid, {Type, Destination, Data})->
     %default sync event timeout 5000ms
-    Result = gen_fsm:sync_send_event(FsmPid, {send_message, {Destination, Data}}, ?TIMEOUT),
+    Result = gen_fsm:sync_send_event(FsmPid, {send_message, {Type, Destination, Data}}, ?TIMEOUT),
     ?LOGGER:info("[~p]: Send Call Result: ~p.~n", [?MODULE, Result]),
     Result.
 
@@ -109,6 +109,7 @@ init(Properties) ->
     ReportingUnit = proplists:get_value(reporting_unit, Properties),
 
     RoutingSet_Id = ets:new(routing_set, [set, public]), %% data entry format : {Destination , {Medium, NextHop}}
+    add_new_entry_to_routing_set(RoutingSet_Id, ?BROADCAST_ADDRESS, ?BROADCAST_ADDRESS, ?RF_PLC, 0, 0),
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
 
@@ -144,7 +145,7 @@ idle(Request, _From, StateData)->
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
-active({send_message, {Destination, Data}}, _From, StateData) ->
+active({send_message, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
     NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
     case NextHop of
@@ -427,7 +428,11 @@ handle_sync_event(get_status, _From, StateName, State) ->
     ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= true -> Entry end),
     RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
-    {reply, [{routing_set, RoutingSet}], StateName, State};
+    RoutingSetList = [
+        {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
+         {next_address, RoutingSetEntry#routing_set_entry.next_addr},
+         {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
+    {reply, [{routing_set, RoutingSetList}], StateName, State};
 
 
 handle_sync_event(Event, _From, StateName, StateData) ->
@@ -689,16 +694,16 @@ isValidForProcessing(Originator, Destination, R_SEQ_NUMBER, State)->
                 end
     end.
 %broadcast forwarding
-forward_packet(#load_ng_packet{type = ?RREQ} = Packet, StateData) -> % only RREQ forwarded to BROADCAST_ADDRESS
-    ?LOGGER:info("[~p]: forward_packet : RREQ in BROADCAST.~n", [?MODULE]),
-    Payload = prepare_payload(StateData#state.self_address,
-                              Packet#load_ng_packet.originator,
-                              Packet#load_ng_packet.destination,
-                              ?RREQ,
-                              get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
-    {Status, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
-    report_management_message(Payload, StateData),
-    {Status, Message, {?RF_PLC, ?BROADCAST_ADDRESS}};
+% forward_packet(#load_ng_packet{type = ?RREQ} = Packet, StateData) -> % only RREQ forwarded to BROADCAST_ADDRESS
+%     ?LOGGER:info("[~p]: forward_packet : RREQ in BROADCAST.~n", [?MODULE]),
+%     Payload = prepare_payload(StateData#state.self_address,
+%                               Packet#load_ng_packet.originator,
+%                               Packet#load_ng_packet.destination,
+%                               ?RREQ,
+%                               get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
+%     {Status, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
+%     report_management_message(Payload, StateData),
+%     {Status, Message, {?RF_PLC, ?BROADCAST_ADDRESS}};
 
 %unicast forwarding
 forward_packet(Packet, StateData) ->
