@@ -36,7 +36,7 @@ send(Destination, Data)->
     gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?TIMEOUT).
 
 send_data_request(Destination)->
-    gen_server:call(?MODULE, {data_request_message, Destination}, ?TIMEOUT).
+    gen_server:call(?MODULE, {data_request_message, {Destination}}, ?TIMEOUT).
 
 send_data_reply(Destination, Data)->
     gen_server:call(?MODULE, {data_reply_message, {Destination, Data}}, ?TIMEOUT).

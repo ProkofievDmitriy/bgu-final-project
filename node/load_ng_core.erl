@@ -19,6 +19,7 @@
 -record(state, {routing_set,
                 rreq_handling_set,
                 pending_acknowledgements_set,
+                flooding_table,
                 self_address,
                 address_length,
                 bottom_level_pid,
@@ -35,6 +36,7 @@
 
 -record(load_ng_packet, {medium, type, source, destination, originator, data}).
 
+-record(dreq_message, {originator, destination, uuid}).
 -record(rreq_message, {originator, destination, hop_count, r_seq_number}).
 -record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number}).
 -record(rack_message, {originator, destination, hop_count, r_seq_number}).
@@ -112,6 +114,7 @@ init(Properties) ->
     add_new_entry_to_routing_set(RoutingSet_Id, ?BROADCAST_ADDRESS, ?BROADCAST_ADDRESS, ?RF_PLC, 0, 0),
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
+    FloodingTable = ets:new(flooding_table, [set, public]),
 
 
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
@@ -122,6 +125,7 @@ init(Properties) ->
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
         pending_acknowledgements_set = PendingAcknowledgmentsSetId,
+        flooding_table = FloodingTable,
         net_traversal_time = NetTraversalTime,
         address_length = AddressLength,
         reporting_unit = ReportingUnit,
@@ -145,17 +149,47 @@ idle(Request, _From, StateData)->
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
+active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
+?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
+NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+case NextHop of
+    {error, ErrorMessage} ->
+        {reply, {error, ErrorMessage}, active, StateData};
+    #routing_set_entry{} = Hop ->
+        Payload = prepare_payload(StateData#state.self_address,
+                                  StateData#state.self_address,
+                                  Destination,
+                                  ?DATA,
+                                  Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
+        case Payload of
+            {error, ErrorMessage} ->
+               {reply, {error, ErrorMessage}, active, StateData};
+            _ ->
+                if Destination =:= ?BROADCAST_ADDRESS ->
+                    update_floooding_table(Payload, StateData);
+                    true -> end,
+                Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                report_data_message_sent(Payload, StateData),
+                {reply, Result, active, StateData}
+        end;
+    Else ->
+        ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
+        {reply, Else, active, StateData}
+end;
+
+
+%DATA, DREP
 active({send_message, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
-    NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+    NextHop = get_next_hop(Destination, StateData), % routing_set_entry
     case NextHop of
         {error, ErrorMessage} ->
             {reply, {error, ErrorMessage}, active, StateData};
-        Hop ->
+        #routing_set_entry{} = Hop ->
             Payload = prepare_payload(StateData#state.self_address,
                                       StateData#state.self_address,
                                       Destination,
-                                      ?DATA,
+                                      Type,
                                       Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
             case Payload of
                 {error, ErrorMessage} ->
@@ -169,8 +203,6 @@ active({send_message, {Type, Destination, Data}}, _From, StateData) ->
             ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
             {reply, Else, active, StateData}
     end.
-
-
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
@@ -544,10 +576,6 @@ deserializePayload(Payload)->
     },
     deserializeMessage(Packet, Data).
 
-
-deserializeMessage(#load_ng_packet{type = ?DATA} = Packet, Data)->
-    Packet#load_ng_packet{data=binary_to_list(Data)};
-
 deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
     ?LOGGER:preciseDebug("[~p]: deserializeMessage RREQ : Data : ~w ~n", [?MODULE, Data]),
     RREQMessageData = binary_to_list(Data),
@@ -614,10 +642,26 @@ deserializeMessage(#load_ng_packet{type = ?RACK} = Packet, Data)->
         r_seq_number = RACKSequenceNumber
     },
 
-    Packet#load_ng_packet{data = RACKMessage}.
+    Packet#load_ng_packet{data = RACKMessage};
+
+deserializeMessage(#load_ng_packet{type = ?DREQ} = Packet, Data)->
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage DREQ : Data : ~w ~n", [?MODULE, Data]),
+    DREQMessageData = binary_to_list(Data),
+    DREQ_UUID = lists:nth(1, DREQMessageData),
+
+    DREQMessage = #dreq_message{
+        uuid = DREQ_UUID
+    },
+    Packet#load_ng_packet{data = DREQMessage};
+
+deserializeMessage(#load_ng_packet{} = Packet, Data)->
+    Packet#load_ng_packet{data=binary_to_list(Data)}.
 
 get_packet_data_as_list(?DATA, Data) ->
   Data;
+
+get_packet_data_as_list(?DREQ, Data) ->
+    [Data#dreq_message.uuid];
 
 get_packet_data_as_list(?RREQ, Data) ->
   [Data#rreq_message.r_seq_number, Data#rreq_message.originator, Data#rreq_message.hop_count ];

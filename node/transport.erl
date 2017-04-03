@@ -76,7 +76,7 @@ idle(enable, StateData) ->
      {next_state, idle, StateData}.
 
 %Synchronous event call
-idle({send, {Destination, Data}}, _From, StateData) ->
+idle({send, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
      {reply, ok, idle, StateData}.
 
@@ -97,7 +97,7 @@ disable(enable, StateData) ->
      {next_state, idle, StateData}.
 
 %Synchronous event call
-disable({send, {Destination, Data}}, _From, StateData) ->
+disable({send, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
     Result = ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, Data}),
      {reply, Result, disable, StateData}.
