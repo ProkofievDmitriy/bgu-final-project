@@ -44,18 +44,11 @@ erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub
 -record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 ```
 
-###Deddy we shouldn't use this record in your server, he should be independent from protocol implementation.
-####You need to define which data you need to describe routing set entry:
-```erlang
-[{next_hop, NextHopAddress}, {destination, DestinationAddress}, {medium, Medium}]
-```
-
-
 ###Configuration Messages Format (to node)
 ```erlang
 {update_configuration,  [{plc, on/off},{rf, on/off},{reset_node, reset}]
 
-{node_state,  [{medium_mode, plc/rf/dual/off} , {node_name, node_1} , {routing_set, [RoutingSetRecordsEntry,...]}
+{reset_routing_set,  [}
 
 {initiate_transaction, [{destination, Destination}, {data, Data}]]
 ```
