@@ -123,7 +123,7 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     {reply, self(), NewContext};
 
 handle_call(get_status, _From, Context) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
     %TODO implement hand_shake with application
     NetworkStatus = ?NETWORK:get_status(Context#context.network_pid),
     DataLinkStatus = ?DATA_LINK:get_status(Context#context.data_link_pid),

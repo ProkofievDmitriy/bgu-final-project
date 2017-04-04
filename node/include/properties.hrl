@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [load_ng, node, transport]).
+-define(MODULES_TO_FILTER, [load_ng, node, transport, report, data_link]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
@@ -86,8 +86,10 @@
                              ]).
 
 %%% REPORTING UNIT PROPERTIES
--define(REPORT_UNIT_PROPS_LIST, [{data_server_name,loadNG_server_interface},
-                                 {data_server_ip, "132.73.204.196"}
+-define(REPORT_UNIT_PROPS_LIST, [
+                                %  {data_server_name,loadNG_server_interface},
+                                 {data_server_name,stub_data_server},
+                                 {data_server_ip, "192.168.14.52"}
 %                                 {data_server_ip, "127.0.0.1"}
                                 ]).
 

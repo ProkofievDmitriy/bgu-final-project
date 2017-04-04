@@ -30,7 +30,7 @@ fi
 
 PASSWORD="zSs3cfmx"
 
- 	echo "INFO : On node $2@$1 passwrod: $PASSWORD: Removing old files if exists..."
+ 	echo "INFO : On node $2@$1 password: $PASSWORD: Removing old files if exists..."
  	sshpass -p $PASSWORD ssh -T -o StrictHostKeyChecking=no root@$1 << EOF
  	rm -rf ./node
 EOF
