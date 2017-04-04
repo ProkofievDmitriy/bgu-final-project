@@ -47,10 +47,11 @@
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed
 -define(ADDRESS_LENGTH, 6). % number of bits to store address
 -define(MESSAGE_TYPE_LENGTH, 8). % number of bits to store address
+-define(MESSAGE_UUID_LENGHT, 8). % number of bits to store address
 -define(SESSION_MANAGEMENT_LENGTH, 8). % number of bits to store address
 -define(DATA_LENGTH_SIZE, 8). % number of bits to store address
 -define(MAX_FRAME_LENGTH, 60 * 8). % number of bits to store address
--define(MAX_DATA_LENGTH, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 4 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_TYPE_LENGTH + ?DATA_LENGTH_SIZE)) / 8). % number of BYTES for data
+-define(MAX_DATA_LENGTH, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 4 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_UUID_LENGHT + ?MESSAGE_TYPE_LENGTH + ?DATA_LENGTH_SIZE)) / 8). % number of BYTES for data
 -define(NET_TRAVERSAL_TIME, 500).
 -define(TIMEOUT, ?NET_TRAVERSAL_TIME * 3).
 -define(ACK_REQUIRED, 0). % 0 = false, 1 = true

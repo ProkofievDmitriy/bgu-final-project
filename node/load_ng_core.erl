@@ -19,7 +19,7 @@
 -record(state, {routing_set,
                 rreq_handling_set,
                 pending_acknowledgements_set,
-                flooding_table,
+                dreq_table,
                 self_address,
                 address_length,
                 bottom_level_pid,
@@ -114,7 +114,7 @@ init(Properties) ->
     add_new_entry_to_routing_set(RoutingSet_Id, ?BROADCAST_ADDRESS, ?BROADCAST_ADDRESS, ?RF_PLC, 0, 0),
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
-    FloodingTable = ets:new(flooding_table, [set, public]),
+    DREQTable = ets:new(dreq_table, [set, public]),
 
 
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
@@ -125,7 +125,7 @@ init(Properties) ->
         routing_set = RoutingSet_Id,
         rreq_handling_set = RREQHandlingSet_Id,
         pending_acknowledgements_set = PendingAcknowledgmentsSetId,
-        flooding_table = FloodingTable,
+        dreq_table = DREQTable,
         net_traversal_time = NetTraversalTime,
         address_length = AddressLength,
         reporting_unit = ReportingUnit,
@@ -150,12 +150,14 @@ active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
 
 active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
-?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
+?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
 NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
 case NextHop of
     {error, ErrorMessage} ->
         {reply, {error, ErrorMessage}, active, StateData};
     #routing_set_entry{} = Hop ->
+      UUID = generate_uuid(),
+      Data = [UUID],
         Payload = prepare_payload(StateData#state.self_address,
                                   StateData#state.self_address,
                                   Destination,
@@ -166,8 +168,8 @@ case NextHop of
                {reply, {error, ErrorMessage}, active, StateData};
             _ ->
                 if Destination =:= ?BROADCAST_ADDRESS ->
-                    update_floooding_table(Payload, StateData);
-                    true -> end,
+                    update_dreq_table(UUID, StateData);
+                    true -> ok end,
                 Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
                 report_data_message_sent(Payload, StateData),
                 {reply, Result, active, StateData}
@@ -897,6 +899,10 @@ update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, h
             {error, failed_updating_routing_set_entry}
     end.
 
+update_dreq_table(UUID, State)->
+  ets:insert(State#state.dreq_table, {UUID, get_current_millis()}).
+
+
 remove_and_get_broken_link(Packet, StateData)->
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.data#rerr_message.unreachable_address),
                                               (Entry#routing_set_entry.next_addr =:= Packet#load_ng_packet.source),
@@ -980,3 +986,7 @@ get_route_set_entry_with_highest_seq_num(Entries) ->
     Result = find_in_list(fun max_by_seq_num_route_set_entry_comparator/2, Entries),
     ?LOGGER:debug("[~p]: get_route_set_entry_with_highest_seq_num Result: ~w.~n", [?MODULE, Result]),
     Result.
+
+generate_uuid()->
+  TimeStamp = get_current_millis(),
+  erlang:crc32(TimeStamp).
