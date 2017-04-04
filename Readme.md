@@ -102,3 +102,35 @@ erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub
 |26    |90:b6:86:0b:b8:27   |	132.73.192.180||
 |27    |90:b6:86:01:db:77   |	132.73.192.56||
 |28    |90:b6:86:09:cc:3c   |	132.73.192.47||
+
+
+
+###Protocol Interface (to application)
+
+
+```erlang
+start(ProtocolModule, Properties) ->
+    ?LOGGER:debug("[~p]: Starting protocol: ~p, with props: ~w~n", [?MODULE, ProtocolModule, Properties]),
+    Timeout = proplists:get_value(timeout, Properties),
+    {ok,PID} = gen_server:start_link({local, ?MODULE }, ProtocolModule, Properties, [{timeout, Timeout}]),
+    PID.
+
+stop() ->
+    gen_server:call(?MODULE, stop).
+
+send(Destination, Data)->
+    gen_server:call(?MODULE, {data_message, {Destination, Data}}, ?TIMEOUT).
+
+send_data_request(Destination)->
+    gen_server:call(?MODULE, {data_request_message, {Destination}}, ?TIMEOUT).
+
+send_data_reply(Destination, Data)->
+    gen_server:call(?MODULE, {data_reply_message, {Destination, Data}}, ?TIMEOUT).
+
+%essential for protocol to be aware of uppel apllication layer
+hand_shake(ApplicationPid) ->
+    gen_server:call(?MODULE, {hand_shake, ApplicationPid}).
+
+update_configuration(OptionsList)->
+    gen_server:call(?MODULE, {update_configuration, OptionsList}).
+```
