@@ -37,10 +37,7 @@ erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub
 			          {destination, Destination}				 
 	            	 ]}
 
-{routing_set, [{node_name, node_1/2/3/4/5/6.../31},
-               {report_time, 312731767},
-               {data, RoutingSetRecordsAsList}
-              ]}
+{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
 ```
 ###Routing Set Entry Record
 ```erlang
