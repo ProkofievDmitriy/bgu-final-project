@@ -22,7 +22,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
--define( LOG_DIR,"logger/").
+-define( LOG_DIR,"./logger/").
 -define( TEMP_DETS_FILE_DIR, ?LOG_DIR).
 -define( TEMP_DETS_FILE, "temp_dets").
 
