@@ -31,7 +31,7 @@
 -define( TEMP_DETS_FILE_DIR, ?LOG_DIR).
 -define( TEMP_DETS_FILE, "temp_dets").
 %% API
--export([start/0, stop/0]).
+-export([export/0, start/0, stop/0, stats_request/1]).
 
 
 
@@ -47,11 +47,15 @@
 -record(counters, {numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
 
 -record(state, {counters, nodes_list, db ,file_version}).
--record(event, {type, time, from, to, key, data}).
+%-record(event, {type, time, from, to, key, data}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+stats_request(From) ->
+  gen_server:cast({global, ?STATS_SERVER}, {states, From}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -118,7 +122,8 @@ init([]) ->
     %%print_nodes_list(Node_ETS),
     %%Self = self(),
     %%net_kernel:monitor_nodes(true),
-   
+    %%erlang:send_after(1000,self(),timer),
+
     {ok, #state{counters = Counters, nodes_list = 0, db = DB}}.
 
 
@@ -185,7 +190,7 @@ handle_call(Req, From, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a management message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, received_message}, [UTIME, Source, Destination, Type]}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{management_message, received_message}, [UTIME, Source, Destination, _Type]}, State = #state{db = DB, counters = Counters}) ->
   dets:insert(DB, {UTIME, management_message, received_message,Source,Destination}),
   NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
   io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
@@ -194,7 +199,7 @@ handle_cast({{management_message, received_message}, [UTIME, Source, Destination
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a management message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, sent_message}, [UTIME, Source, Destination, Type]}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{management_message, sent_message}, [UTIME, Source, Destination, _Type]}, State = #state{db = DB, counters = Counters}) ->
   dets:insert(DB, {UTIME, management_message, sent_message,Source,Destination}),
   NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
   io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
@@ -224,9 +229,19 @@ handle_cast({{data_message, sent_message}, [UTIME, Source, Destination ,Id]}, St
 
 
 
+handle_cast({states, From}, State) ->
+    io:format("stats_server: Requesting Stats~n"),
+    From!State#state.counters,
+    {noreply, State};
+
+
+
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------
 %%  ------------------------------------------------------------------
+
+
+
 handle_cast({printStats}, State = #state{counters=Counters}) ->
 	MessagesSent =  Counters#counters.numberOfManagementMsgSent +  Counters#counters.numberOfDataMsgSent,
 	PercentManagement = Counters#counters.numberOfManagementMsgSent / MessagesSent,
@@ -256,7 +271,8 @@ handle_cast({export_db, Last_Date}, State = #state{db = DB}) ->
     io:format("db:handle_cast:export_db: ETS is:~p~n", [ETS]),
     ETS = dets:to_ets(DB,ETS),
     io:format("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%~n"),
-    export_db(ETS, "tempurary_db_extraction.txt"),
+    export_db(ETS, "ExportDB" ++ isg_time:timeStamp_to_Time(isg_time:now_now()) ++".txt"),
+    dets:delete_all_objects(DB),
     ets:delete(ETS),
   {noreply, State};
 
@@ -264,7 +280,7 @@ handle_cast({export_db, Last_Date}, State = #state{db = DB}) ->
 
 handle_cast(stop, State) -> 
     io:format("stats_server got stop Messages~n"),
-    {stop, "Normal"};
+    {stop, normal,State};
 
 handle_cast(Msg, State) -> 
     io:format("stats_server got cast with bad arg:~p~n", [Msg]),
@@ -286,6 +302,10 @@ handle_cast(Msg, State) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_info(stop, State) ->
 {stop, stop, State};
+
+handle_info(timer, State) ->
+  erlang:send_after(1000,self(),timer),
+  {noreply, State};
 
 handle_info(Info, State) ->
   io:format("isg_server:handle_info: got somethjing:~p~n", [Info]),
@@ -364,11 +384,13 @@ loop(DB, Last_Date) ->
 
 export_db(DB, File_Name) -> 
   
-  A = file:open( ?LOG_DIR ++ File_Name, [append]),
+  A = file:open( ?LOG_DIR ++ File_Name, [write]),
+  io:format("A: ~p~nFile_Name: ~p~n",[A, File_Name]),
   case A of
     {ok, FD} -> io:format("db:opened file~n"),copy_db_to_file2(DB, ets:first(DB), FD),
         %copy_db_to_file(DB, dets:first(DB), FD),
         file:close(FD),
+
         io:format("db: copied to file successfully.~n");
     {error,enoent} -> io:format("%%%%%%%******couldnt open file because of error ~p. file name is:~p.~n", [A, File_Name]);
     {error,badarg} -> file:open( ?LOG_DIR ++ File_Name, write), export_db(DB, File_Name);
@@ -387,9 +409,9 @@ copy_db_to_file2( DB, Key, FD) ->
     {UTIME, management_message, sent_message,Source,Destination, Type} ->
       STR = Destination ++ "Received Management Event Event At: " ++ isg_time:timeStamp_to_Time(UTIME) ++
             " From: " ++ Source ++ " Type: " ++ Type;
-    {UTIME, data_message, received_message,Source,Destination, Id} ->
+    {UTIME, data_message, received_message, _Source, _Destination, _Id} ->
       STR = "Event Key: " ++ integer_to_list(UTIME);
-    {UTIME, data_message, sent_message,Source,Destination, Id} ->
+    {UTIME, data_message, sent_message, _Source, _Destination, _Id} ->
       STR = "Event Key: " ++ integer_to_list(UTIME);
             
     Else -> io:format("db:copoy_db_to_file: ets:lookup got elst:~p~n", [Else]), UTIME = 0,  STR = ""
