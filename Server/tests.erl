@@ -45,25 +45,25 @@ start() ->
 
     receive after 1000-> ok end,
     P1! {routinSet,[
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 4, next_addr = 2, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1}
+            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2},
+            #routing_set_entry{dest_addr = 4, next_addr = 2, medium = 2}
             ]},
     P2! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 1, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 1, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 1, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1}
+            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 1},
+            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 1},
+            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 1}
 
             ]},
     P3! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1}
+            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 2},
+            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1},
+            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2}
 
             ]},
     P4! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 1, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1},
-            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 2, hop_count = 1, r_seq_number = 1, bidirectional = 0, valid_time = 100, valid = 1}
+            #routing_set_entry{dest_addr = 1, next_addr = 1, medium = 2},
+            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1},
+            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 2}
 
             ]},
     [P1,P2,P3,P4].

@@ -4,10 +4,12 @@
 
 
 
--export([start/1, stop/0, simulate/0]).
+-export([start/0, stop/0, simulate/1]).
 
--export([sendMsg/2, chageState/2, sendDataMsg/2, receivedDataMsg/2, sendMangMsg/2, receivedMangMsg/2]).
--record(state, {name, rf, plc}).
+-export([deleteTable/0, sendMsg/2, chageState/2, sendDataMsg/2, receivedDataMsg/2, sendMangMsg/2, receivedMangMsg/2, addRoute/2]).
+-record(state, {name, rf, plc, routing_set}).
+-record(routing_set_entry, {dest_addr, next_addr, medium}).
+
 %% gen_server callbacks
 -export([init/1,
   handle_call/3,
@@ -18,8 +20,16 @@
   
 
 
-simulate() ->
+simulate(ID) ->
 	io:format("Starting simulation~n"),
+	case ID of
+		1 ->
+			addRoute('N2@127.0.0.1', 1);
+		2 ->
+			addRoute('N1@127.0.0.1', 1),
+			addRoute('N3@127.0.0.1', 2);
+		3 -> addRoute('N2@127.0.0.1', 2)
+	end,
 	spawn(fun run_simulate/0).
 
 run_simulate() -> 
@@ -37,9 +47,20 @@ run_simulate() ->
 		run_simulate()
 	end.
 
+addRoute(Node, Medium)->
+	io:format("Add route to ~p, with: ~p~n",[Node,Medium]),
+	gen_server:cast(?MODULE, {addRoute, Node, Medium}).
+
+
+
 sendMsg(To,Msg)->
 	io:format("Send Msg: ~p, TO: ~p~n",[Msg,To]),
 	gen_server:cast(?MODULE, {sendMSG, To,Msg}).
+
+
+deleteTable()->
+	io:format("delete Table~n"),
+	gen_server:cast(?MODULE, {deleteTable}).
 
 
 
@@ -72,6 +93,8 @@ receivedMangMsg(Msg,From)->
 
 
 
+
+
 %%--------------------------------------------------------------------
 %%--------------------------------------------------------------------
 %%--------------------------------------------------------------------
@@ -83,8 +106,11 @@ start_link(Name) ->
 	io:format("BStarting ~p~n",[Name]),
     gen_server:start_link({local,?MODULE}, ?MODULE, [Name], []).
 
-start(Name) ->
+start() ->
+	net_kernel:connect('S@127.0.0.1'),
+	Name = node(),
 	io:format("AStarting ~p~n",[Name]),
+	
     start_link(Name).
     
 stop() -> 
@@ -94,7 +120,7 @@ stop() ->
 init([Name]) ->
     io:format("initiating server ~p~n",[Name]),
 	erlang:send_after(5000,self(),timer),
-    {ok, #state{name = Name, plc = 0, rf = 1}}.
+    {ok, #state{name = Name, plc = 0, rf = 1, routing_set = []}}.
 
 handle_call(Req, From, State) ->
     io:format("stats_server handle_call: ~p from ~p~n", [Req,From]),
@@ -134,12 +160,28 @@ handle_cast({state, PLC, RF}, State = #state{name = Name}) ->
     {noreply, State#state{plc = PLC, rf = RF}};
 
 
+
+handle_cast({deleteTable}, State = #state{name = Name}) -> 
+	io:format("~n~p deleting Table!~n~n",[Name]),
+    {noreply, State};
+
+
 handle_cast({sendMSG, To,Msg}, State = #state{name = Name}) -> 
 	io:format("~p sending Msg: ~p, TO: ~p~n",[Name, Msg,To]),
     {noreply, State};
 
+handle_cast({addRoute, Node, Medium}, State = #state{name = Name, routing_set = Routing_set}) -> 
+	io:format("Adding: ~p, with: ~p~n",[Node, Medium]),
+	NewRS = [#routing_set_entry{dest_addr = Node, next_addr = Node, medium = Medium}|Routing_set],
+    {noreply, State#state{routing_set = NewRS}};
 
 
+
+
+handle_cast(stop, State) -> 
+    io:format("STOP~n"),
+    stats_server_interface:node_is_down(State#state.name),
+    {stop, normal,State};
 
 handle_cast(Msg, State) -> 
     io:format("stats_server got cast with bad arg:~p~n", [Msg]),
@@ -163,9 +205,9 @@ handle_info(stop, State) ->
 
 
 
-handle_info(timer, State#{name = Name, plc = PLC, rf = RF) ->
+handle_info(timer, State = #state{name = Name, plc = PLC, rf = RF, routing_set = Routing_set}) ->
   io:format("stubNode: timer~n"),
-      stats_server_interface:node_is_up(Name,[{medium_mode,{PLC,RF}},{routing_set,[]}]),
+      stats_server_interface:node_is_up(Name,[{medium_mode,{PLC,RF}},{routing_set,Routing_set}]),
   erlang:send_after(5000,self(),timer),
   {noreply, State};
 

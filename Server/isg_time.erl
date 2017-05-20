@@ -23,4 +23,4 @@ timeStamp_to_Time(Time) ->
 	Min_Str = fix_time(Min),
 	Hour_Str = fix_time(Hour),	
 	A =   Hour_Str ++ ":" ++  Min_Str ++ ":" ++  Sec_Str,
-	A2 = integer_to_list(Day) ++ "/" ++  integer_to_list(Month) ++ "/" ++  integer_to_list(Year) ++ "||" ++ A, A2.
+	A2 = integer_to_list(Day) ++ "-" ++  integer_to_list(Month) ++ "-" ++  integer_to_list(Year) ++ "||" ++ A, A2.

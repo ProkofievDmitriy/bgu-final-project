@@ -31,7 +31,7 @@
 -define(MANAGMENT_SERVER, loadNGgui).
 
 %% API
--export([received_data_message/3, sent_data_message/3, 
+-export([node_is_down/1, node_is_up/4, node_is_up/2, received_data_message/3, sent_data_message/3, 
 		 received_management_message/3, sent_management_message/3, 
 		 printStats/0]).
 
@@ -40,9 +40,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-export() -> 
-  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
 
 %**************************************************************************************
 %**********************   Management Server  		  	*******************************
@@ -70,8 +67,11 @@ node_is_down (Id) ->
 	io:format("Node is down with id ~p~n",[Id]),
 		Server = global:whereis_name(loadNGgui),
 
-	wx_object:cast(Server, {node_is_down,{Id}}	).
+	wx_object:cast(Server, {node_is_down,Id}	).
 
+
+export() -> 
+  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
 
 
 
