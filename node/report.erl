@@ -22,7 +22,7 @@
 %   Records
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--record(context, {node_name, data_server_name, data_server_ip, connected_to_server}).
+-record(context, {node_name, data_server_interface, data_server_name, data_server_ip, connected_to_server}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API Functions Implementation
@@ -49,11 +49,13 @@ connect_to_data_server() -> gen_server:cast(?MODULE, connect_to_data_server).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Properties) ->
 	?LOGGER:debug("[~p]: Starting REPORT with props: ~w~n", [?MODULE, Properties]),
+    DataServerInterface = proplists:get_value(data_server_interface, Properties),
     DataServerName = proplists:get_value(data_server_name, Properties),
     DataServerIp = proplists:get_value(data_server_ip, Properties),
     NodeName = proplists:get_value(node_name, Properties),
     {ok, #context{
         node_name = NodeName,
+        data_server_interface = DataServerInterface,
         data_server_name = DataServerName,
         data_server_ip = DataServerIp,
         connected_to_server = false
@@ -72,8 +74,8 @@ handle_call(Request, From, Context) ->
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
     ReportMessage = prepare_message(Type, DataList, Context),
-    ServerModuleInterface = Context#context.data_server_name,
-    ?LOGGER:debug("[~p]: Handle CAST Request(report), ServerModuleInterface: ~p, Message: ~w~n", [?MODULE, ServerModuleInterface, ReportMessage]),
+    ServerModuleInterface = Context#context.data_server_interface,
+    ?LOGGER:debug("[~p]: REPORT, ServerModuleInterface: ~p, Message: ~w~n", [?MODULE, ServerModuleInterface, ReportMessage]),
     try ServerModuleInterface:report(ReportMessage) of %{message_type, [{],{},{}]}
         _ -> {noreply, Context}
     catch
@@ -109,7 +111,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
     end;
 
 handle_cast(connect_to_data_server, #context{connected_to_server = true} = Context) ->
-    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server) IGNORED - ALREADY CONNECTED~n", [?MODULE]),
+    ?LOGGER:debug("[~p]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
     {noreply, Context};
 
 
