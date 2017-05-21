@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [load_ng, node, transport]).
+-define(MODULES_TO_FILTER, [load_ng, node, transport, report, data_link]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
@@ -89,8 +89,9 @@
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
                                  {data_server_ip, "132.73.204.196"}
-%                                 {data_server_ip, "127.0.0.1"}
+                                %  {data_server_ip, "127.0.0.1"}
                                 ]).
+
 
 
 %%% SIMPLE APPLICATION PROPERTIES

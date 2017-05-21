@@ -235,12 +235,12 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
 %% ============================================================================================
 
 handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p~n", [?MODULE, StateName]),
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p~n", [?MODULE, StateName]),
     NewState = StateData#state{upper_level_pid = UpperLevelPid},
 	{reply, ok, StateName, NewState};
 
 handle_sync_event(get_status, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
 	{reply, [{medium_mode, StateName}], StateName, StateData};
 
 handle_sync_event(Event, _From, StateName, StateData) ->
