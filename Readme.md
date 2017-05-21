@@ -23,21 +23,10 @@ erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub
 
 ###Report Messages Format (from node)
 ```erlang
-{data_message, [{data_message_type, send_message/received_message/middle_message},
-		        {report_time, 312731767}, %current time in millis
-	            {source, Originator},
-		        {destination,  Destination},
-		        {message_id, hash(Originator ++ Destination ++ Data)},
-                {data, MessageData}			 
-		        ]}
+{node_state,[{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]} 
 
-{management_message, [{message_type, ?RREQ/?RREP/?RERR/?RACK}, %Should not be sent, not relevant to data server : Managment is Managment
-			          {report_time, 312731767}, %current time in millis
-			          {source, Source},
-			          {destination, Destination}				 
-	            	 ]}
+{{management_message,send_message},[{source,1},{destination,1},{id,45085103},{type,0}]}
 
-{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
 ```
 ###Routing Set Entry Record
 ```erlang
