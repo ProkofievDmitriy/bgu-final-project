@@ -43,7 +43,6 @@ stop() ->
 report(Type, Message)-> gen_server:cast(?MODULE, {report, {Type, Message}}).
 connect_to_data_server() -> gen_server:cast(?MODULE, connect_to_data_server).
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -63,7 +62,7 @@ init(Properties) ->
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   HANDLE CALL's synchronous requests, reply is needed
+%   HANDLE CALL's synchronprepare_message_dataous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~p~n", [?MODULE, Request, From, Context]),
@@ -73,10 +72,10 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
-    ReportMessage = prepare_message(Type, DataList, Context),
+    ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
-    ?LOGGER:debug("[~p]: REPORT, ServerModuleInterface: ~p, Message: ~w~n", [?MODULE, ServerModuleInterface, ReportMessage]),
-    try ServerModuleInterface:report(ReportMessage) of %{message_type, [{],{},{}]}
+    ?LOGGER:debug("[~p]: REPORT, ServerModuleInterface: ~p, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
+    try ServerModuleInterface:report(Type, ReportMessageData) of %{message_type, [{],{},{}]}
         _ -> {noreply, Context}
     catch
         Throw->
@@ -84,8 +83,8 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
             {noreply, Context#context{connected_to_server = false}}
     end;
 
-handle_cast({report, _ }, #context{connected_to_server = false} = Context) ->
-    ?LOGGER:warn("[~p]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER .~n", [?MODULE]),
+handle_cast({report, ReportMessage }, #context{connected_to_server = false} = Context) ->
+    ?LOGGER:warn("[~p]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, ReportMessage]),
     connect_to_data_server(),
     {noreply, Context};
 
@@ -130,7 +129,6 @@ handle_cast(Request, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE INFO's
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 handle_info(Request, Context)  ->
     ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~p~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
@@ -147,8 +145,10 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_message(Type, DataList , Context)->
-    {Type, [{node_name, list_to_atom(Context#context.node_name)}|DataList]}.
+    {Type, prepare_message_data(DataList, Context)}.
 
+prepare_message_data(DataList , Context)->
+    [{node_name, list_to_atom(Context#context.node_name)}|DataList].
 
 test_connection(Address)->
    case net_adm:ping(Address) of

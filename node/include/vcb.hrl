@@ -47,5 +47,6 @@
 %data messages types
 -define(DATA_MESSAGE_TYPE, data_message_type).
 -define(SEND_MESSAGE, send_message).
+-define(RELAY_MESSAGE, relay_message).
 -define(RECEIVED_MESSAGE, received_message).
 -define(MIDDLE_MESSAGE, middle_message).

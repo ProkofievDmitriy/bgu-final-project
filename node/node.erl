@@ -152,6 +152,12 @@ handle_cast({update_configuration, OptionsList}, Context) ->
     {noreply, Context};
 
 
+handle_cast({reset_node}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(reset_node)~n", [?MODULE]),
+    ?PROTOCOL:reset(),
+    {noreply, Context};
+
+
 handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
     ?LOGGER:debug("[~p]: CAST Request(initiate_transaction), Destination:~p, Data: ~p, Context: ~w ~n", [?MODULE, Destination, Data, Context]),
     ?PROTOCOL:send({Destination, Data}),
@@ -302,14 +308,3 @@ compile_resources() ->
 loadTestData()->
 
 ok.
-
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%      node managment interface
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-update_configuration(NodeName, OptionsList)->
-    gen_server:cast(NodeName, {update_configuration, OptionsList}).
-
-initiate_transaction(NodeName, Destination, Data)->
-    gen_server:cast(NodeName, {initiate_transaction, {Destination, Data}}).

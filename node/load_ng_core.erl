@@ -170,7 +170,8 @@ case NextHop of
                     update_dreq_table(UUID, StateData);
                     true -> ok end,
                 Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                report_data_message_sent(Payload, StateData),
+                %TODO Create report
+                % report_data_message_sent(Packet, StateData),
                 {reply, Result, active, StateData}
         end;
     Else ->
@@ -194,7 +195,7 @@ active({send_message, {Type, Destination, Data}}, _From, StateData) ->
                    {reply, {error, ErrorMessage}, active, StateData};
                 _ ->
                     Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                    report_data_message_sent(Payload, StateData),
+                    report_data_message_sent(Packet, StateData),
                     {reply, Result, active, StateData}
             end;
         Else ->
@@ -259,7 +260,7 @@ active({generate_rreq, Destination}, StateData) ->
             ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
             add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
                                               {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
-            report_management_message(Payload, StateData),
+            report_sent_management_message(Packet, StateData),
             NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem ?SEQUENCE_NUMBER_MAX_VALUE}, % increase RREQ Sequence number
             {next_state, active, NewState}
     end;
@@ -288,7 +289,7 @@ active({generate_rrep, {Destination, RREQSequenceNumber, HopCount}}, StateData) 
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
                     ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_management_message(Payload, StateData),
+                    report_sent_management_message(Packet, StateData),
                     if ?ACK_REQUIRED -> %false by default - further implementations
                         add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
                                                                  StateData#state.self_address,
@@ -326,7 +327,7 @@ active({generate_rerr, {Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddres
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
                     ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_management_message(Payload, StateData)
+                    report_sent_management_message(Packet, StateData)
                 end;
         Error ->
             ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RRER : ~w.~n", [?MODULE, Error])
@@ -341,7 +342,7 @@ active({generate_rack, Destination}, StateData) ->
                                 r_seq_number = StateData#state.r_seq_number},
     Packet = build_new_packet(?RACK, Destination, RACKMessage, StateData),
     Payload = serialize_packet(Packet),
-    report_management_message(Payload, StateData),
+    report_sent_management_message(Packet, StateData),
     {next_state, active, StateData};
 
 
@@ -355,7 +356,8 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
     update_routing_set_entry(Packet, StateData), % route maintanace
     AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
     if  AmIDestination ->
-        ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data);
+            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+            report_data_message_received(Packet, StateData);
         true -> ok end,
     ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
     if ShouldBeForwarded ->
@@ -363,7 +365,7 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
             case Result of
                 {ok, sent, _Some } ->
                     ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
-                    report_data_message_received(Packet, StateData);
+                    report_data_message_forwarded(Packet, StateData);
                 {error, Error, #routing_set_entry{} = FailedHop} ->
                     ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
                     generate_RERR({Packet#load_ng_packet.originator,
@@ -378,6 +380,7 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
+    report_received_management_message(Packet, StateData),
     IsValidPacket = isValidForProcessing(?RREQ, Packet, StateData),
     if  IsValidPacket ->
         %install reverse route
@@ -395,7 +398,7 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
                 generate_RREP({Originator, RREQSequenceNumber, HopCount});
             false -> % this router is not a destination, forwarding message
                 forward_packet(Packet, StateData),
-                report_management_message(Packet, StateData)
+                report_sent_management_message(Packet, StateData)
         end;
         true ->
             ?LOGGER:debug("[~p]: ACTIVE - RREQ NOT VALID, Packet DROPPED.~n", [?MODULE]),
@@ -405,6 +408,7 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
+    report_received_management_message(Packet, StateData),
     IsValidPacket = isValidForProcessing(?RREP, Packet, StateData),
     if IsValidPacket ->
         %TODO Remove rreq handling entry
@@ -421,7 +425,7 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
                     ok;
                 false ->
                     forward_packet(Packet, StateData),
-                    report_management_message(Packet, StateData)
+                    report_sent_management_message(Packet, StateData)
         end;
         true ->
           ?LOGGER:debug("[~p]: ACTIVE - RREP NOT VALID, Packet DROPPED.~n", [?MODULE])
@@ -430,12 +434,13 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RERR : Packet : ~w .~n", [?MODULE, Packet]),
+    report_received_management_message(Packet, StateData),
     Result = remove_and_get_broken_link(Packet, StateData#state.routing_set),
     if Packet#load_ng_packet.originator =/= StateData#state.self_address ->
         case Result of
             {ok , RemovedEntry} ->
                 forward_packet(Packet, StateData, RemovedEntry),
-                report_management_message(Packet, StateData);
+                report_sent_management_message(Packet, StateData);
             {error , Message} ->
                 ?LOGGER:err("[~p]: ACTIVE - RERR  - ERROR: ~p .~n", [?MODULE, Message]);
             Else ->
@@ -449,6 +454,7 @@ active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RACK} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RACK : Packet : ~p .~n", [?MODULE, Packet]),
+    report_received_management_message(Packet, StateData),
     {next_state, active, StateData}.
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
@@ -590,7 +596,7 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
     BinaryOriginator = <<Originator:?ADDRESS_LENGTH>>,
     BinaryMessageType = <<Type:?MESSAGE_TYPE_LENGTH>>,
     BinaryUUID = <<UUID:?MESSAGE_UUID_LENGHT>>,
-    %TODO - packet Data soulh be binary
+    %TODO - packet Data should be binary
     BinaryData = list_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
     BinaryDataLengthInBytes = byte_size(BinaryData),
     ?LOGGER:debug("[~p]: serialize_packet : MessageType: ~p, Originator: ~p, Source: ~p , Destination: ~p, DataLengthInBytes: ~p~n", [?MODULE,
@@ -799,17 +805,6 @@ isValidForProcessing(Originator, Destination, R_SEQ_NUMBER, State)->
                     false
                 end
     end.
-%broadcast forwarding
-% forward_packet(#load_ng_packet{type = ?RREQ} = Packet, StateData) -> % only RREQ forwarded to BROADCAST_ADDRESS
-%     ?LOGGER:info("[~p]: forward_packet : RREQ in BROADCAST.~n", [?MODULE]),
-%     Payload = prepare_payload(StateData#state.self_address,
-%                               Packet#load_ng_packet.originator,
-%                               Packet#load_ng_packet.destination,
-%                               ?RREQ,
-%                               get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
-%     {Status, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload}),
-%     report_management_message(Payload, StateData),
-%     {Status, Message, {?RF_PLC, ?BROADCAST_ADDRESS}};
 
 consider_to_forwarding(Packet, State)->
     if
@@ -845,7 +840,6 @@ forward_packet(Packet, StateData, NextHop) ->
                               Packet#load_ng_packet.type,
                               get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
     {SendStatus, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
-    report_management_message(Payload, StateData),
     {SendStatus, Message, NextHop}.
 
 
@@ -1001,29 +995,33 @@ remove_and_get_broken_link(Packet, StateData)->
 %----------------------------------------------------------------------------
 
 %reporting process functions
-report_message(Type, ReportingUnit, Message)->
+report_message(Type, ReportingUnit, Packet)->
+    Data = [{source, Packet#load_ng_packet.source},
+            {destination, Packet#load_ng_packet.destination},
+            {id, Packet#load_ng_packet.uuid},
+            {type, Packet#load_ng_packet.type}
+    ],
     case ReportingUnit of
         undefined ->
             ?LOGGER:warn("[~p]: Reporting Unit is UNDEFINED.~n", [?MODULE]);
         _ ->
-           ReportingUnit:report(Type, Message)
+           ReportingUnit:report(Type, Data)
     end.
 
 report_data_message_sent(Packet, State)->
-    Data = [{?DATA_MESSAGE_TYPE, ?SEND_MESSAGE}, {data, Packet}],
-    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
+    report_message({?DATA_MESSAGE, ?SEND_MESSAGE}, State#state.reporting_unit, Packet).
 
 report_data_message_received(Packet, State)->
-    Data = [{?DATA_MESSAGE_TYPE, ?RECEIVED_MESSAGE}, {data, Packet}],
-    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
+    report_message({?DATA_MESSAGE, ?RECEIVED_MESSAGE}, State#state.reporting_unit, Packet).
 
-report_data_message_middle(Packet, State)->
-    Data = [{?DATA_MESSAGE_TYPE, ?MIDDLE_MESSAGE}, {data, Packet}],
-    report_message(?DATA_MESSAGE, State#state.reporting_unit, Data).
+report_data_message_forwarded(Packet, State)->
+    report_message({?DATA_MESSAGE, ?RELAY_MESSAGE}, State#state.reporting_unit, Packet).
 
-report_management_message(Packet, State)->
-    Data = [{data, Packet}],
-    report_message(?MANAGEMENT_MESSAGE, State#state.reporting_unit, Data).
+report_sent_management_message(Packet, State)->
+    report_message({?MANAGEMENT_MESSAGE, ?SEND_MESSAGE}, State#state.reporting_unit, Packet).
+
+report_received_management_message(Packet, State)->
+    report_message({?MANAGEMENT_MESSAGE, ?RECEIVED_MESSAGE}, State#state.reporting_unit, Packet).
 
 %----------------------------------------------------------------------------
 % UTILS Functions

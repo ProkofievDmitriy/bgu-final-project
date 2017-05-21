@@ -31,7 +31,7 @@
 -define(MANAGMENT_SERVER, loadNGgui).
 
 %% API
--export([report/2, printStats/0]).
+-export([report/2, report/1, printStats/0]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -42,74 +42,6 @@
 %**********************   Management Server  		  	*******************************
 %**************************************************************************************
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  Node Update Status  								  %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% node_is_up (NodeName, Data) ->
-% 	io:format("Node ~p is up. data: ~w~n",[NodeName, Data]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {node_is_up, {NodeName, Data}}).
-%
-% node_is_up (NodeName, Plc,Rf,RoutingSet)->
-% 	io:format("Node ~p State to: PLC- ~p, RF: ~p~n",[NodeName, Plc,Rf]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {node_is_up,[{nodeNodeName, NodeName},
-% 										{medium_mode,{Plc,Rf}},
-% 										{routing_set,RoutingSet}]
-% 							});
-%
-%
-% node_is_up (NodeName, Plc,Rf,RoutingSet)->
-% 	io:format("Node ~p State to: PLC- ~p, RF: ~p~n",[NodeName, Plc,Rf]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {node_is_up,[{nodeNodeName, NodeName},
-% 										{medium_mode,{Plc,Rf}},
-% 										{routing_set,RoutingSet}]
-% 							}).
-%
-%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %%  Node is down  %%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%node_is_up%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% node_is_down (Id) ->
-% 	io:format("Node is down with id ~p~n",[Id]),
-% 		Server = global:whereis_name(loadNGgui),
-%
-% 	wx_object:cast(Server, {node_is_down,Id}	).
-
-% node_is_up (NodeName, Data) ->
-% 	io:format("Node ~p is up. data: ~w~n",[NodeName, Data]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {node_is_up, {NodeName, Data}}).
-%
-% node_is_up (NodeName, Plc,Rf,RoutingSet)->
-% 	io:format("Node ~p State to: PLC- ~p, RF: ~p~n",[NodeName, Plc,Rf]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {node_is_up,[{nodeNodeName, NodeName},
-% 										{medium_mode,{Plc,Rf}},
-% 										{routing_set,RoutingSet}]
-% 							});
-%
-%
-% node_is_up (NodeName, Plc,Rf,RoutingSet)->
-% 	io:format("Node ~p State to: PLC- ~p, RF: ~p~n",[NodeName, Plc,Rf]),
-% 	Server = global:whereis_name(loadNGgui),
-% 	wx_object:cast(Server, {nodnode_is_down/1, node_is_up/4, node_is_up/2, received_data_message/3, sent_data_message/3,
-		%  received_management_message/3, sent_management_message/3,e_is_up,[{nodeNodeName, NodeName},
-% 										{medium_mode,{Plc,Rf}},
-% 										{routing_set,RoutingSet}]
-% 							}).
-%
-%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %%  Node is down  %%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%node_is_up%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% node_is_down (Id) ->
-% 	io:format("Node is down with id ~p~n",[Id]),
-% 		Server = global:whereis_name(loadNGgui),
-%
-% 	wx_object:cast(Server, {node_is_down,Id}	).
 export() ->
   gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
 
@@ -118,12 +50,11 @@ export() ->
 %**************************************************************************************
 %**********************   	 Stats Server  			    *******************************
 %**************************************************************************************
+report(Message) ->
+	{Type, ReportData} = Message,
+    report(Type, ReportData).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  A node has received a management message addressed for him  %{nodeNodeName, NodeName},
-										% {medium_mode,{Plc,Rf}},
-										% {routing_set,RoutingSet}%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 report(Type, Data) ->
 	UTIME = isg_time:now_now(),
 	io:format("REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[Type, UTIME, Data]),
