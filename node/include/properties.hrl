@@ -31,6 +31,7 @@
                          ?MODEM_PORT,
                          ?APPLICATION,
                          stub_data_server,
+                         isg_time,
                          stats_server_interface]).
 
 
@@ -88,7 +89,7 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {data_server_ip, "132.73.204.196"}
+                                 {data_server_ip, "132.73.205.115"}
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
 
