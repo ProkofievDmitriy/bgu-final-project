@@ -565,20 +565,19 @@ switch_to_node(DC, Node,Key, NodesEts, {XNodeLocation, YNodeLocation}) ->
 draw_routs(_, _, _,_,[]) ->     io:format("draw_routs ends~n"),
 ok;
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
-    io:format("draw_routsB N: ~p~n~n",[AtomNode]),
     
     AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
-    
+    io:format("draw_routsB N: ~p~n~n",[AtomNode]),
+
     [{AtomNode,{_NodeNumber, NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
 
     draw_route(DC, Location,NextLocation, Medium),
-{dest_addr = AtomNode1, next_addr = AtomNode2}
     draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
 
-draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node1}, {medium, Medium}}|RoutingSet]) ->
-    io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
+draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
     AtomNode1 = list_to_atom("node_" ++ integer_to_list(Node1)),
-    
+        io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
+
     [{AtomNode1,{_NodeNumber, Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
     
     AtomNode2 = list_to_atom("node_" ++ integer_to_list(Node2)),
