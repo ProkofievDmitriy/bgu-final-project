@@ -190,7 +190,12 @@ handle_call(Req, From, State) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a management message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, received_message}, [UTIME, Source, Destination, _Type]}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{management_message, received_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+  UTIME = proplists:get_value(utime, Data),
+  Source = proplists:get_value(source, Data),
+  Destination = proplists:get_value(destination, Data),
+  Type = proplists:get_value(type, Data),
+
   dets:insert(DB, {UTIME, management_message, received_message,Source,Destination}),
   NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
   io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
@@ -199,7 +204,15 @@ handle_cast({{management_message, received_message}, [UTIME, Source, Destination
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a management message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, sent_message}, [UTIME, Source, Destination, _Type]}, State = #state{db = DB, counters = Counters}) ->
+    
+
+handle_cast({{management_message, send_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+  
+  UTIME = proplists:get_value(utime, Data),
+  Source = proplists:get_value(source, Data),
+  Destination = proplists:get_value(destination, Data),
+  Type = proplists:get_value(type, Data),
+
   dets:insert(DB, {UTIME, management_message, sent_message,Source,Destination}),
   NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
   io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
@@ -210,7 +223,13 @@ handle_cast({{management_message, sent_message}, [UTIME, Source, Destination, _T
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a data message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, received_message}, [UTIME, Source, Destination, Id]}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{data_message, received_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+  
+  UTIME = proplists:get_value(utime, Data),
+  Source = proplists:get_value(source, Data),
+  Destination = proplists:get_value(destination, Data),
+  Id = proplists:get_value(id, Data),
+
   NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
   dets:insert(DB, {UTIME, data_message, received_message,Source,Destination, Id}),
 
@@ -220,7 +239,13 @@ handle_cast({{data_message, received_message}, [UTIME, Source, Destination, Id]}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a data message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, sent_message}, [UTIME, Source, Destination ,Id]}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{data_message, send_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+
+  UTIME = proplists:get_value(utime, Data),
+  Source = proplists:get_value(source, Data),
+  Destination = proplists:get_value(destination, Data),
+  Id = proplists:get_value(id, Data),
+
 	NumberOfDataMsgSent = Counters#counters.numberOfDataMsgSent,
   dets:insert(DB, {UTIME, data_message, sent_message,Source,Destination, Id}),
 
@@ -283,7 +308,7 @@ handle_cast(stop, State) ->
     {stop, normal,State};
 
 handle_cast(Msg, State) -> 
-    io:format("stats_server got cast with bad arg:~p~n", [Msg]),
+    io:format("~n~n~nstats_server got cast with bad arg:~p~n~n~n", [Msg]),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

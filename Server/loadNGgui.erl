@@ -3,8 +3,8 @@
 -behaviour(wx_object).
 
 -define(SERVER, ?MODULE).
--define(X_SIZE, 840).
--define(Y_SIZE, 840).
+-define(X_SIZE, 1080).
+-define(Y_SIZE, 680).
 
 -export([a/0,start/0, init/1, terminate/2,  code_change/3,
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]).
@@ -62,19 +62,29 @@ init(WxServer) ->
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%                          GUI Setup:                          %%
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%.
+
     Frame = wxFrame:new(WxServer, ?wxID_ANY, "LOADng", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
     io:format("Frame: ~p~n",[Frame]),
     Panel = wxPanel:new(Frame),
 
-        %% Sizers
     SuperSz = wxBoxSizer:new(?wxVERTICAL),
     TitleSz = wxBoxSizer:new(?wxVERTICAL),
     OuterSz  = wxBoxSizer:new(?wxHORIZONTAL),
     LogSz = wxBoxSizer:new(?wxVERTICAL),
 
+
     NodesSz = wxStaticBoxSizer:new(?wxVERTICAL, Panel, [{label, "Nodes:"}]),
-    ManagementSz = wxStaticBoxSizer:new(?wxVERTICAL, Panel, [{label, "Management:"}]),
+    ManagementSz = wxStaticBoxSizer:new(?wxHORIZONTAL, Panel, [{label, "Management:"}]),
+    ManagementSzLeftP = wxBoxSizer:new(?wxVERTICAL),
+    ManagementSzRightP = wxBoxSizer:new(?wxVERTICAL),
+    LeftP = wxBoxSizer:new(?wxVERTICAL),
+
+    wxSizer:addSpacer(ManagementSz, 10),
+    wxSizer:add(ManagementSz, ManagementSzLeftP),
+    wxSizer:addSpacer(ManagementSz, 20),
+    wxSizer:add(ManagementSz, ManagementSzRightP),
+
     %NodesSz = wxBoxSizer:new(?wxVERTICAL),
     %ManagementSz = wxBoxSizer:new(?wxVERTICAL),
 
@@ -130,52 +140,53 @@ init(WxServer) ->
     %% Add to sizers
 
     %% Management:
-    wxSizer:add(ManagementSz, ButtonFullMap),
-    wxSizer:addSpacer(ManagementSz, 20),
-    wxSizer:add(ManagementSz, NodeChoice),
-    wxSizer:addSpacer(ManagementSz, 20),
-    wxSizer:add(ManagementSz, ButtonDeleteTable),
-    wxSizer:addSpacer(ManagementSz, 20),
+    wxSizer:add(ManagementSzLeftP, ButtonFullMap),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, NodeChoice),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, ButtonDeleteTable),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
 
 
 
-    wxSizer:add(ManagementSz, CmbTo),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, TxtMsgSend),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, ButtonSendMSG),
-    wxSizer:addSpacer(ManagementSz, 20),
+    wxSizer:add(ManagementSzLeftP, CmbTo),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, TxtMsgSend),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, ButtonSendMSG),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
 
-    wxSizer:add(ManagementSz, RadioButtonSizer),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, ButtonSendConfig),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, XNodeLocation),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, YNodeLocation),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, UpdateLocation),
-    wxSizer:addSpacer(ManagementSz, 10),
-    wxSizer:add(ManagementSz, ButtonExport),
-    wxSizer:addSpacer(ManagementSz, 10),
+    wxSizer:add(ManagementSzRightP, RadioButtonSizer),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzRightP, ButtonSendConfig),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzRightP, XNodeLocation),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzRightP, YNodeLocation),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzRightP, UpdateLocation),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzLeftP, ButtonExport),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
 
     %% Nodes:
     wxSizer:add(NodesSz, Canvas),
-    wxSizer:add(NodesSz, MikraPLC),
-    wxSizer:add(NodesSz, MikraRF),
-    wxSizer:add(NodesSz, Counters),
+
     wxSizer:addSpacer(NodesSz, 10),
 
 
     %% LOGS:
-    Log = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{?X_SIZE,100}},
-                  {style, ?wxDEFAULT bor ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
-    wxSizer:add(LogSz, Log, []),
+    %Log = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{?X_SIZE,100}},
+    %              {style, ?wxDEFAULT bor ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
+    %wxSizer:add(LogSz, Log, []),
+    Log = 1,
+    wxSizer:addSpacer(LeftP, 10),
+    wxSizer:add(LeftP, ManagementSz, []),
+    wxSizer:add(LeftP, MikraPLC),
+    wxSizer:add(LeftP, MikraRF),
+    wxSizer:add(LeftP, Counters),
 
-
-
-
-    wxSizer:add(OuterSz, ManagementSz, []),
+    wxSizer:add(OuterSz, LeftP, []),
     wxSizer:addSpacer(OuterSz, 20), % spacer
     wxSizer:add(OuterSz, NodesSz, []),
 
@@ -342,11 +353,14 @@ handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"
 %%
 %% @end
 %%--------------------------------------------------------------------
+handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, numberOfNodes = NumberOfNodes, cmbTo = CmbTo}) ->
+	
+%%{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
+    io:format ("loadNggui: node_state~nData - ~p~n",[Data]),
 
-handle_cast({node_is_up,{NodeNameAtom, Data}}, State = #state{nodeChoice = NodeChoice, numberOfNodes = NumberOfNodes, cmbTo = CmbTo}) ->
-	NodeName = atom_to_list(NodeNameAtom),
+    NodeNameAtom = proplists:get_value(node_name, Data),
+    NodeName = atom_to_list(NodeNameAtom),
 
-    io:format ("Data - ~p~n",[Data]),
 
 
 	RoutingSet = proplists:get_value(routing_set, Data),
@@ -397,7 +411,7 @@ handle_cast({node_is_down,DownNode}, State) ->
     {noreply, State};
 
 handle_cast(_A, State) ->
-	io:format("loadNGgui.erl: handle_info cast: MSG=~p~n",[_A]),
+	io:format("~n~nloadNGgui.erl: unhandled cast msg=~p~n~n",[_A]),
 	{noreply, State}.
 
 

@@ -6,8 +6,8 @@
 
 -export([start/0, stop/0, simulate/1]).
 
--export([deleteTable/0, sendMsg/2, chageState/2, sendDataMsg/2, receivedDataMsg/2, sendMangMsg/2, receivedMangMsg/2, addRoute/2]).
--record(state, {name, rf, plc, routing_set}).
+-export([deleteTable/0, sendMsg/2, chageState/1, addRoute/2]).
+-record(state, {name, medium_mode, routing_set}).
 -record(routing_set_entry, {dest_addr, next_addr, medium}).
 
 %% gen_server callbacks
@@ -24,25 +24,27 @@ simulate(ID) ->
 	io:format("Starting simulation~n"),
 	case ID of
 		1 ->
+			chageState(rf_only),
 			addRoute('N2@127.0.0.1', 1);
-		2 ->
+		2 ->chageState(dual),
 			addRoute('N1@127.0.0.1', 1),
 			addRoute('N3@127.0.0.1', 2);
-		3 -> addRoute('N2@127.0.0.1', 2)
+		3 -> chageState(plc_only),
+			addRoute('N2@127.0.0.1', 2)
 	end,
 	spawn(fun run_simulate/0).
 
 run_simulate() -> 
 	receive
 		stop->ok
-	after 50000 ->
+	after 5000 ->
 		R = rand:uniform(4),
 		case R of
-			0 -> sendDataMsg(1,"AAA");
-			1 -> receivedDataMsg("BBB",2);
-			2 -> sendMangMsg("CCC",3);
-			3 -> receivedMangMsg("DDD",4);
-			_ -> ok
+			1 -> sendDataMsg(1,2,3);
+			2 -> receivedDataMsg(1,2,3);
+			3 -> sendMangMsg(1,2,3);
+			4 -> receivedMangMsg(1,2,3);
+			_ -> io:format("~n~nUnhandeld R!~n~n")
 		end,
 		run_simulate()
 	end.
@@ -64,28 +66,28 @@ deleteTable()->
 
 
 
-chageState(PLC,RF)->
-	io:format("Change State: PLC ~p, RF ~p~n",[PLC,RF]),
-	gen_server:cast(?MODULE, {state, PLC,RF}).
+chageState(Medium_mode)->
+	io:format("Change State: Medium_mode ~p~n",[Medium_mode]),
+	gen_server:cast(?MODULE, {state, Medium_mode}).
 
 
-sendDataMsg(Msg,To)->
-	io:format("Sending Msg ~p to ~p~n",[Msg,To]),
-	gen_server:cast(?MODULE, {sent_data_message, Msg, To}).
+sendDataMsg(Source, Destination,Id)->
+	io:format("Sending Data sMsg From ~p To ~p Msg ~p~n",[Source, Destination,Id]),
+	gen_server:cast(?MODULE, {sent_data_message, Source, Destination,Id}).
 
-receivedDataMsg(Msg,From)->
-	io:format("Received data Msg ~p From ~p~n",[Msg,From]),
-	gen_server:cast(?MODULE, {received_data_message, Msg, From}).
+receivedDataMsg(Source, Destination,Id)->
+	io:format("Received data From ~p To ~p Msg ~p~n",[Source, Destination,Id]),
+	gen_server:cast(?MODULE, {received_data_message, Source, Destination,Id}).
 
 
 
-sendMangMsg(Msg,To)->
-	io:format("Sending Msg ~p to ~p~n",[Msg,To]),
-	gen_server:cast(?MODULE, {sent_management_message, Msg, To}).
+sendMangMsg(Source, Destination,Type)->
+	io:format("Sending mang Msg From ~p To ~p Msg ~p~n",[Source, Destination,Type]),
+	gen_server:cast(?MODULE, {sent_management_message, Source, Destination,Type}).
 
-receivedMangMsg(Msg,From)->
-	io:format("Received data Msg ~p from ~p~n",[Msg,From]),
-	gen_server:cast(?MODULE, {received_management_message, Msg, From}).
+receivedMangMsg(Source, Destination,Type)->
+	io:format("Received mang From ~p To ~p Msg ~p~n",[Source, Destination,Type]),
+	gen_server:cast(?MODULE, {received_management_message, Source, Destination,Type}).
 
 
 
@@ -107,7 +109,7 @@ start_link(Name) ->
     gen_server:start_link({local,?MODULE}, ?MODULE, [Name], []).
 
 start() ->
-	net_kernel:connect('S@127.0.0.1'),
+	net_kernel:connect('stats_server@127.0.0.1'),
 	Name = node(),
 	io:format("AStarting ~p~n",[Name]),
 	
@@ -120,7 +122,7 @@ stop() ->
 init([Name]) ->
     io:format("initiating server ~p~n",[Name]),
 	erlang:send_after(5000,self(),timer),
-    {ok, #state{name = Name, plc = 0, rf = 1, routing_set = []}}.
+    {ok, #state{name = Name, medium_mode = idle, routing_set = []}}.
 
 handle_call(Req, From, State) ->
     io:format("stats_server handle_call: ~p from ~p~n", [Req,From]),
@@ -135,29 +137,43 @@ handle_call(Req, From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({received_management_message, Msg, From}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p from ~p~n", [Name, Msg, From]),
-	stats_server_interface:received_management_message(Name, From, Msg),
+handle_cast({received_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
+    io:format("~p Sending Msg ~p from ~p~n", [Name, Type, Source]),
+	%stats_server_interface:received_management_message(Name, From, Msg),
+	stats_server_interface:report({management_message,received_message},  [{source, Source},
+ 											   			{destination, Destination},
+										   				{message_type, Type}]),
     {noreply, State};
 
-handle_cast({sent_management_message, Msg, To}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p to ~p~n", [Name, Msg,To]),
-	stats_server_interface:sent_management_message(Name, To, Msg),
+handle_cast({sent_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
+    io:format("~p Sending Msg ~p to ~p~n", [Name, Type,Destination]),
+	%stats_server_interface:sent_management_message(Name, To, Msg),
+	stats_server_interface:report({management_message,send_message}, [{source, Source},
+ 											   			{destination, Destination},
+										   				{message_type, Type}]),
     {noreply, State};
 
-handle_cast({received_data_message, Msg, From}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p from ~p~n", [Name, Msg,From]),
-	stats_server_interface:received_data_message(Name, From, Msg),
+handle_cast({received_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
+    io:format("~p Sending Msg ~p from ~p~n", [Name, Id,Destination]),
+	%stats_server_interface:received_data_message(Name, From, Msg),
+	stats_server_interface:report({data_message,received_message}, [{source, Source},
+									   			{destination, Destination},
+								   				{id, Id}]),
+
     {noreply, State};
 
-handle_cast({sent_data_message, Msg, To}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p to ~p~n", [Name, Msg,To]),
-	stats_server_interface:sent_data_message(Name, To, Msg),
+handle_cast({sent_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
+    io:format("~p Sending Msg ~p to ~p~n", [Name, Id,Destination]),
+	%stats_server_interface:sent_data_message(Name, To, Msg),
+	stats_server_interface:report({data_message,send_message}, [{source, Source},
+									   			{destination, Destination},
+								   				{id, Id}]),
+
     {noreply, State};
 
-handle_cast({state, PLC, RF}, State = #state{name = Name}) -> 
-	io:format("~p changing State: PLC ~p, RF ~p~n",[Name, PLC,RF]),
-    {noreply, State#state{plc = PLC, rf = RF}};
+handle_cast({state, Medium_mode}, State = #state{name = Name}) -> 
+	io:format("~p changing State: Medium_mode: ~p~n",[Name, Medium_mode]),
+    {noreply, State#state{medium_mode = Medium_mode}};
 
 
 
@@ -205,9 +221,10 @@ handle_info(stop, State) ->
 
 
 
-handle_info(timer, State = #state{name = Name, plc = PLC, rf = RF, routing_set = Routing_set}) ->
+handle_info(timer, State = #state{name = Name, medium_mode = Medium_mode, routing_set = Routing_set}) ->
   io:format("stubNode: timer~n"),
-      stats_server_interface:node_is_up(Name,[{medium_mode,{PLC,RF}},{routing_set,Routing_set}]),
+  %stats_server_interface:node_is_up(Name,[{medium_mode,{PLC,RF}},{routing_set,Routing_set}]),
+  stats_server_interface:report(node_state, [{node_name,Name},{medium_mode,Medium_mode},{routing_set,Routing_set}]),
   erlang:send_after(5000,self(),timer),
   {noreply, State};
 
