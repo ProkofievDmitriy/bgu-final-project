@@ -66,7 +66,7 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  handle_cast({report, {Message}}, Context) ->
-     io:format("[~p]: Request(report)  Message ~w~n", [?MODULE, Message]),
+     io:format("[~p]: ~w~n", [?MODULE, Message]),
      {noreply, Context};
 
 handle_cast(Request, Context) ->
