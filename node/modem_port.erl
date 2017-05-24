@@ -52,7 +52,7 @@ stop()->
     of
         Result -> Result
     catch
-        _:Reason -> ?LOGGER:err("[~p]: stop failed : ~p~n",[?MODULE, Reason]),
+        _:Reason -> ?LOGGER:err("[~p]: stop failed : ~w~n",[?MODULE, Reason]),
         Reason
     end.
 
@@ -66,7 +66,7 @@ stop_internal() ->
 %send Packet via channel Channel, with payload Payload.
 % Channel : 1 - RF , 2 - PLC , 3 RF + PLC
 send(Channel, Payload) ->
-	?LOGGER:debug("[~p]: send: channel: ~p, payload ~p ~n", [?MODULE, Channel, Payload]),
+	?LOGGER:debug("[~p]: send: channel: ~w, payload ~w ~n", [?MODULE, Channel, Payload]),
 		MSG = [Channel] ++ [0] ++ Payload,
     call_port(MSG).
 %main use. user wants to sent a packet (list of bytes - integer of range [0,255])
@@ -173,7 +173,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 			MSG = prepare_payload(Msg), % MSG = <<Channel:8, Rest/bitstring>>
 			if is_list(MSG) ->
 			    DataLinkFsmPid ! sendMsg(Port, MSG);
-			    true -> ?LOGGER:err("[~p]: error on message prepare : ~p~n", [?MODULE, MSG]),
+			    true -> ?LOGGER:err("[~p]: error on message prepare : ~w~n", [?MODULE, MSG]),
 			    {error , dont_send}
 			end,
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
@@ -186,9 +186,9 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 			Ans = examine_data2(Data),		%return 0 if data is of correct format, 1 otherwise
 			case Ans of
 				% first byte not recognized
-				channel_error->	?LOGGER:debug("[~p]: got msg: ~p~n but didnt pass exemine reason:~p~n",[?MODULE, Data,Ans]);
-				crc_error -> ?LOGGER:debug("[~p]: got msg: ~p but didnt pass exemine reason:~p~n",[?MODULE, Data,Ans]);
-				crc_error_try_split -> ?LOGGER:debug("[~p]: got msg: ~p but didnt pass exemine reason:~p. now split data and check splits~n",[?MODULE, Data,Ans]);
+				channel_error->	?LOGGER:preciseDebug("[~p]: got msg: ~p~n but didnt pass exemine reason:~p~n",[?MODULE, Data,Ans]);
+				crc_error -> ?LOGGER:preciseDebug("[~p]: got msg: ~p but didnt pass exemine reason:~p~n",[?MODULE, Data,Ans]);
+				crc_error_try_split -> ?LOGGER:preciseDebug("[~p]: got msg: ~p but didnt pass exemine reason:~p. now split data and check splits~n",[?MODULE, Data,Ans]);
 				_List -> ?DATA_LINK:handle_incoming_message(DataLinkFsmPid, Ans) %(channel , rssi, payload)
 			end,
 			loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid);
@@ -204,7 +204,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 	    end;
 	%c port terminates unexpectedly
 	{'EXIT', _Port, Reason} ->
-		?LOGGER:debug("[~p]: got exit from c port. reason is:~p.~n", [?MODULE, Reason]),
+		?LOGGER:debug("[~p]: got exit from c port. reason is:~w.~n", [?MODULE, Reason]),
 	   close_c_port_program(OS_PID), exit(port_terminated)
     end.
 
@@ -223,9 +223,9 @@ examine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel
 examine_data( [Channel, RSSI | Rest]) ->
 	{LCRC, L_NO_CRC} = extract_crc(Rest),
 	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
-	?LOGGER:preciseDebug("[~p]: CRC is:~p~n", [?MODULE, CRC]),
+	?LOGGER:preciseDebug("[~p]: CRC is:~w~n", [?MODULE, CRC]),
 	CRC2 = erlang:crc32(L_NO_CRC),
-	?LOGGER:preciseDebug("[~p]: CRC2 is:~p. L_NO_CRC is:~p~n", [?MODULE, CRC2, L_NO_CRC]),
+	?LOGGER:preciseDebug("[~p]: CRC2 is:~w. L_NO_CRC is:~w~n", [?MODULE, CRC2, L_NO_CRC]),
 	case CRC2  of
 		CRC -> [Channel] ++ [RSSI] ++ L_NO_CRC;
 		_Else ->   crc_error
@@ -296,7 +296,7 @@ sendMSG2(Port, [H|T]) ->
 
 %this function get a port to send data to, a byte of info and it's header. it send the minipacket ([Header, Date_byte]) to the port.
 sendByte(Port, Byte, Type) -> P=self(),
- 	?LOGGER:preciseDebug("[~p]: sendByte: Byte: ~p~n", [?MODULE, Byte]),
+ 	?LOGGER:preciseDebug("[~p]: sendByte: Byte: ~w~n", [?MODULE, Byte]),
 	Port ! {P, {command, [Type,Byte]}},
 	{ok, sent}.
 
@@ -320,24 +320,24 @@ prepare_payload([Channel, _ | Rest]) ->
 	PAD = getPaddingList(Size),
 	Result = case PAD of
 	    too_large ->
-            ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~p.~n", [?MODULE, Size]),
+            ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~w.~n", [?MODULE, Size]),
 	        too_large;
         List ->
             L = pad_list(Rest, PAD),
-            ?LOGGER:dev("[~p]: prepare_payload: PAD LIST SIZE: ~p, LISTS AFTER PADDING: ~p(~p).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
+            ?LOGGER:preciseDebug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
             BinaryZero = <<0:8>>,
-            ?LOGGER:preciseDebug("[~p]: CRC is:~p~n,", [?MODULE, CRC]),
+            ?LOGGER:preciseDebug("[~p]: CRC is:~w~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
             ListToSend = binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>),
-	          ?LOGGER:dev("[~p]: prepare_payload: BYTE SIZE = ~p, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	          ?LOGGER:preciseDebug("[~p]: prepare_payload: BYTE SIZE = ~w, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
 	          ListToSend
     end,
 	Result.
 
 getPaddingList(Size)->
-    ?LOGGER:dev("[~p]: getPaddingList: Size: ~p~n", [?MODULE, Size]),
+    ?LOGGER:preciseDebug("[~p]: getPaddingList: Size: ~w~n", [?MODULE, Size]),
     Result = case Size of
 		S1 when S1 =< 14 ->
 		    X = 20 - Size - 4 - 2,
@@ -364,7 +364,7 @@ getPaddingList(Size)->
 
 
 pad_list(DestinationBinary, List) ->
-	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~p, List: ~w ~n", [?MODULE, DestinationBinary, List]),
+	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~w, List: ~w ~n", [?MODULE, DestinationBinary, List]),
     F = fun(Num, Acc) ->
 %	    ?LOGGER:debug("[~p]: fun in pad list: Acc: ~p, B: ~p ~n", [?MODULE, Acc, Num]),
 	    BinNum = <<Num:8>>,

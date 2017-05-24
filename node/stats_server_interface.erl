@@ -24,7 +24,8 @@
 %%%-------------------------------------------------------------------
 -module(stats_server_interface).
 -author("Deddy Zagury").
-
+-include("./include/properties.hrl").
+-include("./include/vcb.hrl").
 
 -define(STATS_SERVER, stats_server).
 
@@ -35,7 +36,7 @@
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
-%%% API
+%%% APItry
 %%%===================================================================
 
 %**************************************************************************************
@@ -54,67 +55,25 @@ report(Message) ->
 	{Type, ReportData} = Message,
     report(Type, ReportData).
 
-
-report(Type, Data) ->
-	UTIME = isg_time:now_now(),
-	io:format("REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[Type, UTIME, Data]),
-	case Type of
-		node_state ->
-			Server = global:whereis_name(loadNGgui),
-			wx_object:cast(Server, {Type, [{utime, UTIME} | Data]});
-		_ ->
-			gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })
+internal_report(Type, Data)->
+    UTIME = isg_time:now_now(),
+    ?LOGGER:info("[~p]: REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[?MODULE, Type, UTIME, Data]),
+    case Type of
+        node_state ->
+            Server = global:whereis_name(loadNGgui),
+            wx_object:cast(Server, {Type, [{utime, UTIME} | Data]});
+        _ ->
+            gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })
     end.
 
-
-%
-%
-% received_management_message (Source, Destination, Type) ->
-% 	%UTIME = erlang:monotonic_tnode_is_upnode_is_upime(),
-% 	UTIME = isg_time:now_now(),
-% 	io:format("Sending to stats_server report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-%
-% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, }%}%},
-% 											   [{utime, UTIME},
-% 											   {source, Source},anagement_message, received_mess
-% 											   {destination, Destination},
-% 											   {message_type, Type}]
-% 										   }).
-%
-%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %%  A node has Sent a management message  %%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% sent_management_message (Source, Destination, Type) ->
-% 	UTIME = isg_time:now_now(),
-% 	%UTIME = erlang:monotonic_time(),
-% 	io:format("Sending to stats_server report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-%
-% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message}, [UTIME, Source, Destination, Type]}).
-%
-%
-%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %%  A node has received a data message addressed for him  %%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% received_data_message (Source, Destination, Id) ->
-% 	UTIME = isg_time:now_now(),
-% 	%UTIME = erlang:monotonic_time(),
-% 	io:format("Sending to stats_server report about: Incoming msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-%
-% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, received_message}, [UTIME, Source, Destination, Id]}).
-%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% %%  A node has Sent a data message  %%
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% sent_data_message (Source, Destination, Id) ->
-% 	UTIME = isg_time:now_now(),
-% 	%UTIME = erlang:monotonic_time(),
-% 	io:format("Sending to stats_server report about: Sent msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-%
-% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, sent_message}, [UTIME, Source, Destination, Id]}).
-%
-%
+report(Type, Data) ->
+    try internal_report(Type, Data) of
+        Result -> {ok, Result}
+    catch
+        Throw ->
+            ?LOGGER:critical("[~p]: Error catched: ~w ~n", [?MODULE, Throw]),
+            {error, Throw}
+    end.
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------

@@ -37,7 +37,7 @@ preciseDebug(Message) ->
     debug(Message, []).
 
 dev(Message, Params) ->
-    print(5, "[DEVELOPMENT] ", Message, Params).
+    print(5, "[TEMP]  ", Message, Params).
 dev(Message) ->
     debug(Message, []).
 

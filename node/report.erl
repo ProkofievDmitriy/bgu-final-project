@@ -65,7 +65,7 @@ init(Properties) ->
 %   HANDLE CALL's synchronprepare_message_dataous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~p~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -75,11 +75,14 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
     ?LOGGER:debug("[~p]: REPORT, ServerModuleInterface: ~p, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
-    try ServerModuleInterface:report(Type, ReportMessageData) of %{message_type, [{],{},{}]}
-        _ -> {noreply, Context}
-    catch
-        Throw->
+    ReportResult = ServerModuleInterface:report(Type, ReportMessageData),
+    case ReportResult of
+        {ok, _} -> {noreply, Context};
+        {error, Throw} ->
             ?LOGGER:warn("[~p]: ServerModuleInterface: ~w unavailable: ~p.~n", [?MODULE, ServerModuleInterface, Throw]),
+            {noreply, Context#context{connected_to_server = false}};
+        Else ->
+            ?LOGGER:critical("[~p]: ServerModuleInterface: ~w UNXEPECTED RESULT: ~w.~n", [?MODULE, ServerModuleInterface, Else]),
             {noreply, Context#context{connected_to_server = false}}
     end;
 
@@ -91,7 +94,7 @@ handle_cast({report, ReportMessage }, #context{connected_to_server = false} = Co
 
 handle_cast(connect_to_data_server, #context{connected_to_server = false} = Context) ->
 %TODO Pattern match in function definition to only not connected to server state
-    ?LOGGER:debug("[~p]: Handle CAST Request(connect_to_data_server) ~n", [?MODULE]),
+    ?LOGGER:debug("[~p]: Handle ResultCAST Request(connect_to_data_server) ~n", [?MODULE]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
     test_connection(ServerNodeName),
     Ans = net_kernel:connect_node(ServerNodeName),
@@ -117,7 +120,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = true} = Conte
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~p ~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 

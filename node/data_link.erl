@@ -304,5 +304,5 @@ handle_message(Medium, Target, StateData, Data)->
             ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to network layer~n", [?MODULE]),
             ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Medium, Data);
         Else ->
-            ?LOGGER:debug("[~p]: handle_message : target is NOT valid - IGNORING incoming message ~n", [?MODULE])
+            ?LOGGER:debug("[~p]: handle_message : target(~w) is NOT valid - IGNORING incoming message ~n", [?MODULE, Target])
     end.
