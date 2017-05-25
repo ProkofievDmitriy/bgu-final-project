@@ -11,6 +11,7 @@
 
 -behaviour(gen_fsm).
 -include("app_macros.hrl").
+
 %% API
 -export([start_link/1]).
 
@@ -24,6 +25,9 @@
 
 %% TODO: discuss initialization with dima - he should send me my name?
 
+%%TODO: add TO in drep format.
+
+%% TODO add a handshake before doing any activity (gen_server:call)
 
 %%%===================================================================
 %%% API

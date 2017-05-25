@@ -1,0 +1,58 @@
+Meters = [m1,m2,m3,m4,m5,m6,m7,m8,m9,m10].
+
+spawn(dc,start_link,[dc_app,self(),Meters]). 
+
+dc_app ! ok.
+
+
+1:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m1,1}],0}).
+
+2:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m1,1},{m2,2}],0}).
+
+3:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m3,3}],0}).
+
+4:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m4,4}],0}).
+
+5:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m5,5}],0}).
+
+6:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m6,6}],0}).
+
+7:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m7,7}],0}).
+
+8:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m7,7},{m8,8}],0}).
+
+9:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m9,9}],0}).
+
+10:
+ gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m9,9},{m10,10}],0}).
+ 
+ 
+ 
+ gen_fsm:stop(dc_app).
+ 
+ 
+ 
+ 
+ 
+ accidental bugs:
+ - arrival of unexpected sequence number crashee phase2
+ - phase 2: when timeout, the merge of rd and nrs contains dups
+ 
+ 
+ unhandeled stuff:
+ - handleinfo
+ - unresponsive station
+ - supervision
+ - change drep format in sem module
+ 
+ testes and working:
+ - phase 1

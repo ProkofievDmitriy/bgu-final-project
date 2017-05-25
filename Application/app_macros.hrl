@@ -9,30 +9,22 @@
 -author("liya").
 
 
-% ================================ module_names ================================
+% ================================ macros ================================
 % for external protocol use only.
 -define(DC_MODULE, dc).
--define(AM_SEM_MODULE, am_sem).
--define(SM_SEM_MODULE, sm_sem).
+-define(SEM_MODULE, am_sem).
 
-
-% ================================ node_names =================================
-% for external protocol use only.
--define(MASTER_NODE, 'master_node@cseadmin-ThinkStation-S30').
--define(DC_NODE, 'dc_node@cseadmin-ThinkStation-S30').
--define(SEM1_NODE, 'sem1_node@cseadmin-ThinkStation-S30').
--define(SEM_NODES, [?SEM1_NODE]).
+-define(DC_NODE, m11).
 
 
 
-% ================================= protocol_names =============================
-% for external protocol use only.
--define(MASTER_PROT, master).
--define(DC_PROT, dc).
--define(SEM1_PROT, sem1).
+
 
 
 %================================ properties ================================
 
 
--define(TIMEOUT, 20000).
+-define(TIMEOUT, 180000).
+-define(HAND_SHAKE_MAX_TRIES,3).
+-define(HAND_SHAKE_TIMEOUT, 30000).
+-define(TERMINATION_TIMEOUT, 3000).

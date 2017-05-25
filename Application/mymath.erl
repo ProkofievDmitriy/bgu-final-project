@@ -21,15 +21,18 @@ atan(Input) ->
 	(math:atan(Input)*180)/math:pi().
 
 get_random(Number)-> 
-		random:seed(now()),
-	{RandomNumber,_Seed} = random:uniform_s(Number, random:seed(now())),
+		rand:seed(erlang:timestamp()),
+	{RandomNumber,_Seed} = rand:uniform_s(Number, rand:seed(erlang:timestamp())),
 		RandomNumber.
 
 get_random_resource(Number) ->
-	random:seed(now()),
-	{A,B,C} = now(),
-	{RandomNumber, _Seed} = random:uniform_s(Number, random:seed(C*B,C,erlang:round(C/A))),
+	%rand:seed(erlang:timestamp()),
+	{A,B,C} = erlang:timestamp(),
+	{RandomNumber, _Seed} = rand:uniform_s(Number, rand:seed(exs1024,{A,B,C})),
 	RandomNumber.
+
+
+
 
 %% ====================================================================
 %% Internal functions

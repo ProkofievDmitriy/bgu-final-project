@@ -38,8 +38,9 @@
 %%--------------------------------------------------------------------
 
 start_link(My_name,App_type) ->
-  gen_server:start_link({local, My_name}, ?MODULE, [My_name,App_type], []),
-  io:format("~p started~n",[My_name]).
+  io:format("~p started~n",[My_name]),
+  gen_server:start_link({local, My_name}, ?MODULE, [My_name,App_type], []).
+
 
 %%%===================================================================
 %%% gen_server callbacks
