@@ -49,6 +49,7 @@ dc_app ! ok.
  
  
  unhandeled stuff:
+ - timestamps
  - handleinfo
  - unresponsive station
  - supervision

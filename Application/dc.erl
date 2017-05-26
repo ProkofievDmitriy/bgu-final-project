@@ -1,11 +1,11 @@
-%%%-------------------------------------------------------------------
+%%%------------------------------------------------------------------------------
 %%% @author liya
 %%% @copyright (C) 2017, <COMPANY>
 %%% @doc
 %%%
 %%% @end
 %%% Created : 30. Mar 2017 11:43
-%%%-------------------------------------------------------------------
+%%%------------------------------------------------------------------------------
 -module(dc).
 -author("liya").
 
@@ -32,31 +32,31 @@
 
 -record(state, {}).
 
-%%%===================================================================
+%%%==============================================================================
 %%% API
-%%%===================================================================
+%%%==============================================================================
 
-%%--------------------------------------------------------------------
+%%-------------------------------------------------------------------------------
 %% @doc
 %% Creates a gen_fsm process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%-------------------------------------------------------------------------------
 
 
 %% TODO: update protocol interface to Dima: he starts app with the properties bellow.
 start_link(Me, My_server,Meters) ->
-  io:format("~p created ~n",[Me]),
+  log:info("~p created ~n",[Me]),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_server,Meters}, []),
   Pid.
 
-%%%===================================================================
+%%%=================================================================================
 %%% gen_fsm callbacks
-%%%===================================================================
+%%%=================================================================================
 
-%%--------------------------------------------------------------------
+%%----------------------------------------------------------------------------------
 %% @private
 %% @doc
 %% Whenever a gen_fsm is started using gen_fsm:start/[3,4] or
@@ -64,7 +64,7 @@ start_link(Me, My_server,Meters) ->
 %% process to initialize.
 %%
 %% @end
-%%--------------------------------------------------------------------
+%%----------------------------------------------------------------------------------
 -spec(init(Args :: term()) ->
   {ok, StateName :: atom(), StateData :: #state{}} |
   {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
@@ -77,7 +77,7 @@ start_link(Me, My_server,Meters) ->
 %% My_server - the gen server of the protocol in tha same node (DC)
 %% Meters - list of names of the other nodes
 
-%% TODO add a handshake before doing any activity (gen_server:call), do the checking inside the function and if failed call handshake over and over again.
+%% TODO add a handshake before doing any activity (gen_server:call),do the checking inside the function and if failed call handshake over and over again.
 
 init({Me, My_server,Meters}) ->
   Hand_shake =hand_shake(Me,My_server,1),
@@ -92,12 +92,13 @@ init({Me, My_server,Meters}) ->
       io:format("first dreq sent, Rd are ~p~n",[Rd]),
       Timerpid = erlang:spawn(?MODULE,timer,[Me]),        % 1/12
       {ok, discovering, {Me, My_server,Meters,Nrs1,Rd,[],0,Timerpid}};
-    {terminate, Reason} -> log:critical("handshake with ~p failed with message: ~p~n", [My_server,Reason]),
+    {terminate, Reason} -> log:critical("handshake with ~p failed with message:
+     ~p~n", [My_server,Reason]),
       {stop,{handshake_failure,Reason}}
   end.
 
 
-%%--------------------------------------------------------------------
+%%----------------------------------------------------------------------------------
 %% @private
 %% @doc
 %% There should be one instance of this function for each possible
@@ -117,12 +118,23 @@ init({Me, My_server,Meters}) ->
 
 
 %% phase 1 of AMR - AM
-discovering({drep,To,Data,_Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+discovering({drep,To,Data,Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   case To of
     % ok, drep received with destination address of dc
     ?DC_NODE ->
-      {V,_} = lists:last(Data),                         % 1/14
-      log:debug("received drep from: ~p,~n state data: Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n",
+      {V,_} = lists:last(Data),
+      case Seq of
+        % the seq num of the drep is higher than expected -> error, ignore
+        Seq when Seq>Sn ->
+          log:err("received drep from ~p in state discovering with higher seq of
+           ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n", [V,Seq,Nrs]),
+          {next_state, discovering, {Me,My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+        Seq when Seq<Sn ->
+
+      end,
+                              % 1/14
+      log:debug("received drep from: ~p, in state discovering ~n state data:
+       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n",
         [V,Nrs,Rd,Ter,Sn]),
       Rd1 = lists:delete(V,Rd),                         % 1/15
       Ter1 = lists:umerge([Ter,[V]]),                   % 1/16-18
@@ -135,12 +147,16 @@ discovering({drep,To,Data,_Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) -
       _Ok = ets:insert(mr_ets,Data),
       log:debug("Rd2 is now ~p~n",[Rd2]),
       if Rd2 == [] ->  gen_fsm:send_event(Me, rd_empty),
-        {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,Timerpid}};
-        true -> {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,Timerpid}}
+        {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,
+          Timerpid}};
+        true -> {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,
+          Timerpid}}
       end;
-    % received drep with other destination address then dc, report error and ignore.
+    % received drep with other destination address then dc, report error and
+    % ignore.
     Dest ->
-      log:err("dc recived drep with destination address of: ~p, ignoring~n",[Dest]),
+      log:err("dc recived drep with destination address of: ~p, in state
+      discovering ignoring~n",[Dest]),
       {next_state, discovering, {Me,My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}}
   end;
 
@@ -149,13 +165,13 @@ discovering({drep,To,Data,_Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) -
 
 %% Rd = [] , prepare for another iteration of external loop
 discovering(rd_empty,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
-  log:debug("received rd_empy event,~n State data:
+  log:debug("received rd_empy event in state discovering,~n State data:
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:umerge(Nrs,Rd),                    % 1/23
   log:debug("Nrs1 is ~p~n",[Nrs1]),
   case  Nrs1 of
     [] ->        %% external loop terminated, go ro phase 2
-      log:info("finished reading sems, preparing for phase 2 ~n"),
+      log:info("finished reading sems in phase1, preparing for phase 2 ~n"),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
@@ -176,13 +192,13 @@ discovering(rd_empty,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       {next_state, discovering, {Me,My_server,Meters,Nrs2,Rd1,Ter,Sn,Timerpid}}
   end;
 
-%% timout elapsed, prepare for another iteration of external loop
+%% timeout elapsed, prepare for another iteration of external loop
 discovering(timeout,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
-  log:debug("received timeout event, State data:~n
+  log:debug("received timeout event in state discovering, State data:~n
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:umerge(Nrs,Rd),                       % 1/23
   if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
-      log:info("finished reading sems, preparing for phase 2~n"),
+      log:info("finished reading sems in phase 1, preparing for phase 2~n"),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs1 = Meters,                                 % 2/4
@@ -208,17 +224,26 @@ discovering(timeout,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
 
 %%TODO update drep format in phase 2
 
-collecting({drp,Data,_Seq},{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
-  {V,_} = lists:last(Data),                          % 2/10
-  Ter81 = lists:delete(Ter8,V),
-  Ter1 = lists:umerge([Ter,[V]]),                    % 2/11
-  Nodes = extract_nodes_from_drep([], Data),
-  Nodes1 = lists:delete(V,Nodes),
-  Ter2 = lists:subtract(Ter1,Nodes1),                % 2/16
-  Nrs1 = lists:subtract(Nrs, Nodes),                 % 2/15
-  _Ok = ets:insert(mr_ets,Data),
-  if Ter81 == [] ->  gen_fsm:send_event(Me, ter8_empty) end,
-  {next_state, collecting, {Me,My_server,Meters, Nrs1, Ter81,Ter2,Sn,Timerpid}};
+collecting({drep,To,Data,_Seq},{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+  case To of
+    ?DC_NODE ->
+      {V,_} = lists:last(Data),                          % 2/10
+      log:debug("received drep from: ~p, in state collecting ~n state data: Nrs: ~p, Rd: ~p,Ter* = ~p, Ter: ~p, Sn: ~p~n",
+        [V,Nrs,Ter8,Ter,Sn]),
+      Ter81 = lists:delete(Ter8,V),
+      Ter1 = lists:umerge([Ter,[V]]),                    % 2/11
+      Nodes = extract_nodes_from_drep([], Data),
+      Nodes1 = lists:delete(V,Nodes),
+      Ter2 = lists:subtract(Ter1,Nodes1),                % 2/16
+      Nrs1 = lists:subtract(Nrs, Nodes),                 % 2/15
+      _Ok = ets:insert(mr_ets,Data),
+      if Ter81 == [] ->  gen_fsm:send_event(Me, ter8_empty) end,
+      {next_state, collecting, {Me,My_server,Meters, Nrs1, Ter81,Ter2,Sn,Timerpid}};
+    Dest ->
+      log:err("dc recived drep with destination address of: ~p, ignoring~n",[Dest]),
+      {next_state, collecting, {Me,My_server,Meters, Nrs, Ter8,Ter,Sn,Timerpid}}
+  end;
+
 
 collecting(ter8_empty,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Ter81 = lists:umerge(Nrs ,Ter8),

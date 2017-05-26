@@ -43,5 +43,5 @@ send_data_reply(Destination, Data, Seq_num)->
 %essential for protocol to be aware of uppel apllication layer
 hand_shake(ApplicationPid,App_type) ->  % App_type might be dc or sem
    _Reply=  gen_server:call(?PROTOCOL_NAME, {app_handshake, ApplicationPid, App_type} , ?HAND_SHAKE_TIMEOUT).
-
+%expected Reply=ok
 
