@@ -1,5 +1,7 @@
 Meters = [m1,m2,m3,m4,m5,m6,m7,m8,m9,m10].
 
+c(dc).
+
 spawn(dc,start_link,[dc_app,self(),Meters]). 
 
 dc_app ! ok.
@@ -50,6 +52,7 @@ dc_app ! ok.
  
  unhandeled stuff:
  - timestamps
+ - average number of rounds of phase 1
  - handleinfo
  - unresponsive station
  - supervision
