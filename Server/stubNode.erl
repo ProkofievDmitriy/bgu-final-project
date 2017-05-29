@@ -4,11 +4,10 @@
 
 
 
--export([start/0, stop/0, simulate/1]).
+-export([start/0, stop/0, simulate/0, simulate_rand/0]).
 
--export([deleteTable/0, sendMsg/2, chageState/1, addRoute/2]).
+-export([update_configuration/2, initiate_transaction/3, reset_node/1, addRoute/2, receivedMangMsg/3, receivedDataMsg/3]).
 -record(state, {name, medium_mode, routing_set}).
--record(routing_set_entry, {dest_addr, next_addr, medium}).
 
 %% gen_server callbacks
 -export([init/1,
@@ -20,21 +19,83 @@
   
 
 
-simulate(ID) ->
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% APi
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+update_configuration(_, Medium_mode)->
+	io:format("Change State: Medium_mode ~p~n",[Medium_mode]),
+	gen_server:cast(?MODULE, {state, Medium_mode}).
+
+initiate_transaction(_, Destination, Msg)->
+	io:format("Send Msg: ~p, TO: ~p~n",[Msg,Destination]),
+	gen_server:cast(?MODULE, {initiate_transaction, Destination,Msg}).
+
+reset_node(_)->
+	io:format("delete Table~n"),
+	gen_server:cast(?MODULE, {reset_node}).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+simulate()->
+	start(),
+
+	Name = node(),
+	receive after 5000 -> ok end,
 	io:format("Starting simulation~n"),
-	case ID of
-		1 ->
-			chageState(rf_only),
-			addRoute('N2@127.0.0.1', 1);
-		2 ->chageState(dual),
+	case Name of
+		'N1@127.0.0.1' ->
+			update_configuration('N1@127.0.0.1', rf_only),
+			addRoute('N2@127.0.0.1', 1),
+			spawn(fun() -> run_simulate_a(0) end);
+		'N2@127.0.0.1' ->update_configuration('N2@127.0.0.1', dual),
 			addRoute('N1@127.0.0.1', 1),
 			addRoute('N3@127.0.0.1', 2);
-		3 -> chageState(plc_only),
+		'N3@127.0.0.1' -> update_configuration('N3@127.0.0.1', plc_only),
+			addRoute('N2@127.0.0.1', 2),
+			spawn(fun run_simulate_c/0)
+	end.
+	
+
+run_simulate_a(Id) -> 
+	receive
+		stop->ok
+	after 5000 ->
+		sendDataMsg('N3@127.0.0.1','N2@127.0.0.1',Id),
+		run_simulate_a(Id+1)
+	end.
+
+
+run_simulate_c() -> 
+	receive
+		stop->ok
+	after 5000 ->
+		sendMangMsg('N3@127.0.0.1','N2@127.0.0.1',type_a),
+		run_simulate_c()
+	end.
+
+
+
+simulate_rand() ->
+
+	start(),
+	Name = node(),
+	receive after 5000 -> ok end,
+	io:format("Starting simulation~n"),
+	case Name of
+		'N1@127.0.0.1' ->
+			update_configuration('N1@127.0.0.1', rf_only),
+			addRoute('N2@127.0.0.1', 1);
+		'N2@127.0.0.1' ->update_configuration('N2@127.0.0.1', dual),
+			addRoute('N1@127.0.0.1', 1),
+			addRoute('N3@127.0.0.1', 2);
+		'N3@127.0.0.1' -> update_configuration('N3@127.0.0.1', plc_only),
 			addRoute('N2@127.0.0.1', 2)
 	end,
-	spawn(fun run_simulate/0).
+	spawn(fun run_simulate_rand/0).
 
-run_simulate() -> 
+run_simulate_rand() -> 
 	receive
 		stop->ok
 	after 5000 ->
@@ -46,7 +107,7 @@ run_simulate() ->
 			4 -> receivedMangMsg(1,2,3);
 			_ -> io:format("~n~nUnhandeld R!~n~n")
 		end,
-		run_simulate()
+		run_simulate_rand()
 	end.
 
 addRoute(Node, Medium)->
@@ -55,20 +116,7 @@ addRoute(Node, Medium)->
 
 
 
-sendMsg(To,Msg)->
-	io:format("Send Msg: ~p, TO: ~p~n",[Msg,To]),
-	gen_server:cast(?MODULE, {sendMSG, To,Msg}).
 
-
-deleteTable()->
-	io:format("delete Table~n"),
-	gen_server:cast(?MODULE, {deleteTable}).
-
-
-
-chageState(Medium_mode)->
-	io:format("Change State: Medium_mode ~p~n",[Medium_mode]),
-	gen_server:cast(?MODULE, {state, Medium_mode}).
 
 
 sendDataMsg(Source, Destination,Id)->
@@ -138,36 +186,53 @@ handle_call(Req, From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast({received_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p from ~p~n", [Name, Type, Source]),
-	%stats_server_interface:received_management_message(Name, From, Msg),
 	stats_server_interface:report({management_message,received_message},  [{source, Source},
  											   			{destination, Destination},
 										   				{message_type, Type}]),
+    io:format("~p Sending Msg ~p from ~p~n", [Name, Type, Source]),
+
     {noreply, State};
 
 handle_cast({sent_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p to ~p~n", [Name, Type,Destination]),
-	%stats_server_interface:sent_management_message(Name, To, Msg),
 	stats_server_interface:report({management_message,send_message}, [{source, Source},
  											   			{destination, Destination},
 										   				{message_type, Type}]),
+    io:format("~p Sending Msg ~p to ~p~n", [Name, Type,Destination]),
+
+
+	R = 100*rand:uniform(50),
+	receive
+		stop->ok
+	after R ->
+    	rpc:cast(Destination, stubNode, receivedMangMsg, [Source, Destination,Type])
+	end,
+
     {noreply, State};
 
 handle_cast({received_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p from ~p~n", [Name, Id,Destination]),
 	%stats_server_interface:received_data_message(Name, From, Msg),
 	stats_server_interface:report({data_message,received_message}, [{source, Source},
 									   			{destination, Destination},
 								   				{id, Id}]),
+    io:format("~p Sending Msg ~p from ~p~n", [Name, Id,Destination]),
 
     {noreply, State};
 
 handle_cast({sent_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
-    io:format("~p Sending Msg ~p to ~p~n", [Name, Id,Destination]),
+
+
 	%stats_server_interface:sent_data_message(Name, To, Msg),
 	stats_server_interface:report({data_message,send_message}, [{source, Source},
 									   			{destination, Destination},
 								   				{id, Id}]),
+    io:format("~p Sending Msg ~p to ~p~n", [Name, Id,Destination]),
+	R = 100*rand:uniform(50),
+	receive
+		stop->ok
+	after R ->
+    	rpc:cast(Destination, stubNode, receivedDataMsg, [Source, Destination,Id])
+	end,
+
 
     {noreply, State};
 
@@ -177,18 +242,19 @@ handle_cast({state, Medium_mode}, State = #state{name = Name}) ->
 
 
 
-handle_cast({deleteTable}, State = #state{name = Name}) -> 
+handle_cast({reset_node}, State = #state{name = Name}) -> 
 	io:format("~n~p deleting Table!~n~n",[Name]),
     {noreply, State};
 
 
-handle_cast({sendMSG, To,Msg}, State = #state{name = Name}) -> 
+handle_cast({initiate_transaction, To,Msg}, State = #state{name = Name}) -> 
 	io:format("~p sending Msg: ~p, TO: ~p~n",[Name, Msg,To]),
     {noreply, State};
 
 handle_cast({addRoute, Node, Medium}, State = #state{name = Name, routing_set = Routing_set}) -> 
 	io:format("Adding: ~p, with: ~p~n",[Node, Medium]),
-	NewRS = [#routing_set_entry{dest_addr = Node, next_addr = Node, medium = Medium}|Routing_set],
+	
+	NewRS = [{{destination, Node}, {next_address, Node}, {medium, Medium}}|Routing_set],
     {noreply, State#state{routing_set = NewRS}};
 
 

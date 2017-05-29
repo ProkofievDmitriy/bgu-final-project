@@ -314,20 +314,20 @@ io:format("~n~nAAA - ~p~n~n",[L]),
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
 
-                    rpc:cast(SelectedNode, stubNode, deleteTable, []),
+                    rpc:cast(SelectedNode, stubNode, reset_node, []),
 
                     {noreply,State};
                     %{initiate_transaction, [{destination, Destination}]]
         ButtonSendMSG ->
                     io:format("buttonSendMSG~n"),
 
-                    rpc:cast(SelectedNode, stubNode, sendMsg, [wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
+                    rpc:cast(SelectedNode, stubNode, initiate_transaction, [SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
                     wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonSendConfig ->
                     [_,PLC,_,RF] = State#state.configButtons,
                     {P,R} = checkRadio(PLC,RF),
-                    rpc:cast(SelectedNode, stubNode, chageState, [P,R]),
+                    rpc:cast(SelectedNode, stubNode, update_configuration, [SelectedNode, {P,R}]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
         ButtonExport ->
@@ -424,18 +424,20 @@ handle_cast(_A, State) ->
 %%--------------------------------------------------------------------
 
 handle_info(timer, State) ->
-  io:format("loadNG: timer~n"),
+ % io:format("loadNG: timer~n"),
   stats_server:stats_request(self()),
   erlang:send_after(1000,self(),timer),
   {noreply, State};
 
-handle_info(Counters = #counters{}, State) ->
+handle_info({Counters = #counters{}, Avg}, State) ->
   io:format("loadNG: Got State Update~p~n",[Counters]),
   wxStaticText:setLabel(State#state.counters,
                 "numberOfManagementMsgSent = " ++ integer_to_list(Counters#counters.numberOfManagementMsgSent) ++
                 "\nnumberOfManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\numberOfDataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
-                "\numberOfDataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived)),
+                "\numberOfDataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
+                "\nAverage time: " ++ float_to_list(Avg)
+                ),
   {noreply, State};
 handle_info(_, State) ->
 	io:format("handle_info _Event~n"),
@@ -567,8 +569,15 @@ ok;
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, 0},_, _}|RoutingSet]) ->
 	draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
+<<<<<<< Updated upstream
 
     AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
+=======
+    
+    AtomNode = Node,
+    %AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
+
+>>>>>>> Stashed changes
     io:format("draw_routsB N: ~p~n~n",[AtomNode]),
 
     [{AtomNode,{_NodeNumber, NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
@@ -577,13 +586,20 @@ draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_add
     draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
 
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
-    AtomNode1 = list_to_atom("node_" ++ integer_to_list(Node1)),
+    
+    AtomNode1 = Node1,  % = list_to_atom("node_" ++ integer_to_list(Node1)),
         io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
 
     [{AtomNode1,{_NodeNumber, Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
+<<<<<<< Updated upstream
 
     AtomNode2 = list_to_atom("node_" ++ integer_to_list(Node2)),
 
+=======
+    
+    AtomNode2 = Node2,% = list_to_atom("node_" ++ integer_to_list(Node2)),
+    
+>>>>>>> Stashed changes
     [{AtomNode2,{_NodeNumber2, Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
 
     draw_route(DC, Location1,Location2, 0),

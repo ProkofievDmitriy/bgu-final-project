@@ -46,7 +46,7 @@
 
 -record(counters, {numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
 
--record(state, {counters, nodes_list, db ,file_version}).
+-record(state, {counters, nodes_list, db, dm_ets, file_version}).
 %-record(event, {type, time, from, to, key, data}).
 
 %%%===================================================================
@@ -77,7 +77,7 @@ stop() ->
   gen_server:cast({global, ?STATS_SERVER}, stop).
 
 export() -> 
-  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
+  gen_server:cast({global, ?STATS_SERVER}, {export_db, stringTime(calendar:local_time())}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -100,31 +100,17 @@ export() ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-    io:format("initiating server~n"),
-
-    %%Messages_DB = init_db(management),
-    %%Current_File_Version = get_file_version(),
-    %%Node_DB = get_nodes_id_from_file(Current_File_Version),
+  io:format("initiating server~n"),
 
   A = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]),
-  
+  DM_ets = ets:new(data_messages, [duplicate_bag]),
   io:format("dets: ~p~n",[A]),
   {ok,DB} = A,
   dets:insert(DB, {0, { yalla_maccabi} }),
 
-	%%PRO_DB = init_db(protocol),
-    %%MANAGMENT_DB = init_db(management),
-    %%Current_File_Version = get_file_version(),
-    %%Node_ETS = get_nodes_id_from_file(Current_File_Version),
-    
+  Counters = #counters{numberOfManagementMsgSent = 0, numberOfManagementMsgReceived = 0, numberOfDataMsgSent = 0, numberOfDataMsgReceived = 0},
 
-    Counters = #counters{numberOfManagementMsgSent = 0, numberOfManagementMsgReceived = 0, numberOfDataMsgSent = 0, numberOfDataMsgReceived = 0},
-    %%print_nodes_list(Node_ETS),
-    %%Self = self(),
-    %%net_kernel:monitor_nodes(true),
-    %%erlang:send_after(1000,self(),timer),
-
-    {ok, #state{counters = Counters, nodes_list = 0, db = DB}}.
+  {ok, #state{counters = Counters, nodes_list = 0, db = DB, dm_ets = DM_ets}}.
 
 
 
@@ -196,9 +182,9 @@ handle_cast({{management_message, received_message}, Data}, State = #state{db = 
   Destination = proplists:get_value(destination, Data),
   Type = proplists:get_value(type, Data),
 
-  dets:insert(DB, {UTIME, management_message, received_message,Source,Destination}),
+  dets:insert(DB, {UTIME, management_message, received_message,Source,Destination,Type}),
   NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
-  io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
+%  io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgReceived = NumberOfManagementMsgReceived + 1}}};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -213,9 +199,9 @@ handle_cast({{management_message, send_message}, Data}, State = #state{db = DB, 
   Destination = proplists:get_value(destination, Data),
   Type = proplists:get_value(type, Data),
 
-  dets:insert(DB, {UTIME, management_message, sent_message,Source,Destination}),
+  dets:insert(DB, {UTIME, management_message, sent_message,Source,Destination,Type}),
   NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
-  io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
+ % io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgSent = NumberOfManagementMsgSent + 1}}};
 
 %%--------------------------------------------------------------------
@@ -223,7 +209,7 @@ handle_cast({{management_message, send_message}, Data}, State = #state{db = DB, 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has received a data message addressed for him  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, received_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{data_message, received_message}, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
   
   UTIME = proplists:get_value(utime, Data),
   Source = proplists:get_value(source, Data),
@@ -232,14 +218,20 @@ handle_cast({{data_message, received_message}, Data}, State = #state{db = DB, co
 
   NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
   dets:insert(DB, {UTIME, data_message, received_message,Source,Destination, Id}),
+  
+  [{Id,{OldUTIME,nr}}] = ets:lookup(DM_ets,Id),
 
-	io:format("stats_server got report about: Incoming data msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
+  ets:delete(DM_ets,Id),
+  ets:insert(DM_ets,{res,{Id,UTIME - OldUTIME}}),
+ 
+	io:format("stats_server got report about: Incoming data msg from ~p to ~p at ~p sent at ~p~n",[Source,Destination, UTIME,OldUTIME]),
+
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = NumberOfDataMsgReceived + 1}}};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a data message  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, send_message}, Data}, State = #state{db = DB, counters = Counters}) ->
+handle_cast({{data_message, send_message}, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
 
   UTIME = proplists:get_value(utime, Data),
   Source = proplists:get_value(source, Data),
@@ -249,14 +241,20 @@ handle_cast({{data_message, send_message}, Data}, State = #state{db = DB, counte
 	NumberOfDataMsgSent = Counters#counters.numberOfDataMsgSent,
   dets:insert(DB, {UTIME, data_message, sent_message,Source,Destination, Id}),
 
+  ets:insert(DM_ets,{Id,{UTIME, nr}}),
+
+
 	io:format("stats_server got report about: Sent data msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = NumberOfDataMsgSent + 1}}};
 
 
 
 handle_cast({states, From}, State) ->
-    io:format("stats_server: Requesting Stats~n"),
-    From!State#state.counters,
+    %io:format("stats_server: Requesting Stats~n"),
+    Avg = avrageTime(State#state.dm_ets),
+        io:format("Stats avg: ~p~n",[Avg]),
+
+    From!{State#state.counters,Avg},
     {noreply, State};
 
 
@@ -282,24 +280,21 @@ handle_cast({printStats}, State = #state{counters=Counters}) ->
 	io:format("numberOfManagementMsgSent: ~p~n",[Counters#counters.numberOfManagementMsgSent]),
 	io:format("numberOfManagementMsgReviced: ~p~n~n",[Counters#counters.numberOfManagementMsgReceived]),
 
-	{noreply,State};
+{noreply,State};
 
 
 
 %%  ------------------------------------------------------------------
 %%	----      Export database to file at end of the day  ----------
 %%  ------------------------------------------------------------------
-handle_cast({export_db, Last_Date}, State = #state{db = DB}) -> 
-    io:format("stats_server got cast with export_db:~p~n", [Last_Date]),
-  
-    ETS = ets:new(temp, [ordered_set]),
-    io:format("db:handle_cast:export_db: ETS is:~p~n", [ETS]),
-    ETS = dets:to_ets(DB,ETS),
-    io:format("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%~n"),
-    export_db(ETS, "ExportDB" ++ isg_time:timeStamp_to_Time(isg_time:now_now()) ++".txt"),
-    dets:delete_all_objects(DB),
-    ets:delete(ETS),
-  {noreply, State};
+handle_cast({export_db, Time}, State = #state{db = DB}) -> 
+    io:format("stats_server got cast with export_db~n"),
+    A = dets:close(DB),
+
+    B = file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ "Last_Date"),
+    io:format("RES: A ~p~nB: ~p~n",[A,B]),
+    {ok,NewDB} = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ Time ++ ".db"}]),
+  {noreply, State#state{db = NewDB}};
 
 
 
@@ -404,52 +399,16 @@ loop(DB, Last_Date) ->
 %%%===================================================================
 
 
-
-
+stringTime({{YY,MM,DD},{HH,MO,_}}) ->
+  "DB" ++ integer_to_list(HH) ++ ": " ++ integer_to_list(MO) ++ "-" ++ 
+  integer_to_list(DD) ++ "." ++ integer_to_list(MM) ++ "." ++ integer_to_list(YY).
 
 export_db(DB, File_Name) -> 
-  
-  A = file:open( ?LOG_DIR ++ File_Name, [write]),
-  io:format("A: ~p~nFile_Name: ~p~n",[A, File_Name]),
-  case A of
-    {ok, FD} -> io:format("db:opened file~n"),copy_db_to_file2(DB, ets:first(DB), FD),
-        %copy_db_to_file(DB, dets:first(DB), FD),
-        file:close(FD),
+  dets:close(DB),
 
-        io:format("db: copied to file successfully.~n");
-    {error,enoent} -> io:format("%%%%%%%******couldnt open file because of error ~p. file name is:~p.~n", [A, File_Name]);
-    {error,badarg} -> file:open( ?LOG_DIR ++ File_Name, write), export_db(DB, File_Name);
-    Else -> io:format("db:export_db: got Els:~p~n", [Else])
-  end.
-  
-  
-copy_db_to_file2(_DB, '$end_of_table', _FD) -> ok;
-copy_db_to_file2( DB, Key, FD) ->
-  
-  [A] = ets:lookup(DB, Key),
-  case A of
-    {UTIME, management_message, received_message,Source,Destination, Type} ->
-      STR = Destination ++ "Received Management Event Event At: " ++ isg_time:timeStamp_to_Time(UTIME) ++
-            " From: " ++ Source ++ " Type: " ++ Type;
-    {UTIME, management_message, sent_message,Source,Destination, Type} ->
-      STR = Destination ++ "Received Management Event Event At: " ++ isg_time:timeStamp_to_Time(UTIME) ++
-            " From: " ++ Source ++ " Type: " ++ Type;
-    {UTIME, data_message, received_message, _Source, _Destination, _Id} ->
-      STR = "Event Key: " ++ integer_to_list(UTIME);
-    {UTIME, data_message, sent_message, _Source, _Destination, _Id} ->
-      STR = "Event Key: " ++ integer_to_list(UTIME);
-            
-    Else -> io:format("db:copoy_db_to_file: ets:lookup got elst:~p~n", [Else]), UTIME = 0,  STR = ""
-  end,
-  
-  LOG_STR =  integer_to_list(Key) ++ ")" ++ isg_time:timeStamp_to_Time(UTIME) ++"," ++ STR ++ "\n",
-  _Ans = file:write(FD, LOG_STR),
-  %try next log, if fails, try next one
-  try
-  copy_db_to_file2(DB, ets:next(DB, Key), FD)
-  catch
-  _:_ -> copy_db_to_file2(DB, ets:next(DB, ets:next(DB, Key) ), FD )
-  end.
+
+  dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]).
+
 
   
 
@@ -457,3 +416,14 @@ copy_db_to_file2( DB, Key, FD) ->
 %%% Nodes table ets functions
 %%%===================================================================
 
+avrageTime(DB) ->
+  A = ets:lookup(DB,res),
+  average(A, 0, 0).
+
+
+average([], _, 0) -> 0.0; 
+average([], Sum, Number) -> 
+  Sum/Number;
+average([{res,{Id,Time}}|B], Sum, Number) ->
+  io:format("Id: ~p Time: ~p Number: ~p~n",[Id, Time, Number]),
+  average(B, Sum + Time, Number + 1).

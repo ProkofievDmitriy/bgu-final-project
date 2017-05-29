@@ -21,82 +21,48 @@
 -record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time, valid}).
 
 %% Client API
--export([start/0, stop_all/1]).
+-export([openPrint/1, start/0, copy/1]).
 -compile(export_all).
+
+
+-define( LOG_DIR,"./logger/").
+-define( TEMP_DETS_FILE_DIR, ?LOG_DIR).
+-define( TEMP_DETS_FILE, "temp_dets").
+%% API
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+time()->
+%isg_time:now_now().
+calander:now_to_local_time(os:system_time()).
+
+
+
 start() ->
-    net_kernel:connect_node('G@127.0.0.1'),
-    P1 = start_node(node_1),
-    receive after 50-> ok end,
-    P2 = start_node(node_2),
-    receive after 50-> ok end,
-    P3 = start_node(node_3),
-    receive after 50-> ok end,
-    P4 = start_node(node_4),
-    receive after 1000-> ok end,
-    P1!plc,
-    P2!rf,
-    P3!plc_rf,
-    P4!plc_rf,
+    {ok,DB} = dets:open_file(det,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"},{type,duplicate_bag}]),
+    dets:insert(DB,{aaa,aaa}),
+    dets:insert(DB,{bbb,aaa1}),
+    dets:insert(DB,{bbb,aaa2}),
+    printDets(DB, dets:first(DB)),
+    dets:close(DB).
 
-    receive after 1000-> ok end,
-    P1! {routinSet,[
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2},
-            #routing_set_entry{dest_addr = 4, next_addr = 2, medium = 2}
-            ]},
-    P2! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 1},
-            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 1},
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 1}
+printDets(_,'$end_of_table') -> ok;
+printDets(DB,Key) -> 
+    A = dets:lookup(DB,Key),
+    print(A),
+    printDets(DB, dets:next(DB,Key)).
 
-            ]},
-    P3! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 4, medium = 2},
-            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1},
-            #routing_set_entry{dest_addr = 4, next_addr = 4, medium = 2}
+print([]) ->ok;
+print([A|R])->io:format("DB: ~p~n",[A]),
+            print(R).
 
-            ]},
-    P4! {routinSet,[
-            #routing_set_entry{dest_addr = 1, next_addr = 1, medium = 2},
-            #routing_set_entry{dest_addr = 2, next_addr = 2, medium = 1},
-            #routing_set_entry{dest_addr = 3, next_addr = 3, medium = 2}
+openPrint(Filename)->
+    {ok,DB} = dets:open_file(det,[{file, ?TEMP_DETS_FILE_DIR ++ Filename}]),
+    printDets(DB, dets:first(DB)),
+    dets:close(DB).
 
-            ]},
-    [P1,P2,P3,P4].
-
-stop_all([]) -> ok;
-stop_all([P|List])->
-    P!stop,
-    stop_all(List).
-
-start_node(Node)->
-    %N = atom_to_list(Node),
-    stats_server_interface:node_is_up(Node,[{medium_mode,{0,0}},{routing_set,[]}]),
-
-    Pid = spawn(fun() -> run_node(Node,0,0,[]) end),
-
-
-    Pid. 
-
-%% {otherNode,plc/rf/{nei,thru}}
-run_node(Node,PLC,RF,RoutingSet)->
-    io:format("~p sending, PLC: ~p, RF: ~p RoutingSet: ~p~n", [Node,PLC,RF,RoutingSet]),
-    stats_server_interface:node_is_up(Node,[{medium_mode,{PLC,RF}},{routing_set,RoutingSet}]),
-
-    receive 
-        stop -> ok;
-        plc_rf -> run_node(Node,1,1,RoutingSet);
-        rf -> run_node(Node,0,1,RoutingSet);
-        plc -> run_node(Node,1,0,RoutingSet);
-        no -> run_node(Node,0,0,RoutingSet);
-        {routinSet,NewRoutingSet} -> run_node(Node,PLC,RF,NewRoutingSet)
-
-
-    after 1000->
-        run_node(Node,PLC,RF,RoutingSet)
-    end.
+copy(A)->
+    file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ A).
 
