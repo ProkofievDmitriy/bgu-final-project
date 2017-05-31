@@ -48,8 +48,54 @@ export() ->
 
 
 %**************************************************************************************
-%**********************   	 Stats Server  			    *******************************
+%**********************   	 From node  			    *******************************
 %**************************************************************************************
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%	reports type:
+%%	Message: {Type, Data}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%	Type: node_state
+%%			{node_state,
+%%				[{node_name,node_##},
+%%				{routing_set,
+%%					[{{destination,#},{next_address,#},{medium,1/2}},...]},
+%%				{medium_mode,plc_only/rf_only/dual}]}
+%%			This report will update the current state of the node in the server.
+%%			routing_set should contain a list of all of the nodes neighbors.
+%%				destination - final destination
+%%				next_address - the closest neighbor
+%%				medium - on which medium this transaction take place 1 - plc 2 - rf
+%%			medium_mode should state the mode the node is in.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%	Type: node_is_down
+%%			{node_is_down,DownNode}
+%%				Tell the server this node is down and no longer running, and it should remove it.
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%	Message to stats server:
+%%
+%%	Type: {management_message, sent_message}
+%%		Report a management message was sent on node.
+%%	Data:
+%%			[{source,Source}, {destination, Destination}, {type, Type}]
+%%
+%%	Type: {management_message, received_message}
+%%		Report a management message was received on node.
+%%	Data:
+%%			[{source,Source}, {destination, Destination}, {type, Type}]
+%%
+%%	Type: {data_message, sent_message}
+%%		Report a data message was sent on node.
+%%	Data:
+%%			[{source,Source}, {destination, Destination}, {id, Id}]
+%%
+%%	Type: {data_message, received_message}
+%%		Report a data message was received on node.
+%%	Data:
+%%			[{source,Source}, {destination, Destination}, {id, Id}]
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 report(Message) ->
 	{Type, ReportData} = Message,
     report(Type, ReportData).
@@ -74,9 +120,9 @@ report(Type, Data) ->
 % 	UTIME = isg_time:now_now(),
 % 	io:format("Sending to stats_server report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 %
-% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, }%}%},
+% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message},
 % 											   [{utime, UTIME},
-% 											   {source, Source},anagement_message, received_mess
+% 											   {source, Source},
 % 											   {destination, Destination},
 % 											   {message_type, Type}]
 % 										   }).
@@ -90,7 +136,7 @@ report(Type, Data) ->
 % 	%UTIME = erlang:monotonic_time(),
 % 	io:format("Sending to stats_server report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 %
-% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message}, [UTIME, Source, Destination, Type]}).
+% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message}, [{utime,UTIME}, {source,Source}, {destination, Destination}, {type, Type}]}).
 %
 %
 %
@@ -102,7 +148,7 @@ report(Type, Data) ->
 % 	%UTIME = erlang:monotonic_time(),
 % 	io:format("Sending to stats_server report about: Incoming msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 %
-% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, received_message}, [UTIME, Source, Destination, Id]}).
+% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, received_message}, [{utime,UTIME}, {source,Source}, {destination, Destination}, {id, Id}]}).
 %
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % %%  A node has Sent a data message  %%
@@ -112,7 +158,7 @@ report(Type, Data) ->
 % 	%UTIME = erlang:monotonic_time(),
 % 	io:format("Sending to stats_server report about: Sent msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 %
-% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, sent_message}, [UTIME, Source, Destination, Id]}).
+% 	gen_server:cast({global, ?STATS_SERVER}, {{data_message, sent_message}, [{utime,UTIME}, {source,Source}, {destination, Destination}, {id, Id}]}).
 %
 %
 

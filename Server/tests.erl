@@ -66,3 +66,6 @@ openPrint(Filename)->
 copy(A)->
     file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ A).
 
+tes()->io:format("AAAA~n"),
+A = btests:tes(),
+io:format("CCCC - ~p~n",[A]).

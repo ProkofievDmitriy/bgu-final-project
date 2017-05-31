@@ -6,7 +6,7 @@
 
 -export([start/0, stop/0, simulate/0, simulate_rand/0]).
 
--export([update_configuration/2, initiate_transaction/3, reset_node/1, addRoute/2, receivedMangMsg/3, receivedDataMsg/3]).
+-export([update_configuration/2, initiate_transaction/3, reset_node/1, receivedMangMsg/3, receivedDataMsg/3]).
 -record(state, {name, medium_mode, routing_set}).
 
 %% gen_server callbacks
@@ -45,15 +45,17 @@ simulate()->
 	receive after 5000 -> ok end,
 	io:format("Starting simulation~n"),
 	case Name of
-		'N1@127.0.0.1' ->
-			update_configuration('N1@127.0.0.1', rf_only),
-			addRoute('N2@127.0.0.1', 1),
+		'node_1@127.0.0.1' ->
+			update_configuration('node_1@127.0.0.1', rf_only),
+			%addRoute('node_2@127.0.0.1', 1),
+			addRoute(3,2, 1),
 			spawn(fun() -> run_simulate_a(0) end);
-		'N2@127.0.0.1' ->update_configuration('N2@127.0.0.1', dual),
-			addRoute('N1@127.0.0.1', 1),
-			addRoute('N3@127.0.0.1', 2);
-		'N3@127.0.0.1' -> update_configuration('N3@127.0.0.1', plc_only),
-			addRoute('N2@127.0.0.1', 2),
+		'node_2@127.0.0.1' ->update_configuration('node_2@127.0.0.1', dual),
+			addRoute(3,3, 1);
+			%addRoute('node_1@127.0.0.1', 1),
+			%addRoute('node_3@127.0.0.1', 2);
+		'node_3@127.0.0.1' -> update_configuration('node_3@127.0.0.1', plc_only),
+			%addRoute('node_2@127.0.0.1', 2),
 			spawn(fun run_simulate_c/0)
 	end.
 	
@@ -62,7 +64,7 @@ run_simulate_a(Id) ->
 	receive
 		stop->ok
 	after 5000 ->
-		sendDataMsg('N3@127.0.0.1','N2@127.0.0.1',Id),
+		sendDataMsg(3,2,Id),
 		run_simulate_a(Id+1)
 	end.
 
@@ -71,7 +73,7 @@ run_simulate_c() ->
 	receive
 		stop->ok
 	after 5000 ->
-		sendMangMsg('N3@127.0.0.1','N2@127.0.0.1',type_a),
+		sendMangMsg('node_3@127.0.0.1','node_2@127.0.0.1',type_a),
 		run_simulate_c()
 	end.
 
@@ -84,14 +86,19 @@ simulate_rand() ->
 	receive after 5000 -> ok end,
 	io:format("Starting simulation~n"),
 	case Name of
-		'N1@127.0.0.1' ->
-			update_configuration('N1@127.0.0.1', rf_only),
-			addRoute('N2@127.0.0.1', 1);
-		'N2@127.0.0.1' ->update_configuration('N2@127.0.0.1', dual),
-			addRoute('N1@127.0.0.1', 1),
-			addRoute('N3@127.0.0.1', 2);
-		'N3@127.0.0.1' -> update_configuration('N3@127.0.0.1', plc_only),
-			addRoute('N2@127.0.0.1', 2)
+		'node_1@127.0.0.1' ->
+			update_configuration('node_1@127.0.0.1', rf_only),
+			addRoute(3,2, 1);
+
+			%addRoute('node_2@127.0.0.1', 1);
+		'node_2@127.0.0.1' ->update_configuration('N2@127.0.0.1', dual),
+			addRoute(3,3, 1);
+
+			%addRoute('node_1@127.0.0.1', 1),
+			%addRoute('node_3@127.0.0.1', 2);
+		'node_3@127.0.0.1' -> update_configuration('node_3@127.0.0.1', plc_only)%,
+			
+			%addRoute('node_2@127.0.0.1', 2)
 	end,
 	spawn(fun run_simulate_rand/0).
 
@@ -110,9 +117,9 @@ run_simulate_rand() ->
 		run_simulate_rand()
 	end.
 
-addRoute(Node, Medium)->
-	io:format("Add route to ~p, with: ~p~n",[Node,Medium]),
-	gen_server:cast(?MODULE, {addRoute, Node, Medium}).
+addRoute(Dest, Next, Medium)->
+	io:format("Add route Dest ~p, Next ~p, with: ~p~n",[Dest, Next,Medium]),
+	gen_server:cast(?MODULE, {addRoute, Dest, Next, Medium}).
 
 
 
@@ -157,7 +164,7 @@ start_link(Name) ->
     gen_server:start_link({local,?MODULE}, ?MODULE, [Name], []).
 
 start() ->
-	net_kernel:connect('stats_server@127.0.0.1'),
+	net_kernel:connect('stats_server@192.168.1.19'),
 	Name = node(),
 	io:format("AStarting ~p~n",[Name]),
 	
@@ -251,10 +258,10 @@ handle_cast({initiate_transaction, To,Msg}, State = #state{name = Name}) ->
 	io:format("~p sending Msg: ~p, TO: ~p~n",[Name, Msg,To]),
     {noreply, State};
 
-handle_cast({addRoute, Node, Medium}, State = #state{name = Name, routing_set = Routing_set}) -> 
-	io:format("Adding: ~p, with: ~p~n",[Node, Medium]),
+handle_cast({addRoute, Dest,Next, Medium}, State = #state{name = Name, routing_set = Routing_set}) -> 
+	io:format("Adding: Dest: ~p, Next: ~p, with: ~p~n",[Dest, Next, Medium]),
 	
-	NewRS = [{{destination, Node}, {next_address, Node}, {medium, Medium}}|Routing_set],
+	NewRS = [{{destination, Dest}, {next_address, Next}, {medium, Medium}}|Routing_set],
     {noreply, State#state{routing_set = NewRS}};
 
 
