@@ -5,8 +5,10 @@
 -define(SERVER, ?MODULE).
 -define(X_SIZE, 1080).
 -define(Y_SIZE, 680).
+-define( LOG_DIR,"./logger/").
 
--export([a/0,start/0, init/1, terminate/2,  code_change/3,
+
+-export([start/0, init/1, terminate/2,  code_change/3,
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]).
 
 -record(state,
@@ -21,15 +23,6 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
 -record(counters, {numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
 
 
-
-
--define( LOG_DIR,"./logger/").
-
-
-a()->
-    File_Name =  "ExportDB" ++ isg_time:timeStamp_to_Time(isg_time:now_now()) ++".txt",
-    io:format("A -~p~n",[File_Name]),
-    A = file:open( ?LOG_DIR ++ File_Name, [write]).
 
 
 
@@ -54,11 +47,8 @@ init(WxServer) ->
 
 
     NodesEts = ets:new(nodesEts,[set,named_table]),
-    MapEts = ets:new(mapEts,[set,named_table]),
+    MapEts = ets:new(mapEts,[set,named_table]),  % {NodeNameAtom,{NodeNumber, Location, Medium ,RoutingSet}}
 	io:format("init 1 ~n"),
-
-
-
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%                          GUI Setup:                          %%
@@ -256,8 +246,30 @@ handle_sync_event(_Event,_,State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Handling events
+%% Handling WX events
+%%  
+%%      event command_listbox_selected:
+%%            user selected a new node to represent on map and settings
+%%              SelectedNode is updated to new node.
+%%              Map is updated to show new node view.
+%%              
 %%
+%%      event command_button_clicked:
+%%            user clicked a button
+%%
+%%              UpdateLocation button: 
+%%                  move SelectedNode to new location on the map
+%%              ButtonFullMap button:
+%%                  Show the all routes known.
+%%              ButtonDeleteTable button:
+%%                  Make SelectedNode reset itself.
+%%              ButtonSendMSG button:
+%%                  Make SelectedNode send a message.
+%%              ButtonSendConfig button:
+%%                  Update SelectedNode configurations.
+%%              ButtonExport button: 
+%%                  Make stats_server export its data now.
+%%  
 %% @end
 %%--------------------------------------------------------------------
 
@@ -303,10 +315,10 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
             io:format("Showing full map~n"),
             DC = wxWindowDC:new(State#state.canvas),
             wxDC:clear(DC),
-            draw_circles(DC,ets:first(State#state.nodesEts), State#state.nodesEts),
+            draw_circle(DC,ets:first(State#state.nodesEts), State#state.nodesEts),
             switch_to_full_map(DC, ets:first(State#state.mapEts), State#state.mapEts, State#state.nodesEts),
-{_,L} = wxListBox:getSelections(State#state.nodeChoice),
-io:format("~n~nAAA - ~p~n~n",[L]),
+            {_,L} = wxListBox:getSelections(State#state.nodeChoice),
+            io:format("~n~nAAA - ~p~n~n",[L]),
             lists:map(fun (X) -> wxListBox:deselect(State#state.nodeChoice,X) end,L),
 
 
@@ -314,20 +326,23 @@ io:format("~n~nAAA - ~p~n~n",[L]),
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
 
-                    rpc:cast(SelectedNode, stubNode, reset_node, []),
-
+                    %rpc:cast(SelectedNode, node_control_interface, reset_node, [SelectedNode]),
+                    node_control_interface:reset_node(SelectedNode),
+                    
                     {noreply,State};
                     %{initiate_transaction, [{destination, Destination}]]
         ButtonSendMSG ->
                     io:format("buttonSendMSG~n"),
 
-                    rpc:cast(SelectedNode, stubNode, initiate_transaction, [SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
+                    %rpc:cast(SelectedNode, stubNode, initiate_transaction, [SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
+                    node_control_interface:initiate_transaction(SelectedNode, Destination, State#state.txtMsgSend),
                     wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonSendConfig ->
-                    [_,PLC,_,RF] = State#state.configButtons,
-                    {P,R} = checkRadio(PLC,RF),
-                    rpc:cast(SelectedNode, stubNode, update_configuration, [SelectedNode, {P,R}]),
+                    %[_,PLC,_,RF] = State#state.configButtons,
+                    OptionsList = checkRadio(State#state.configButtons),
+                    node_control_interface:update_configuration(SelectedNode, OptionsList),
+                    %rpc:cast(SelectedNode, stubNode, update_configuration, [SelectedNode, {P,R}]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
         ButtonExport ->
@@ -350,16 +365,19 @@ handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"
 %% @private
 %% @doc
 %% Handling cast messages
-%%
+%%      {node_state,Data}:
+%%          node new state, Data contains name of node, routing set of node and medium mode.
+%%      
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, numberOfNodes = NumberOfNodes, cmbTo = CmbTo}) ->
 
-%%{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
-    io:format ("loadNggui: node_state~nData - ~p~n",[Data]),
+    %%Data:{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
+  %  io:format ("loadNggui: node_state Data - ~p~n",[Data]),
+  %  io:format ("loadNggui: node_state Data~n"),
 
     NodeNameAtom = proplists:get_value(node_name, Data),
-    NodeName = atom_to_list(NodeNameAtom),
+    NodeNameList = atom_to_list(NodeNameAtom),
 
 
 
@@ -367,29 +385,30 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, numberOfN
 	MediumMode = proplists:get_value(medium_mode, Data),
 
 	% Update radio buttons status:
-
     io:format ("MediumMode - ~p~n",[MediumMode]),
 	Mode = case MediumMode of
-		plc_only -> {1,0};
-		rf_only -> {0,1};
-		dual -> {1,1};
-	 	idle -> {0,0};
+        plc_only -> {1,0};
+        rf_only -> {0,1};
+        dual -> {1,1};
+        idle -> {0,0};
         {Plc,Rf} -> {Plc,Rf}
-     end,
-	Res = ets:lookup(State#state.nodesEts,NodeNameAtom),
+    end,
+
+    % look the current state of this node:
+    Res = ets:lookup(State#state.nodesEts,NodeNameAtom),
 	case Res of
-		[] ->
-			io:format("loadNGgui.erl: new_node_is_up: ID=~p Res: ~p~n",[NodeName,Res]),
+		[] -> % no such node exists, create node on server
+			io:format("loadNGgui.erl: new_node_is_up: ID=~p~n",[NodeNameList]),
 		    %wxTextCtrl:appendText(Log, "New node is up ID: " ++ NodeName ++"\n"),
-		    wxListBox:insertItems(NodeChoice,[NodeName],0),
-            wxComboBox:append(CmbTo, NodeName),
+		    wxListBox:insertItems(NodeChoice,[NodeNameList],0),
+            wxComboBox:append(CmbTo, NodeNameList),
 
 		    ets:insert(State#state.nodesEts,{NodeNameAtom,{NumberOfNodes+1, {rand:uniform(500),rand:uniform(500)}, Mode,RoutingSet}}),
             update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
 
 		    {noreply, State#state{numberOfNodes = NumberOfNodes + 1 }};
 		[{NodeNameAtom,{NodeNumber, Location, _,_}}] ->
-			io:format("loadNGgui.erl: node updated: ID=~p Res:~p~n",[NodeNameAtom,Res]),
+			io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
 			%wxTextCtrl:appendText(Log, "Node ID: " ++ NodeName ++" updated\n"),
 			ets:insert(State#state.nodesEts,{NodeNameAtom,{NodeNumber, Location, Mode,RoutingSet}}),
             update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
@@ -507,9 +526,24 @@ update_map_ets(MapEts, Node, [#routing_set_entry{dest_addr = NextNodeAtom, next_
 
     ets:insert(MapEts,{{Node,NextNodeAtom},{Medium}}),
     update_map_ets(MapEts, Node, NodeRoutingMap);
-update_map_ets(MapEts, Node, [_|NodeRoutingMap])->
-    update_map_ets(MapEts, Node, NodeRoutingMap).
 
+update_map_ets(MapEts, Node, [{{destination,0},{next_address,0},{medium,_}}|NodeRoutingMap])->
+
+    update_map_ets(MapEts, Node, NodeRoutingMap);
+
+
+update_map_ets(MapEts, Node, [{{destination,DestNode},{next_address,NextNode},{medium,Medium}}|NodeRoutingMap])->
+    NextNodeAtom = makeAtom(NextNode),
+    DestNodeAtom = makeAtom(DestNode),
+    ets:insert(MapEts,{{Node,NextNodeAtom},{Medium}}),
+    ets:insert(MapEts,{{NextNodeAtom,DestNodeAtom},{0}}),
+
+    update_map_ets(MapEts, Node, NodeRoutingMap);
+
+update_map_ets(MapEts, Node, [A|NodeRoutingMap])->
+io:format("\n\n\n\n******************************************************\nupdate_map_ets:~p~n************************************\n\n\n",[A]),
+    update_map_ets(MapEts, Node, NodeRoutingMap).
+    
 
 
 %%%%
@@ -526,29 +560,33 @@ switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
     switch_to_full_map(DC, ets:next(MapEts,MapEtsKey), MapEts, NodesEts).
 
 
-draw_circles(_,'$end_of_table', _)-> ok;
-draw_circles(DC,Node, NodesEts)->
+draw_circle(_,'$end_of_table', _)-> ok;
+draw_circle(DC,Node, NodesEts)->
     [{Key,{_, {X,Y}, {_PLC,_RF},_RoutingSet}}] = ets:lookup(NodesEts,Node),
     wxDC:drawCircle(DC, {X,Y}, 15),
     wxDC:drawLabel(DC,atom_to_list(Key), {X-10,Y-10,X+50,Y+50}),
-
-draw_circles(DC,ets:next(NodesEts,Node), NodesEts).
+draw_circle(DC,ets:next(NodesEts,Node), NodesEts).
 
 
 switch_to_node(_, _,'$end_of_table', _, _) -> ok;
 switch_to_node(DC, Node,Node, NodesEts, {XNodeLocation, YNodeLocation}) ->
+
+    io:format("switch_to_node 2 Node: ~p~n",[Node]),
     [{Node,{_NodeNumber, {X,Y}, {_PLC,_RF},RoutingSet}}] = ets:lookup(NodesEts,Node),
+    
     wxDC:drawCircle(DC, {X,Y}, 15),
     wxTextCtrl:setValue(XNodeLocation, integer_to_list(X)),
     wxTextCtrl:setValue(YNodeLocation, integer_to_list(Y)),
-
 	wxDC:drawLabel(DC,atom_to_list(Node), {X-10,Y-10,X+50,Y+50}),
 
 
     draw_routs(DC, Node, {X,Y},NodesEts,RoutingSet),
+
     switch_to_node(DC, Node,ets:next(NodesEts,Node),NodesEts, {XNodeLocation, YNodeLocation});
 
 switch_to_node(DC, Node,Key, NodesEts, {XNodeLocation, YNodeLocation}) ->
+    io:format("switch_to_node3 Node: ~p Key ~p~n",[Node,Key]),
+
     [{Key,{_NodeNumber, {X,Y}, {_PLC,_RF},_RoutingSet}}] = ets:lookup(NodesEts,Key),
 
     wxDC:drawCircle(DC, {X,Y}, 15),
@@ -569,43 +607,40 @@ ok;
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, 0},_, _}|RoutingSet]) ->
 	draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
-<<<<<<< Updated upstream
 
     AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
-=======
-    
-    AtomNode = Node,
+    %AtomNode = Node,
     %AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
-
->>>>>>> Stashed changes
     io:format("draw_routsB N: ~p~n~n",[AtomNode]),
 
     [{AtomNode,{_NodeNumber, NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
 
     draw_route(DC, Location,NextLocation, Medium),
+
     draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
+
 
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
     
-    AtomNode1 = Node1,  % = list_to_atom("node_" ++ integer_to_list(Node1)),
+    %AtomNode1 = Node1,  % = list_to_atom("node_" ++ integer_to_list(Node1)),
+    AtomNode1 = list_to_atom("node_" ++ integer_to_list(Node1)),
         io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
 
     [{AtomNode1,{_NodeNumber, Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
-<<<<<<< Updated upstream
-
     AtomNode2 = list_to_atom("node_" ++ integer_to_list(Node2)),
-
-=======
+    %AtomNode2 = Node2,% = list_to_atom("node_" ++ integer_to_list(Node2)),
     
-    AtomNode2 = Node2,% = list_to_atom("node_" ++ integer_to_list(Node2)),
-    
->>>>>>> Stashed changes
     [{AtomNode2,{_NodeNumber2, Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
 
+    draw_route(DC, Location,Location2, Medium),
     draw_route(DC, Location1,Location2, 0),
 
     draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet).
 
+
+
+makeAtom(NodeNumber) ->
+    list_to_atom("node_" ++ integer_to_list(NodeNumber)).
 
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
@@ -622,14 +657,11 @@ draw_route(DC, Location1,Location2, Medium) ->
     end,
 
 
-    Pen = wxPen:new({200,200,0,255}),
-    wxPen:setColour(Pen, Colour),
-    wxDC:setBrush(DC, ?wxTRANSPARENT_BRUSH),
+    Pen = wxPen:new(Colour),
     wxDC:setPen(DC, Pen),
-
-
     wxDC:drawLine(DC, Location1, Location2),
-    wxPen:destroy(Pen).
+    %wxPen:destroy(Pen).
+    wxDC:setPen(DC, wxPen:new()).
 
 configButtonUpdate(0,0,[PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
 configButtonUpdate(0,1,[PlcOff,_,_,RfOn])->selectRadio(PlcOff,RfOn);
@@ -638,8 +670,12 @@ configButtonUpdate(1,1,[_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn).
 
 selectRadio(Plc,Rf) -> wxRadioButton:setValue(Plc,true), wxRadioButton:setValue(Rf,true).
 
+checkRadio(0,0) -> idle;
+checkRadio(0,1) -> rf_only;
+checkRadio(1,0) -> plc_only;
+checkRadio(1,1) -> dual;
 checkRadio(Plc,Rf) -> {wxRadioButton:getValue(Plc), wxRadioButton:getValue(Rf)}.
-
+checkRadio([_,PLC,_,RF]) ->checkRadio(wxRadioButton:getValue(Plc), wxRadioButton:getValue(Rf)).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Create Form Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
