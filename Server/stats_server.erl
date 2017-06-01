@@ -44,7 +44,7 @@
   code_change/3]).
 
 
--record(counters, {numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
 
 -record(state, {counters, nodes_list, db, dm_ets, file_version}).
 %-record(event, {type, time, from, to, key, data}).
@@ -108,7 +108,7 @@ init([]) ->
   {ok,DB} = A,
   dets:insert(DB, {0, { yalla_maccabi} }),
 
-  Counters = #counters{numberOfManagementMsgSent = 0, numberOfManagementMsgReceived = 0, numberOfDataMsgSent = 0, numberOfDataMsgReceived = 0},
+  Counters = #counters{numberOfRelayMsg = 0, numberOfManagementMsgSent = 0, numberOfManagementMsgReceived = 0, numberOfDataMsgSent = 0, numberOfDataMsgReceived = 0},
 
   {ok, #state{counters = Counters, nodes_list = 0, db = DB, dm_ets = DM_ets}}.
 
@@ -246,6 +246,23 @@ handle_cast({{data_message, send_message}, Data}, State = #state{dm_ets = DM_ets
 
 	io:format("stats_server got report about: Sent data msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = NumberOfDataMsgSent + 1}}};
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% A node has passed a relay message %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
+
+  UTIME = proplists:get_value(utime, Data),
+  Source = proplists:get_value(source, Data),
+  Destination = proplists:get_value(destination, Data),
+  Id = proplists:get_value(id, Data),
+  Node = proplists:get_value(node, Data),
+
+  NumberOfRelayMsg = Counters#counters.numberOfRelayMsg,
+  dets:insert(DB, {UTIME, relay, Node, Source, Destination, Id}),
+
+  io:format("stats_server got report about: Relay msg from ~p to ~p through ~p at ~p~n",[Source,Destination, Node, UTIME]),
+{noreply, State#state{counters = Counters#counters{numberOfRelayMsg = NumberOfRelayMsg + 1}}};
 
 
 

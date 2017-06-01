@@ -120,7 +120,7 @@ report(Type, Data) ->
 % 	UTIME = isg_time:now_now(),
 % 	io:format("Sending to stats_server report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 %
-% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message},
+% 	gen_server:cast({global, ?STATS_SERVER}, {{management_message, sent_message}%},
 % 											   [{utime, UTIME},
 % 											   {source, Source},
 % 											   {destination, Destination},
