@@ -2,46 +2,58 @@ Meters = [m1,m2,m3,m4,m5,m6,m7,m8,m9,m10].
 
 c(dc).
 
-spawn(dc,start_link,[dc_app,self(),Meters]). 
+spawn(dc,start_link,[dc_node,self(),Meters]). 
 
-dc_app ! ok.
+dc_node_app ! ok.
 
 
 1:
- gen_fsm:send_event(dc_app,{drep,m11,[{m1,1}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m1,1}],0}).
 
 2:
- gen_fsm:send_event(dc_app,{drep,m11,[{m1,1},{m2,2}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m1,1},{m2,2}],0}).
 
 3:
- gen_fsm:send_event(dc_app,{drep,m11,[{m3,3}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3}],0}).
 
 4:
- gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m4,4}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m4,4}],0}).
 
 5:
- gen_fsm:send_event(dc_app,{drep,m11,[{m5,5}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5}],0}).
 
 6:
- gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m6,6}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m6,6}],0}).
 
 7:
- gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m7,7}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7}],0}).
 
 8:
- gen_fsm:send_event(dc_app,{drep,m11,[{m3,3},{m7,7},{m8,8}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7},{m8,8}],0}).
 
 9:
- gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m9,9}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m9,9}],0}).
 
 10:
- gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m9,9},{m10,10}],0}).
+ gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m9,9},{m10,10}],0}).
 
  
  
- gen_fsm:stop(dc_app).
+ gen_fsm:stop(dc_node_app).
+ 
+ ==============================================================
+ 
+
  
  
+ 
+
+
+
+
+
+
+
  
  
  

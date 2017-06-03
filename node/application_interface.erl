@@ -2,14 +2,14 @@
 
 
 -define(PROTOCOL_NAME, protocol).
--define(APPLICATION_NAME, app_name).
+-define(NODE_NAME, node_name).
 -define(APPLICATION_MODULE, application_module) % might be: dc/ am_sem/ sm_sem
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start_link/3,send/2, hand_shake/2, send_data_request/2, send_data_reply/3]).
+-export([start_application/1, handle_call/3, rise_dreq_to_app/2, rise_drep_to_app/2, ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -26,15 +26,27 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 start_application(Meters_list) ->
-   spawn(?APPLICATION_MODULE, start_link,[?APPLICATION_NAME,?PROTOCOL_NAME, Meters_list]).
+   spawn(?APPLICATION_MODULE, start_link,[?NODE_NAME,?PROTOCOL_NAME, Meters_list]).
    
-handle_call({app_handshake, ApplicationPid, App_type}, ?APPLICATION_NAME, State) -> % App_type might be dc or sem
-
-rise_dreq({dreq, Destination, Seq_num}) ->
-	gen_fsm:send_event(?APPLICATION_NAME, {dreq, Destination, Seq_num}).
+handle_call({app_handshake, ApplicationName, App_role}, ApplicationName, State) ->
+ {reply, ok, State};
+ 
+ handle_call({dreq, Destination, Seq_num}, ApplicationName,State) ->
+	send_the_dreq_to_its_destination(),
+	{reply,ok,State};
+	 
 	
-rise_drep({drep, Destination, Data, Seq_num}) ->
-	gen_fsm:send_event(?APPLICATION_NAME, {drep, Destination, Data, Seq_num}).
+handle_call ({drep, Destination, Data, Seq_num}, ApplicationName, State) ->
+	send_the_drep_to_its_destination(),
+	{reply,pk,State}.
+
+rise_dreq_to_app({dreq, Destination, Seq_num}, ApplicationName) -> % use only if Destination == ?NODE_NAME
+	gen_fsm:send_event(ApplicationName, {dreq, Destination, Seq_num}).
+	
+rise_drep_to_app({drep, Destination, Data, Seq_num},ApplicationName) ->
+	gen_fsm:send_event(ApplicationName, {drep, Destination, Data, Seq_num}).
+	
+
 
 
 
