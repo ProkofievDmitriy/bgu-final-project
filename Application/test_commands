@@ -36,7 +36,7 @@ dc_app ! ok.
 
 10:
  gen_fsm:send_event(dc_app,{drep,m11,[{m5,5},{m9,9},{m10,10}],0}).
- 
+
  
  
  gen_fsm:stop(dc_app).
@@ -47,10 +47,11 @@ dc_app ! ok.
  
  accidental bugs:
  - arrival of unexpected sequence number crashee phase2
- - phase 2: when timeout, the merge of rd and nrs contains dups
+
  
  
  unhandeled stuff:
+ - OTP behavior
  - timestamps
  - average number of rounds of phase 1
  - handleinfo
@@ -58,5 +59,5 @@ dc_app ! ok.
  - supervision
  - change drep format in sem module
  
- testes and working:
- - phase 1
+ tested and working:
+ - dc

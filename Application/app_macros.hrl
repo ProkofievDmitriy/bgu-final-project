@@ -24,7 +24,10 @@
 %================================ properties ================================
 
 
+-define(TEST_MODE, local). % local - no OTP behavior | integrated - with OTP behavior
+
 -define(TIMEOUT, 180000).
 -define(HAND_SHAKE_MAX_TRIES,3).
 -define(HAND_SHAKE_TIMEOUT, 30000).
 -define(TERMINATION_TIMEOUT, 3000).
+

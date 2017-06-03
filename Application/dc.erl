@@ -409,8 +409,14 @@ handle_sync_event(_Event, _From, StateName, State) ->
   {next_state, NextStateName :: atom(), NewStateData :: term(),
     timeout() | hibernate} |
   {stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info(_Info, StateName, State) ->
-  {next_state, StateName, State}.
+
+handle_info(Info, StateName, State) ->
+  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~ with data ~p",[self(),Info,StateName,State]),
+    {next_state, StateName, State}.
+
+
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -449,26 +455,32 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 
 hand_shake(Me,My_server,Times) ->
-  My_server! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
-  receive
-    ok -> ready;
-    Err-> case Times of
-                    Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                      log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
-                      hand_shake(Me,My_server,Times+1);
-                    Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                      log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
-                      {terminate, Err}
-                  end
-    after ?HAND_SHAKE_TIMEOUT -> case Times of
-                                   Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                                     log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
-                                     hand_shake(Me,My_server,Times+1);
-                                   Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                                     log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
-                                     {terminate, timeout}
-                                 end
-  end.
+  case ?TEST_MODE of
+      local ->
+       My_server! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
+         receive
+           ok -> ready;
+           Err-> case Times of
+                           Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                             log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
+                             hand_shake(Me,My_server,Times+1);
+                           Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                             log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
+                             {terminate, Err}
+                         end
+           after ?HAND_SHAKE_TIMEOUT -> case Times of
+                                          Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                                            log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
+                                            hand_shake(Me,My_server,Times+1);
+                                          Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                                            log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
+                                            {terminate, timeout}
+                                        end
+         end;
+    integrated -> ok
+      %% translate local to OTP
+      end.
+
 
 
 
@@ -504,9 +516,15 @@ delete_elements(List,[H|T])->
 
 send_dreq(_,[],_) -> ok;
 send_dreq(My_server, [H|T], Seq) ->
-  log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
-  My_server ! {dreq, H, Seq},
-  send_dreq(My_server, T, Seq).
+  case ?TEST_MODE of
+    local ->
+      log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
+      My_server ! {dreq, H, Seq},
+      send_dreq(My_server, T, Seq);
+    integrated ->
+      % translate local to OTP BEHAVIOR
+      ok
+  end.
 
 timer(Me) ->
   receive
