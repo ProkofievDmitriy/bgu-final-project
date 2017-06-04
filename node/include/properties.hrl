@@ -1,4 +1,5 @@
--define(MODULES_TO_FILTER, [load_ng, node, transport, stats_server_interface]).
+-define(MODULES_TO_FILTER, [stats_server_interface, report]).
+% -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
@@ -11,7 +12,9 @@
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).
 -define(DATA_LINK, data_link).
--define(APPLICATION, simple_app).
+% -define(APPLICATION, simple_app).
+% -define(APPLICATION, dc).
+-define(APPLICATION, am_sem).
 -define(REPORT_UNIT, report).
 -define(MODEM_PORT, modem_port).
 -define(PROTOCOL, protocol_interface).
@@ -104,5 +107,6 @@
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
-                         {role, data_concentration_server}
+                         {role, data_concentration_server},
+                         {meters_list, [node_10, node_4]}
                         ]).

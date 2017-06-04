@@ -13,7 +13,7 @@
 -include("app_macros.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -33,10 +33,12 @@
 %%% API
 %%%===================================================================
 
-start_link(My_node, My_protocol,_Meters) ->
+start_link({My_node, My_protocol,_Meters}) ->
   My_name = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
   log:info("~p created ~n",[My_name]),
-  gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []).
+  timer:sleep(1500),
+  {ok, PID} = gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []),
+  PID.
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -153,7 +155,7 @@ hand_shake(Me,My_protocol,Times) ->
                                    end
       end;
     integrated ->
-      Reply =( catch gen_server:call(My_protocol, {app_handshake,{Me, dc}},?HAND_SHAKE_TIMEOUT))     ,
+      Reply =( catch protocol_interface:hand_shake(self(),?HAND_SHAKE_TIMEOUT)),
       case Reply of
         ok -> ready;
         {'EXIT',{timeout,{gen_server,call,_}}} ->
@@ -184,7 +186,8 @@ send_drep(My_protocol,Data,Seq) ->
       ok;
     integrated ->
       log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
-      Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+     % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Seq})),
       case Reply of
         ok -> ok;
         Err -> log:critical("error in gen_server:call in send_drep : ~p~n",[Err])
@@ -199,7 +202,8 @@ send_dreq(My_protocol, To, Seq) ->
 
     integrated ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [To,Seq]) ,
-      Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+      %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+      Reply = (catch protocol_interface:send_data_request(To,{dreq, To, Seq})),
       case Reply of
         ok -> ok;
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])

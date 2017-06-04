@@ -103,9 +103,9 @@ handle_call({data_message, {Destination, Data}}, From, Context) ->
     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
-handle_call({data_request_message, {Destination}}, From, Context) ->
+handle_call({data_request_message, {Destination, Data}}, From, Context) ->
     ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Context#context.transport_pid, Context]),
-    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, []}),
+    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
