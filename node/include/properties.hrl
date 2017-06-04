@@ -30,6 +30,7 @@
                          ?LOAD_NG,
                          ?MODEM_PORT,
                          ?APPLICATION,
+                         node_control_interface,
                          stub_data_server,
                          isg_time,
                          stats_server_interface]).

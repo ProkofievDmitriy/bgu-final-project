@@ -27,6 +27,7 @@ initiate_transaction(NodeName, Destination, Data)->
     gen_server:cast({global, NodeName}, {initiate_transaction, {Destination, Data}}).
 
 reset_node(NodeName)->
-    io:format("~nAAAA: ~p~n",[NodeName]),
-    A = gen_server:cast({global, NodeName}, {reset_node}),
+    io:format("~nAAAA3: ~p~n",[NodeName]),
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {reset_node}),
     io:format("BBBB: ~p~n~n",[A]).
