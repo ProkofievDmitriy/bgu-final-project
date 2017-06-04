@@ -476,7 +476,7 @@ hand_shake(Me,My_protocol,Times) ->
                                         end
          end;
     integrated ->
-       Reply =( protocol_interface:hand_shake(self(), ?HAND_SHAKE_TIMEOUT))     ,
+       Reply =(catch protocol_interface:hand_shake(self(), ?HAND_SHAKE_TIMEOUT))     ,
           case Reply of
             ok -> ready;
             {'EXIT',{timeout,{gen_server,call,_}}} ->
@@ -544,9 +544,9 @@ send_dreq(My_protocol, [H|T], Seq) ->
     integrated ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]) ,
     %   Reply = (catch gen_server:call(My_protocol, {dreq, H, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-      Reply = protocol_interface:send_data_request(H, Seq),
+      Reply = protocol_interface:send_data_request(H, {dreq, H, Seq}),
       case Reply of
-        ok ->
+        {ok, sent} ->
                send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
       end

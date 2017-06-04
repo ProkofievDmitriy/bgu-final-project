@@ -8,7 +8,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([send/2, hand_shake/3, send_data_request/2, send_data_reply/3]).
+-export([send/2, hand_shake/2, send_data_request/2, send_data_reply/2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -36,7 +36,7 @@ send_data_request(Destination, Data)->
     gen_server:call(?PROTOCOL_NAME, {data_request_message, Destination, Data}).
 
 
-send_data_reply(Destination, Data, Seq_num)->
+send_data_reply(Destination, Data)->
     gen_server:call(?PROTOCOL_NAME, {data_reply_message, Destination, Data}).
 
 
