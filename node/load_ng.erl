@@ -120,7 +120,7 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     %TODO implement hand_shake with application
     NewContext = Context#context{application_pid = ApplicationPid},
     ?TRANSPORT:updateUpperLevelPid(NewContext#context.transport_pid, NewContext#context.application_pid),
-    {reply, self(), NewContext};
+    {reply, ok, NewContext};
 
 handle_call(get_status, _From, Context) ->
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),

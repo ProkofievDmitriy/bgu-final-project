@@ -1069,4 +1069,7 @@ get_route_set_entry_with_highest_seq_num(Entries) ->
 
 generate_uuid()->
   TimeStamp = get_current_millis(),
-  erlang:phash2(TimeStamp).
+  UUID = erlang:phash2(TimeStamp),
+  Binary = <<UUID:?MESSAGE_UUID_LENGHT>>,
+  <<FinalUUID:?MESSAGE_UUID_LENGHT>> = Binary,
+  FinalUUID.

@@ -126,9 +126,7 @@ init(WxServer) ->
     NodeChoice = wxListBox:new(Panel, ?wxID_ANY, [{size,{150,100}},{style, ?wxLB_SINGLE}]),
     wxListBox:connect(NodeChoice, command_listbox_selected),
 
-    %% Add to sizers
-
-    %% Management:
+	%% Management:
     wxSizer:add(ManagementSzLeftP, ButtonFullMap),
     wxSizer:addSpacer(ManagementSzLeftP, 10),
     wxSizer:add(ManagementSzLeftP, NodeChoice),
@@ -180,7 +178,7 @@ init(WxServer) ->
 
 
 
-    wxSizer:add(SuperSz, TitleSz, []),`
+    wxSizer:add(SuperSz, TitleSz, []),
         wxSizer:addSpacer(SuperSz, 10), % spacer
     wxSizer:add(SuperSz, OuterSz, []),
         wxSizer:addSpacer(SuperSz, 10), % spacer
@@ -233,17 +231,17 @@ handle_sync_event(_Event,_,State) ->
 %% @private
 %% @doc
 %% Handling WX events
-%%  
+%%
 %%      event command_listbox_selected:
 %%            user selected a new node to represent on map and settings
 %%              SelectedNode is updated to new node.
 %%              Map is updated to show new node view.
-%%              
+%%
 %%
 %%      event command_button_clicked:
 %%            user clicked a button
 %%
-%%              UpdateLocation button: 
+%%              UpdateLocation button:
 %%                  move SelectedNode to new location on the map
 %%              ButtonFullMap button:
 %%                  Show the all routes known.
@@ -253,9 +251,9 @@ handle_sync_event(_Event,_,State) ->
 %%                  Make SelectedNode send a message.
 %%              ButtonSendConfig button:
 %%                  Update SelectedNode configurations.
-%%              ButtonExport button: 
+%%              ButtonExport button:
 %%                  Make stats_server export its data now.
-%%  
+%%
 %% @end
 %%--------------------------------------------------------------------
 
@@ -313,7 +311,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 
                     %rpc:cast(SelectedNode, node_control_interface, reset_node, [SelectedNode]),
                     node_control_interface:reset_node(SelectedNode),
-                    
+
                     {noreply,State};
                     %{initiate_transaction, [{destination, Destination}]]
         ButtonSendMSG ->
@@ -348,7 +346,7 @@ handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"
 %% Handling cast messages
 %%      {node_state,Data}:
 %%          node new state, Data contains name of node, routing set of node and medium mode.
-%%      
+%%
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = CmbTo}) ->
@@ -368,7 +366,7 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             wxListBox:insertItems(NodeChoice,[NodeNameList],0),
             wxComboBox:append(CmbTo, NodeNameList),
             Location = {rand:uniform(500),rand:uniform(500)};
-        true -> 
+        true ->
             io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
             [{NodeNameAtom,{Location, _,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
     end,
@@ -402,18 +400,19 @@ handle_info(timer, State) ->
   erlang:send_after(?REFRESH_TIME,self(),timer),
   {noreply, State};
 
-handle_info({Counters = #counters{}, Avg}, State) ->
-  io:format("loadNG: Got State Update~p~n",[Counters]),
+handle_info({Counters = #counters{}, Avg, Length}, State) ->
+  io:format("loadNGgui: Got State Update~p~n",[Counters]),
   wxStaticText:setLabel(State#state.counters,
                 "numberOfManagementMsgSent = " ++ integer_to_list(Counters#counters.numberOfManagementMsgSent) ++
                 "\nnumberOfManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\nnumberOfDataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nnumberOfDataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
-                "\nAverage time: " ++ float_to_list(Avg)
+                "\nAverage time: " ++ float_to_list(Avg) ++
+				"\nAverage Route Length: " ++ integer_to_list(Length)
                 ),
   {noreply, State};
-handle_info(_, State) ->
-	io:format("handle_info _Event~n"),
+handle_info(E, State) ->
+	io:format("loadNGgui: handle_info unhandeld Event ~p~n",[E]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -484,14 +483,19 @@ switch_to_full_map(_, '$end_of_table', _, _) -> ok;
 switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
     [{{Node,NextNode},{Medium}}] = ets:lookup(MapEts,MapEtsKey),
     io:format("Node: ~p NextNode: ~p~n",[Node,NextNode]),
-    
-    %case NextNode of
-    %    NextNode when is_atom(NextNode) ->
-    [{Node,{NodeLocation,_, _}}] = ets:lookup(NodesEts,Node),
-    [{NextNode,{NextNodeLocation,_, _}}] = ets:lookup(NodesEts,NextNode),
-    draw_route(DC, NodeLocation,NextNodeLocation, Medium),
-    %    NextNode -> ok
-    %end,
+
+
+
+	case {ets:lookup(NodesEts,Node), ets:lookup(NodesEts,NextNode)} of
+	%[{AtomNode1,{Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
+    %[{AtomNode2,{Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
+	{[{Node,{NodeLocation,_, _}}], [{NextNode,{NextNodeLocation,_, _}}]} ->
+		draw_route(DC, NodeLocation,NextNodeLocation, Medium);
+	{A,B} ->
+		io:format("loadNGgui - switch_to_full_map: Node ~p or NextNode ~p are not found in ets.~n{~p,~p}~n",[Node, NextNode,A,B])
+	end,
+
+
     switch_to_full_map(DC, ets:next(MapEts,MapEtsKey), MapEts, NodesEts).
 
 %%%%
@@ -500,9 +504,9 @@ switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
 switch_to_node(_, _,'$end_of_table', _, _) -> ok;
 switch_to_node(DC, Node,Node, NodesEts, {XNodeLocation, YNodeLocation}) ->
 
-    io:format("switch_to_node 2 Node: ~p~n",[Node]),
     [{Node,{{X,Y}, _MediumMode,RoutingSet}}] = ets:lookup(NodesEts,Node),
-    
+	io:format("switch_to_node 2 Node: ~p RoutingSet:~p~n",[Node,RoutingSet]),
+
     wxDC:drawCircle(DC, {X,Y}, 15),
     wxTextCtrl:setValue(XNodeLocation, integer_to_list(X)),
     wxTextCtrl:setValue(YNodeLocation, integer_to_list(Y)),
@@ -537,29 +541,34 @@ draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_add
     %AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
     io:format("draw_routsB N: ~p~n~n",[AtomNode]),
 
-    [{AtomNode,{NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
-
-    draw_route(DC, Location,NextLocation, Medium),
-    draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
+	case ets:lookup(NodesEts,AtomNode) of
+    [{AtomNode,{NextLocation, _,_}}] ->
+			draw_route(DC, Location,NextLocation, Medium),
+    		draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
+	[] -> 	io:format("loadNGgui: AtomNode ~p is not found int ets.~n",[AtomNode]),
+			draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet)
+	end;
 
 
 draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
-    
+
     %AtomNode1 = Node1,  % = list_to_atom("node_" ++ integer_to_list(Node1)),
     AtomNode1 = list_to_atom("node_" ++ integer_to_list(Node1)),
         io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
 
-    [{AtomNode1,{Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
     AtomNode2 = list_to_atom("node_" ++ integer_to_list(Node2)),
     %AtomNode2 = Node2,% = list_to_atom("node_" ++ integer_to_list(Node2)),
-    
-    [{AtomNode2,{Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
 
-    draw_route(DC, Location,Location2, Medium),
-    draw_route(DC, Location1,Location2, 0),
-
-    draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet).
-
+	case {ets:lookup(NodesEts,AtomNode1), ets:lookup(NodesEts,AtomNode2)} of
+	%[{AtomNode1,{Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
+    %[{AtomNode2,{Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
+	{[{AtomNode1,{Location1, _,_}}], [{AtomNode2,{Location2,_,_}}]} ->
+	    draw_route(DC, Location,Location2, Medium),
+	    draw_route(DC, Location1,Location2, 0),
+	    draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
+	{A,B} ->
+		io:format("loadNGgui: AtomNode1 ~p or AtomNode2 ~p are not found int ets.~n{~p,~p}~n",[AtomNode1, AtomNode2,A,B])
+	end.
 
 draw_circle(_,'$end_of_table', _)-> ok;
 draw_circle(DC,Node, NodesEts)->
