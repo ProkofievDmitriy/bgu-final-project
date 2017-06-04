@@ -180,7 +180,7 @@ init(WxServer) ->
 
 
 
-    wxSizer:add(SuperSz, TitleSz, []),`
+    wxSizer:add(SuperSz, TitleSz, []),
         wxSizer:addSpacer(SuperSz, 10), % spacer
     wxSizer:add(SuperSz, OuterSz, []),
         wxSizer:addSpacer(SuperSz, 10), % spacer
@@ -310,22 +310,21 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
-
-                    %rpc:cast(SelectedNode, node_control_interface, reset_node, [SelectedNode]),
+                    %A = rpc:call('node_11@192.168.1.26', node_control_interface, reset_node, [SelectedNode]),
                     node_control_interface:reset_node(SelectedNode),
-                    
+                    %io:format("buttonDeleteTable delete ~p res ~p~n",[SelectedNode, A]),
                     {noreply,State};
                     %{initiate_transaction, [{destination, Destination}]]
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxComboBox:getValue(State#state.cmbTo)]),
 
-                    %rpc:cast(SelectedNode, stubNode, initiate_transaction, [SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
-                    node_control_interface:initiate_transaction(SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)),
+                    rpc:cast(SelectedNode, node_control_interface, initiate_transaction, [SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
+                    %node_control_interface:initiate_transaction(SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)),
                     wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonSendConfig ->
-                    node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
-                    %rpc:cast(SelectedNode, stubNode, update_configuration, [SelectedNode, {P,R}]),
+                    %node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
+                    rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
         ButtonExport ->
@@ -409,11 +408,12 @@ handle_info({Counters = #counters{}, Avg}, State) ->
                 "\nnumberOfManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\nnumberOfDataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nnumberOfDataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
+                "\nnumberOfRelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
                 "\nAverage time: " ++ float_to_list(Avg)
                 ),
   {noreply, State};
-handle_info(_, State) ->
-	io:format("handle_info _Event~n"),
+handle_info(E, State) ->
+	io:format("handle_info _Event ~p~n",[E]),
 	{noreply, State}.
 
 %%--------------------------------------------------------------------
