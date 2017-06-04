@@ -147,37 +147,40 @@ idle(Request, _From, StateData)->
 
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
-
-active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
-?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
-NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
-case NextHop of
-    {error, ErrorMessage} ->
-        {reply, {error, ErrorMessage}, active, StateData};
-    #routing_set_entry{} = Hop ->
-      UUID = generate_uuid(),
-      Data = [UUID],
-        Payload = prepare_payload(StateData#state.self_address,
-                                  StateData#state.self_address,
-                                  Destination,
-                                  ?DATA,
-                                  Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
-        case Payload of
-            {error, ErrorMessage} ->
-               {reply, {error, ErrorMessage}, active, StateData};
-            _ ->
-                if Destination =:= ?BROADCAST_ADDRESS ->
-                    update_dreq_table(UUID, StateData);
-                    true -> ok end,
-                Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                %TODO Create report
-                % report_data_message_sent(Packet, StateData),
-                {reply, Result, active, StateData}
-        end;
-    Else ->
-        ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
-        {reply, Else, active, StateData}
-end;
+%
+% active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
+% ?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
+% NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+% case NextHop of
+%     {error, ErrorMessage} ->
+%         {reply, {error, ErrorMessage}, active, StateData};
+%     #routing_set_entry{} = Hop ->
+%         Packet = build_new_packet(?DREQ, Destination, Data, StateData),
+%         Payload = serialize_packet(Packet),
+%
+%       UUID = generate_uuid(),
+%       Data = [UUID],
+%         Payload = prepare_payload(StateData#state.self_address,
+%                                   StateData#state.self_address,
+%                                   Destination,
+%                                   ?DREQ,
+%                                   Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
+%         case Payload of
+%             {error, ErrorMessage} ->
+%                {reply, {error, ErrorMessage}, active, StateData};
+%             _ ->
+%                 if Destination =:= ?BROADCAST_ADDRESS ->
+%                     update_dreq_table(UUID, StateData);
+%                     true -> ok end,
+%                 Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+%                 %TODO Create report
+%                 % report_data_message_sent(Packet, StateData),
+%                 {reply, Result, active, StateData}
+%         end;
+%     Else ->
+%         ?LOGGER:critical("[~p]: ACTIVE - Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
+%         {reply, Else, active, StateData}
+% end;
 
 
 %DATA, DREP
@@ -433,6 +436,9 @@ active({received_message, #load_ng_packet{type = ?RACK} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RACK : Packet : ~p .~n", [?MODULE, Packet]),
     report_received_management_message(Packet, StateData),
     {next_state, active, StateData}.
+
+
+
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
 %% ============================================================================================
