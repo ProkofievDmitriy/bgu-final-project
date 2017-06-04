@@ -13,7 +13,7 @@
 -include("app_macros.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/3]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -33,9 +33,10 @@
 %%% API
 %%%===================================================================
 
-start_link({My_name, My_server}) ->
-  io:format("~p created~n",[My_name]),
-  gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_server}, []).
+start_link(My_node, My_protocol,_Meters) ->
+  My_name = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
+  log:info("~p created ~n",[My_name]),
+  gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -43,69 +44,82 @@ start_link({My_name, My_server}) ->
 
 
 %% My_name - self
-%% My_server - the gen server of the protocol in the same node
-init({My_name,My_server}) ->
-  io:format("~p initialized~n", [My_name]),
-  {ok, counting, {My_name,My_server,0,0}}.
+%% My_protocol - the gen server of the protocol in the same node
+init({My_name,My_protocol,My_node}) ->
+  Hand_shake =hand_shake(My_name,My_protocol,1),
+  case Hand_shake of
+   ready ->
+    log:info("~p initialized~n", [My_name]),
+     {ok, counting, {My_name,My_protocol,My_node,0,0}};
+    {terminate, Reason} ->
+      log:critical("handshake with ~p failed with message: ~p~n", [My_protocol,Reason]),
+      {stop,{handshake_failure,Reason}}
+  end.
 
 
 %%TODO - trigger increment event
-counting(increment, {My_name,My_server,Counter,Sn}) ->
+counting(increment, {My_name,My_protocol,My_node,Counter,Sn}) ->
   io:format("~p is icrementing, last reading: ~p~n",[My_name,Counter]),
-  {next_state, counting, {My_name,My_server,Counter+1,Sn}};
+  {next_state, counting, {My_name,My_protocol,My_node,Counter+1,Sn}};
 
 %%TODO - consider replacing with 2 function using pattern matching on To(Me/other)
-counting({dreq,To,Seq},{My_name,My_server,Counter,Sn}) ->
-  io:format("~p received dreq with Sn ~p~n", [My_name,Seq] ),
+counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
+  log:debug("~p received dreq with Sn ~p~n", [My_name,Seq] ),
   %% if the dreq was meant to me
-  if To == My_name ->
+  if To == My_node ->
     %% if the dreq has a bigger sequence number - send reading and update my sn
     if Sn<Seq ->
-      %%TODO replace message with call/cast/event
       %% sending reading
-      io:format("~p is sending reading ~n", [My_name] ),
-      My_server ! {drep,[{My_name,Counter}], Seq},
+      log:info("~p is sending reading ~n", [My_name] ),
+      _Ok = send_drep (My_protocol,[{My_name,Counter}|[]],Seq),
       %% returning to the same state with updated sequence number
-      {next_state, counting, {My_name,My_server,Counter,Seq}};
+      {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
     %% if seq lower or equals - ignore
       true ->
-        io:format("~p is ignoring dreq ~n", [My_name] ),
-        {next_state, counting, {My_name,My_server,Counter,Sn}}
+        log:debug("~p received dreq ,with Seq ~p, local Sn ~p, ignoring~n", [Seq,Sn,My_name] ),
+        {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
     end;
     %% if the dreq was not meant to me pass it back
     true ->
-      %%TODO replace message with call/cast/event
-      io:format("~p is passing a dreq ~p~n", [My_name,Seq] ),
-      My_server ! {dreq,To,Seq},
-      {next_state, counting, {My_name,My_server,Counter,Sn}}
+      log:err("~p received dreq with destination missmatch, passing on to ~p~n", [My_name,To] ),
+      _Ok = send_dreq(My_protocol, To, Seq),
+      {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
   end;
 
-counting({drep,Data,Seq},{My_name,My_server,Counter,Sn}) ->
-  io:format("~p received drep with Sn ~p~n", [My_name,Seq] ),
-  %% if the drep has a newer sequence number- append my reading
-  if Sn<Seq ->
-    io:format("~p is appending reading ~n", [My_name] ),
-    %%TODO replace message with call/cast/event
-    My_server ! {drep,[{My_name,Counter}|Data],Seq},
+counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
+  case To of
+    ?DC_NODE ->
+  log:info("~p received drep with Seq ~p, state data: ~p ~n", [My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
+  %% if the drep has equal or newer sequence number- append my reading
+  if Sn=<Seq ->
+    log:debug("~p is appending reading ~n", [My_name] ),
+    _Ok = send_drep(My_protocol, [{My_node,Counter}|Data],Seq),
     %% returning to the same state with updated sequence number
-    {next_state, counting, {My_name,My_server,Counter,Seq}};
-  %% if seq lower or equals - ignore
+    {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
+  %% if seq lower  - ignore
     true ->
-      io:format("~p is passing drep ~n", [My_name] ),
-      My_server ! {drep,[Data],Seq},
-      {next_state, counting, {My_name,My_server,Counter,Sn}}
+      log:err("~p received drep with Seq ~p, local Sn ~p. passing drep ~n", [My_name,Seq,Sn]),
+      _Ok = send_drep(My_protocol,Data, Seq),
+      {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
+      end;
+    Dest ->
+      log:err("~p received drep with wrong dest address of: ~p, ignoring~n",[My_name, Dest]),
+      {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
   end;
 
-counting(Event,{My_name,My_server,Counter,Sn}) ->
-  io:format("~p recaived UNEXPECTED EVENT ~p~n", [My_name,Event] ),
-  {next_state, counting, {My_name,My_server,Counter,Sn}}.
+counting(Event,{My_name,My_protocol,My_node,Counter,Sn}) ->
+  log:err("~p recaived UNEXPECTED EVENT ~p~n", [My_name,Event] ),
+  {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}.
 
 
 
-handle_info(_Info, StateName, State) ->
-  {next_state, StateName, State}.
+handle_info(Info, StateName, State) ->
+  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~ with data ~p",[self(),Info,StateName,State]),
+    {next_state, StateName, State}.
 
-terminate(_Reason, _StateName, _State) ->
+terminate(Reason, StateName, State) ->
+  log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+    [Reason,StateName,State]),
   ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -114,3 +128,50 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+hand_shake(Me,My_protocol,Times) ->
+  case ?TEST_MODE of
+    local ->
+      My_protocol! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
+      receive
+        ok -> ready;
+        Err-> case Times of
+                Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                  log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
+                  hand_shake(Me,My_protocol,Times+1);
+                Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                  log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
+                  {terminate, Err}
+              end
+      after ?HAND_SHAKE_TIMEOUT -> case Times of
+                                     Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                                       log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
+                                       hand_shake(Me,My_protocol,Times+1);
+                                     Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                                       log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
+                                       {terminate, timeout}
+                                   end
+      end;
+    integrated -> ok
+    %% translate local to OTP
+  end.
+
+send_drep(My_protocol,Data,Seq) ->
+  case ?TEST_MODE of
+    local ->
+      My_protocol ! {drep,?DC_NODE,Data,Seq},
+      ok;
+    integrated ->
+      % translate local to OTP.
+      ok
+ end .
+
+send_dreq(My_protocol, To, Seq) ->
+  case ?TEST_MODE of
+    local ->
+      My_protocol! {dreq, To,Seq},
+      ok;
+    integrated ->
+      %translate local to OTP.
+  ok
+  end.

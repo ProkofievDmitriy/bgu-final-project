@@ -47,9 +47,10 @@
 
 
 %% TODO: update protocol interface to Dima: he starts app with the properties bellow.
-start_link(Me, My_server,Meters) ->
-  log:info("~p created ~n",[Me]),
-  {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_server,Meters}, []),
+start_link(My_node, My_protocol,Meters) ->
+   Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
+   log:info("~p created ~n",[Me]),
+  {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
 %%%=================================================================================
@@ -74,26 +75,26 @@ start_link(Me, My_server,Meters) ->
 
 
 %% Me -  self
-%% My_server - the gen server of the protocol in tha same node (DC)
+%% My_protocol - the gen server of the protocol in tha same node (DC)
 %% Meters - list of names of the other nodes
 
 %% TODO add a handshake before doing any activity (gen_server:call),do the checking inside the function and if failed call handshake over and over again.
 
-init({Me, My_server,Meters}) ->
-  Hand_shake =hand_shake(Me,My_server,1),
+init({Me, My_protocol,My_node,Meters}) ->
+  Hand_shake =hand_shake(Me,My_protocol,1),
   case Hand_shake of
     ready ->
-      io:format("~p initialized~n", [Me]),
+      log:info("~p initialized~n", [Me]),
       Nrs = Meters,
       Rd = random_elements (Nrs),                         % 1/4+9c
       Nrs1 = delete_elements (Nrs, Rd),                   % 1/3+10
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
-      _Ok = send_dreq(My_server,Rd,0),                    % 1/11
-      io:format("first dreq sent, Rd are ~p~n",[Rd]),
+      _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
+      log:info("first dreq sent, Rd are ~p~n",[Rd]),
       Timerpid = erlang:spawn(?MODULE,timer,[Me]),        % 1/12
-      {ok, discovering, {Me, My_server,Meters,Nrs1,Rd,[],0,Timerpid}};
+      {ok, discovering, {Me, My_protocol,My_node,Meters,Nrs1,Rd,[],0,Timerpid}};
     {terminate, Reason} -> log:critical("handshake with ~p failed with message:
-     ~p~n", [My_server,Reason]),
+     ~p~n", [My_protocol,Reason]),
       {stop,{handshake_failure,Reason}}
   end.
 
@@ -120,7 +121,11 @@ init({Me, My_server,Meters}) ->
 %%===================================================================================
 
 %% phase 1 of AMR - AM
-discovering({drep,?DC_NODE,Data,Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+  if To =/=My_node ->
+    log:err("dc recived drep with dest address of: ~p, in state discovering ignoring~n", [To]),
+    {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+    true ->
  % ok, drep received with destination address of dc
   {V,_} = lists:last(Data),
   case Seq of
@@ -129,14 +134,14 @@ discovering({drep,?DC_NODE,Data,Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpi
       log:err("received drep from ~p in state discovering with higher seq of
       ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
        [V,Seq,Nrs,Rd,Ter,Sn]),
-      {next_state, discovering, {Me,My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
     Seq when Seq<Sn ->
       % the seq num of the drep is lower than expected -> error,check
       log:err("received drep from ~p in state discovering with lower seq of
       ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
        [V,Seq,Nrs,Rd,Ter,Sn]),
       _Ok = check_reading_and_log_time(),       %%todo
-      {next_state, discovering, {Me,My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
     Seq when Seq==Sn ->
      log:debug("received drep from: ~p, in state discovering ~n state data:
       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n",
@@ -152,21 +157,16 @@ discovering({drep,?DC_NODE,Data,Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpi
       _Ok = ets:insert(mr_ets,Data),
       log:debug("Rd2 is now ~p~n",[Rd2]),
       if Rd2 == [] ->  gen_fsm:send_event(Me, rd_empty),
-        {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,
+        {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs1,Rd2,Ter2,Sn,
          Timerpid}};
-        true -> {next_state, discovering, {Me,My_server,Meters,Nrs1,Rd2,Ter2,Sn,
+        true -> {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs1,Rd2,Ter2,Sn,
          Timerpid}}
       end
+    end
   end;
 
-%% received drep with other destination address then dc
-discovering({drep,To,_Data,_Seq},{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
- log:err("dc recived drep with dest address of: ~p, in state discovering ignoring~n", [To]),
- {next_state, discovering, {Me,My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
-
-
 %% Rd = [] , prepare for another iteration of external loop
-discovering(rd_empty,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("received rd_empy event in state discovering,~n State data:
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                    % 1/23
@@ -180,22 +180,22 @@ discovering(rd_empty,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Ter8 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
-      _Ok = send_dreq(My_server,Ter8,Sn1),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
-        {Me,My_server,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
     Nrs1  ->              %% otherwise prepare for next iteration
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                  % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
-      _Ok = send_dreq(My_server,Rd1,Sn),             % 1/11
+      _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       Timerpid!restart,                              % 1/12
-      {next_state, discovering, {Me,My_server,Meters,Nrs2,Rd1,Ter,Sn,Timerpid}}
+      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid}}
   end;
 
 %% timeout elapsed, prepare for another iteration of external loop
-discovering(timeout,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("received timeout event in state discovering, State data:~n
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
@@ -207,18 +207,18 @@ discovering(timeout,{Me, My_server,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Ter8 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to: ~p with sn ~p~n", [Ter8,Sn1]),
-      _Ok = send_dreq(My_server,Ter8,Sn1),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
-        {Me,My_server,Meters,Nrs1,Ter8,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter8,Ter1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                   % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),             % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
-      _Ok = send_dreq(My_server,Rd1,Sn),              % 1/11
+      _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
-      {next_state, discovering, {Me,My_server,Meters,Nrs2,Rd1,Ter,Sn,Timerpid1}}
+      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid1}}
   end;
 
 discovering( Event , State_data) ->
@@ -235,21 +235,25 @@ discovering( Event , State_data) ->
 
 %%TODO update drep format in phase 2
 
-collecting({drep,?DC_NODE,Data,Seq},{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+  if To =/= My_node ->
+    log:err("dc recived drep with destination address of: ~p, ignoring~n",[To]),
+    {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+    true ->
   {V,_} = lists:last(Data),                          % 2/10
   case Seq of
     Seq when Seq>Sn ->
       log:err("received drep from ~p in state collecting with higher seq of
       ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
       [V,Seq,Nrs,Ter8,Ter,Sn]),
-      next_state, collecting, {Me,My_server,Meters,Nrs,Ter8,Ter,Sn,Timerpid};
+      next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid};
     Seq when Seq<Sn ->
       % the seq num of the drep is lower than expected -> error,check
       log:err("received drep from ~p in state collecting with lower seq of
       ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
        [V,Seq,Nrs,Ter8,Ter,Sn]),
       _Ok = check_reading_and_log_time(),       %%todo
-      {next_state, collecting, {Me,My_server,Meters,Nrs,Ter8,Ter,Sn,Timerpid}};
+      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid}};
     Seq when Seq==Sn ->
       log:debug("received drep from: ~p, in state collecting ~n state data: Nrs:
        ~p,Ter* = ~p, Ter: ~p, Sn: ~p~n", [V,Nrs,Ter8,Ter,Sn]),
@@ -262,20 +266,16 @@ collecting({drep,?DC_NODE,Data,Seq},{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Tim
       Ter82 = lists:subtract(Ter81,Nodes1),
       _Ok = ets:insert(mr_ets,Data),
       if Ter82 == [] ->  gen_fsm:send_event(Me, ter8_empty),
-        {next_state, collecting, {Me,My_server,Meters,Nrs1,Ter82,Ter2,Sn,
+        {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
          Timerpid}};
-        true -> {next_state, collecting, {Me,My_server,Meters,Nrs1,Ter82,Ter2,Sn,
+        true -> {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
          Timerpid}}
       end
-    end;
+   end
+ end;
 
 
- collecting({drep,To,_Data,_Seq},{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
-   log:err("dc recived drep with destination address of: ~p, ignoring~n",[To]),
-   {next_state, collecting, {Me,My_server,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
-
-
-collecting(ter8_empty,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
    log:debug("received ter8_empy event in state collecting,~n State data:
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -288,19 +288,19 @@ collecting(ter8_empty,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
       Ter82 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
        log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
-      _Ok = send_dreq(My_server,Ter82,Sn1),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
-        {Me,My_server,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
-      _Ok = send_dreq(My_server,Ter81,Sn),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
       Timerpid ! restart,
-      {next_state, collecting, {Me,My_server,Meters, Nrs, Ter81,Ter,Sn,Timerpid}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid}}
   end;
 
-collecting(timeout,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   log:debug("received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -313,16 +313,16 @@ collecting(timeout,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
       Ter82 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
-      _Ok = send_dreq(My_server,Ter82,Sn1),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
-        {Me,My_server,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
-      _Ok = send_dreq(My_server,Ter81,Sn),           % 2/7
+      _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
-      {next_state, collecting, {Me,My_server,Meters, Nrs, Ter81,Ter,Sn,Timerpid1}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid1}}
   end.
 
 
@@ -409,8 +409,14 @@ handle_sync_event(_Event, _From, StateName, State) ->
   {next_state, NextStateName :: atom(), NewStateData :: term(),
     timeout() | hibernate} |
   {stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info(_Info, StateName, State) ->
-  {next_state, StateName, State}.
+
+handle_info(Info, StateName, State) ->
+  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~ with data ~p",[self(),Info,StateName,State]),
+    {next_state, StateName, State}.
+
+
+
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -424,10 +430,10 @@ handle_info(_Info, StateName, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, {Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+terminate(Reason, StateName, {Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
   log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
-    [Reason,StateName,{Me,My_server,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
+    [Reason,StateName,{Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
   ok.
 
 %%--------------------------------------------------------------------
@@ -448,27 +454,33 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 
-hand_shake(Me,My_server,Times) ->
-  My_server! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
-  receive
-    ok -> ready;
-    Err-> case Times of
-                    Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                      log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
-                      hand_shake(Me,My_server,Times+1);
-                    Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                      log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
-                      {terminate, Err}
-                  end
-    after ?HAND_SHAKE_TIMEOUT -> case Times of
-                                   Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                                     log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
-                                     hand_shake(Me,My_server,Times+1);
-                                   Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                                     log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
-                                     {terminate, timeout}
-                                 end
-  end.
+hand_shake(Me,My_protocol,Times) ->
+  case ?TEST_MODE of
+      local ->
+       My_protocol! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
+         receive
+           ok -> ready;
+           Err-> case Times of
+                           Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                             log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
+                             hand_shake(Me,My_protocol,Times+1);
+                           Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                             log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
+                             {terminate, Err}
+                         end
+           after ?HAND_SHAKE_TIMEOUT -> case Times of
+                                          Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                                            log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
+                                            hand_shake(Me,My_protocol,Times+1);
+                                          Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                                            log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
+                                            {terminate, timeout}
+                                        end
+         end;
+    integrated -> ok
+      %% translate local to OTP
+      end.
+
 
 
 
@@ -503,10 +515,16 @@ delete_elements(List,[H|T])->
 %%TODO update regular message send to a gen_server call
 
 send_dreq(_,[],_) -> ok;
-send_dreq(My_server, [H|T], Seq) ->
-  log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
-  My_server ! {dreq, H, Seq},
-  send_dreq(My_server, T, Seq).
+send_dreq(My_protocol, [H|T], Seq) ->
+  case ?TEST_MODE of
+    local ->
+      log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
+      My_protocol ! {dreq, H, Seq},
+      send_dreq(My_protocol, T, Seq);
+    integrated ->
+      % translate local to OTP BEHAVIOR
+      ok
+  end.
 
 timer(Me) ->
   receive
