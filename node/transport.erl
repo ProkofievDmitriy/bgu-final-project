@@ -85,8 +85,7 @@ idle({send, {Type, Destination, Data}}, _From, StateData) ->
 %% Pass all message as is - no session management enabled
 disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-    % StateData#state.upper_level_pid ! Message,
-    gen_fsm:send_event(StateData#state.upper_level_pid, list_to_tuple(Message)),
+    StateData#state.upper_level_pid ! Message,
     {next_state, disable, StateData};
 
 disable(disable, StateData) ->

@@ -152,29 +152,8 @@ hand_shake(Me,My_protocol,Times) ->
                                        {terminate, timeout}
                                    end
       end;
-    integrated ->
-      Reply =( catch protocol_interface:hand_shake(self(),?HAND_SHAKE_TIMEOUT)),
-      case Reply of
-        ok -> ready;
-        {'EXIT',{timeout,{gen_server,call,_}}} ->
-          case Times of
-            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err("handshake timeout on try number: ~p , trying again~n",[Times]),
-              hand_shake(Me,My_protocol,Times+1);
-            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err("handshake timeout on try number: ~p , TERMINATING~n",[Times]),
-              {terminate, timeout}
-          end;
-        Err->
-          case Times of
-            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err("handshake failed with err ~p, on try number: ~p , trying again~n",[Err,Times]),
-              hand_shake(Me,My_protocol,Times+1);
-            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err("handshake failed with err ~p, on try number: ~p , TERMINATING~n",[Err,Times]),
-              {terminate, Err}
-          end
-      end
+    integrated -> ok
+    %% translate local to OTP
   end.
 
 send_drep(My_protocol,Data,Seq) ->
@@ -183,13 +162,8 @@ send_drep(My_protocol,Data,Seq) ->
       My_protocol ! {drep,?DC_NODE,Data,Seq},
       ok;
     integrated ->
-      log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
-     % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Seq})),
-      case Reply of
-        ok -> ok;
-        Err -> log:critical("error in gen_server:call in send_drep : ~p~n",[Err])
-      end
+      % translate local to OTP.
+      ok
  end .
 
 send_dreq(My_protocol, To, Seq) ->
@@ -197,13 +171,7 @@ send_dreq(My_protocol, To, Seq) ->
     local ->
       My_protocol! {dreq, To,Seq},
       ok;
-
     integrated ->
-      log:debug("sending dreq to: ~p with sequence ~p~n", [To,Seq]) ,
-      %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-      Reply = (catch protocol_interface:send_data_request(To,{dreq, To, Seq})),
-      case Reply of
-        ok -> ok;
-        Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
-      end
+      %translate local to OTP.
+  ok
   end.

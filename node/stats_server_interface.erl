@@ -61,7 +61,6 @@ internal_report(Type, Data)->
     case Type of
         node_state ->
             Server = global:whereis_name(loadNGgui),
-            ?LOGGER:info("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
             wx_object:cast(Server, {Type, [{utime, UTIME} | Data]});
         _ ->
             gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })

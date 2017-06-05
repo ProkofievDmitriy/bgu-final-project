@@ -64,7 +64,7 @@ internal_start(Properties) when is_list(Properties)->
     NodeName = proplists:get_value(node_name, Properties),
     Timeout = proplists:get_value(timeout, NodeProperties),
     ?LOGGER:info("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
-    {ok, NodePID} = gen_server:start_link({global, NodeName}, ?MODULE, Properties, [{timeout, Timeout * 3}]),
+    {ok,NodePID} = gen_server:start_link({global, NodeName}, ?MODULE, Properties, [{timeout, Timeout}]),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
     NodePID.
@@ -107,16 +107,18 @@ init(GlobalProperties) ->
 
     %initialize application
     ApplicationProperties = proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties),
-    Meters_list = proplists:get_value(meters_list, ApplicationProperties),
-	% Application_Pid = ?APPLICATION:start(ApplicationProperties),
-	Application_Pid = ?APPLICATION:start_link({list_to_atom(NodeName), Protocol_Pid, Meters_list}),
-    % ?PROTOCOL:hand_shake(Application_Pid),
+	Application_Pid = ?APPLICATION:start(ApplicationProperties),
+    ?PROTOCOL:hand_shake(Application_Pid),
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
 
     ?LOGGER:info("[~p]: Node: ~p, is up.~n", [?MODULE, NodeName]),
 
+    %TODO : Remove in production
+%    loadTestData(),
+
     Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
+
 
     {ok, #context{
         node_properties = NodeProperties,
@@ -126,8 +128,7 @@ init(GlobalProperties) ->
         protocol_monitor_ref = Protocol_Monitor_Reference,
         protocol_properties = ProtocolProperties,
         application_monitor_ref = Application_Monitor_Reference,
-        application_properties = {list_to_atom(NodeName), Protocol_Pid, Meters_list},
-        % application_properties = ApplicationProperties,
+        application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
         node_status_timer = Timer
@@ -176,9 +177,8 @@ handle_cast(Request, Context) ->
 %case Application crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:debug("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
-    Application_Pid = ?APPLICATION:start_link(Context#context.application_properties),
-    % Application_Pid = ?APPLICATION:start(Context#context.application_properties),
-    % ?PROTOCOL:hand_shake(Application_Pid),
+    Application_Pid = ?APPLICATION:start(Context#context.application_properties),
+    ?PROTOCOL:hand_shake(Application_Pid),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
     NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference},
     {noreply, NewContext};
