@@ -15,7 +15,7 @@ start(Properties)->
 	case Role of
 		smart_meter ->
 	        SendInterval = proplists:get_value(send_message_interval, Properties),
-            PID = spawn(fun()->smart_meter_loop(SendInterval, 1000, "1") end),
+            PID = spawn(fun()->smart_meter_loop(SendInterval, 1000, "Some Random Message") end),
             ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
             register(?APPLICATION_NAME, PID),
             PID;
@@ -60,8 +60,8 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
                             ?LOGGER:info("[~p]: Received error message : ~p ~n" ,[?MODULE, Message]);
                         {ok, sent} ->
                             ?LOGGER:info("[~p]: Message successfully sent!!!~n" ,[?MODULE]),
-                            smart_meter_loop(SendInterval, FalseLoops + 1 , Data ++ [2]);
-                        %    smart_meter_loop(SendInterval, FalseLoops + 1 , Data);
+                            % smart_meter_loop(SendInterval, FalseLoops + 1 , Data ++ [2]);
+                           smart_meter_loop(SendInterval, FalseLoops + 1 , Data);
 
                         SomeResult ->
                             ?LOGGER:info("[~p]: Some unexpected result received: ~p~n" ,[?MODULE, SomeResult])

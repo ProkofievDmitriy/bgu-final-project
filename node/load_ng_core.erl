@@ -147,37 +147,40 @@ idle(Request, _From, StateData)->
 
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
-
-active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
-?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
-NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
-case NextHop of
-    {error, ErrorMessage} ->
-        {reply, {error, ErrorMessage}, active, StateData};
-    #routing_set_entry{} = Hop ->
-      UUID = generate_uuid(),
-      Data = [UUID],
-        Payload = prepare_payload(StateData#state.self_address,
-                                  StateData#state.self_address,
-                                  Destination,
-                                  ?DATA,
-                                  Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
-        case Payload of
-            {error, ErrorMessage} ->
-               {reply, {error, ErrorMessage}, active, StateData};
-            _ ->
-                if Destination =:= ?BROADCAST_ADDRESS ->
-                    update_dreq_table(UUID, StateData);
-                    true -> ok end,
-                Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                %TODO Create report
-                % report_data_message_sent(Packet, StateData),
-                {reply, Result, active, StateData}
-        end;
-    Else ->
-        ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
-        {reply, Else, active, StateData}
-end;
+%
+% active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
+% ?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
+% NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
+% case NextHop of
+%     {error, ErrorMessage} ->
+%         {reply, {error, ErrorMessage}, active, StateData};
+%     #routing_set_entry{} = Hop ->
+%         Packet = build_new_packet(?DREQ, Destination, Data, StateData),
+%         Payload = serialize_packet(Packet),
+%
+%       UUID = generate_uuid(),
+%       Data = [UUID],
+%         Payload = prepare_payload(StateData#state.self_address,
+%                                   StateData#state.self_address,
+%                                   Destination,
+%                                   ?DREQ,
+%                                   Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
+%         case Payload of
+%             {error, ErrorMessage} ->
+%                {reply, {error, ErrorMessage}, active, StateData};
+%             _ ->
+%                 if Destination =:= ?BROADCAST_ADDRESS ->
+%                     update_dreq_table(UUID, StateData);
+%                     true -> ok end,
+%                 Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+%                 %TODO Create report
+%                 % report_data_message_sent(Packet, StateData),
+%                 {reply, Result, active, StateData}
+%         end;
+%     Else ->
+%         ?LOGGER:critical("[~p]: ACTIVE - Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
+%         {reply, Else, active, StateData}
+% end;
 
 
 %DATA, DREP
@@ -367,6 +370,61 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
         true -> ok end, % not eligible to forward, skip
     {next_state, active, StateData};
 
+active({received_message, #load_ng_packet{type = ?DREQ} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
+    update_routing_set_entry(Packet, StateData), % route maintanace
+    AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
+    if  AmIDestination ->
+            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+            report_data_message_received(Packet, StateData);
+        true -> ok end,
+    ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
+    if ShouldBeForwarded ->
+            Result = forward_packet(Packet, StateData),
+            case Result of
+                {ok, sent, _Some } ->
+                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
+                    report_data_message_forwarded(Packet, StateData);
+                {error, Error, #routing_set_entry{} = FailedHop} ->
+                    ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
+                    generate_RERR({Packet#load_ng_packet.originator,
+                                   FailedHop#routing_set_entry.r_seq_number,
+                                   ?RERR_HOST_UNREACHABLE,
+                                   Packet#load_ng_packet.destination});
+               Else ->
+                   ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
+               end;
+        true -> ok end, % not eligible to forward, skip
+    {next_state, active, StateData};
+
+
+active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
+    update_routing_set_entry(Packet, StateData), % route maintanace
+    % AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
+    % if  AmIDestination ->
+            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+            report_data_message_received(Packet, StateData),
+        % true -> ok end,
+    % ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
+    % if ShouldBeForwarded ->
+            % Result = forward_packet(Packet, StateData),
+            % case Result of
+                % {ok, sent, _Some } ->
+                    % ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
+                    % report_data_message_forwarded(Packet, StateData);
+                % {error, Error, #routing_set_entry{} = FailedHop} ->
+                    % ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
+                    % generate_RERR({Packet#load_ng_packet.originator,
+                                %    FailedHop#routing_set_entry.r_seq_number,
+                                %    ?RERR_HOST_UNREACHABLE,
+                                %    Packet#load_ng_packet.destination});
+            %    Else ->
+                %    ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
+            %    end;
+        % true -> ok end, % not eligible to forward, skip
+    {next_state, active, StateData};
+
 active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
     report_received_management_message(Packet, StateData),
@@ -433,6 +491,9 @@ active({received_message, #load_ng_packet{type = ?RACK} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RACK : Packet : ~p .~n", [?MODULE, Packet]),
     report_received_management_message(Packet, StateData),
     {next_state, active, StateData}.
+
+
+
 %% ============================================================================================
 %% =========================================== Sync Event Handling =========================================
 %% ============================================================================================
@@ -509,7 +570,7 @@ get_next_hop(Destination, State)->
                     {ok, {_Key, Hop}} -> Hop;
                     _ ->
                         ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
-                        {error, "TIME OUT EXCEEDED"}
+                        {error, timeout_exceeded}
                 end
             end;
         Error ->
@@ -572,7 +633,8 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
     BinaryMessageType = <<Type:?MESSAGE_TYPE_LENGTH>>,
     BinaryUUID = <<UUID:?MESSAGE_UUID_LENGHT>>,
     %TODO - packet Data should be binary
-    BinaryData = list_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
+    % BinaryData = list_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
+    BinaryData = term_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
     BinaryDataLengthInBytes = byte_size(BinaryData),
     ?LOGGER:debug("[~p]: serialize_packet : MessageType: ~w, Originator: ~w, Source: ~w , Destination: ~w, DataLengthInBytes: ~w, UUID: ~w~n", [?MODULE,
                                                                                                                    BinaryMessageType,
@@ -623,7 +685,7 @@ deserializePayload(Payload)->
 
 
 deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
-    RREQMessageData = binary_to_list(Data),
+    RREQMessageData = binary_to_term(Data),
     ?LOGGER:debug("[~p]: deserializeMessage RREQMessageData : ~w ~n", [?MODULE, RREQMessageData]),
     RREQSequenceNumber = lists:nth(1, RREQMessageData),
     Originator = lists:nth(2, RREQMessageData),
@@ -641,7 +703,7 @@ deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
 
 deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
     ?LOGGER:preciseDebug("[~p]: deserializeMessage RREP : Data : ~w ~n", [?MODULE, Data]),
-    RREPMessageData = binary_to_list(Data),
+    RREPMessageData = binary_to_term(Data),
     RREPSequenceNumber = lists:nth(1, RREPMessageData),
     Originator = lists:nth(2, RREPMessageData),
     HopCount = lists:nth(3, RREPMessageData) + 1,
@@ -660,7 +722,7 @@ deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
 
 deserializeMessage(#load_ng_packet{type = ?RERR} = Packet, Data)->
     ?LOGGER:preciseDebug("[~p]: deserializeMessage RERR : Data : ~w ~n", [?MODULE, Data]),
-    RERRMessageData = binary_to_list(Data),
+    RERRMessageData = binary_to_term(Data),
     RERRSequenceNumber = lists:nth(1, RERRMessageData),
     Originator = lists:nth(2, RERRMessageData),
     UnreacheableAddress = lists:nth(3, RERRMessageData),
@@ -679,7 +741,7 @@ deserializeMessage(#load_ng_packet{type = ?RERR} = Packet, Data)->
 
 deserializeMessage(#load_ng_packet{type = ?RACK} = Packet, Data)->
     ?LOGGER:preciseDebug("[~p]: deserializeMessage RACK : Data : ~w ~n", [?MODULE, Data]),
-    RACKMessageData = binary_to_list(Data),
+    RACKMessageData = binary_to_term(Data),
     RACKSequenceNumber = lists:nth(1, RACKMessageData),
     Originator = lists:nth(2, RACKMessageData),
     HopCount = lists:nth(3, RACKMessageData) + 1,
@@ -705,10 +767,8 @@ deserializeMessage(#load_ng_packet{type = ?RACK} = Packet, Data)->
 %     Packet#load_ng_packet{data = DREQMessage};
 
 deserializeMessage(#load_ng_packet{} = Packet, Data)->
-    Packet#load_ng_packet{data=binary_to_list(Data)}.
+    Packet#load_ng_packet{data=binary_to_term(Data)}.
 
-get_packet_data_as_list(?DATA, Data) ->
-  Data;
 
 % get_packet_data_as_list(?DREQ, Data) ->
 %     [Data#dreq_message.uuid];
@@ -723,7 +783,11 @@ get_packet_data_as_list(?RERR, Data) ->
   [Data#rerr_message.r_seq_number, Data#rerr_message.originator, Data#rerr_message.unreachable_address, Data#rerr_message.error_code, Data#rerr_message.destination];
 
 get_packet_data_as_list(?RACK, Data) ->
-  [Data#rack_message.r_seq_number, Data#rack_message.originator, Data#rack_message.hop_count, Data#rack_message.destination].
+  [Data#rack_message.r_seq_number, Data#rack_message.originator, Data#rack_message.hop_count, Data#rack_message.destination];
+
+
+get_packet_data_as_list( _ , Data) ->
+    Data.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 amIDestination(Destination, SelfAddress)->
@@ -1069,4 +1133,7 @@ get_route_set_entry_with_highest_seq_num(Entries) ->
 
 generate_uuid()->
   TimeStamp = get_current_millis(),
-  erlang:phash2(TimeStamp).
+  UUID = erlang:phash2(TimeStamp),
+  Binary = <<UUID:?MESSAGE_UUID_LENGHT>>,
+  <<FinalUUID:?MESSAGE_UUID_LENGHT>> = Binary,
+  FinalUUID.

@@ -18,7 +18,7 @@ erl -name node_1@132.73.198.5 -setcookie load_ng_project -run c c node -run node
 stub_data_server:
 erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub_data_server -run c c log -run stub_data_server start
 
-erl setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -run loadNGgui start
+erl -name stats_server@127.0.0.1 -setcookie load_ng_project -run c c loadNGgui -run loadNGgui start
 
 
 ```
@@ -62,16 +62,16 @@ erl setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -r
 |4     |78:4b:87:a8:4b:d5   |	132.73.199.200|Valid|
 |5     |90:b6:86:03:62:f5   |	132.73.199.228|Valid|
 |6     |90:b6:86:09:6c:64   |	132.73.199.225|Valid|
-|7     |90:b6:86:0e:f6:11   |	132.73.199.234||
-|8     |90:b6:86:0e:8c:dd   |	132.73.199.235||
+|7     |90:b6:86:0e:f6:11   |	132.73.199.234|Valid|
+|8     |90:b6:86:0e:8c:dd   |	132.73.199.235|Valid|
 |9     |90:b6:86:04:31:0a   |	132.73.199.238|Valid|
 |10    |90:b6:86:0a:4e:1d   |	132.73.199.232|Valid|		
 |11    |78:4b:87:ac:dc:7b   |	132.73.192.104||
-|12    |78:4b:87:ad:52:2a   |	132.73.192.176||
+|12    |78:4b:87:ad:52:2a   |	132.73.192.176|XXXXX (50)|
 |13    |90:b6:86:0e:35:8f   |	132.73.192.195||
 |14    |90:b6:86:0e:09:9a   |	132.73.192.164||
-|15    |90:b6:86:08:4d:0c   |	132.73.192.109||
-|16    |90:b6:86:13:39:21   |	132.73.192.175||
+|15    |90:b6:86:08:4d:0c   |	132.73.192.109|XXXXX (36)|
+|16    |90:b6:86:13:39:21   |	132.73.192.175|XXXXX (12)|
 |17    |90:b6:86:0d:e4:ec   |	132.73.192.38||
 |18    |                    |                  ||
 |19    |                    |                  ||

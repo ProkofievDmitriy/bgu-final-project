@@ -7,7 +7,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/2, hand_shake/1, send_data_request/1, send_data_reply/2, update_configuration/1, reset/0, get_status/0]).
+-export([start/2, stop/0, send/2, hand_shake/2, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -32,18 +32,36 @@ start(ProtocolModule, Properties) ->
 stop() ->
     gen_server:call(?PROTOCOL_NAME, stop).
 
-send(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_message, {Destination, Data}}, ?TIMEOUT).
 
-send_data_request(Destination)->
-    gen_server:call(?PROTOCOL_NAME, {data_request_message, {Destination}}, ?TIMEOUT).
+%%%%%%%%%%%%%%%%%%%%%%%% APLICATION INSTERFACE
+send(Destination, Data)->
+    gen_server:call(?PROTOCOL_NAME, {data_message, {extract_address(Destination), Data}}).
+
+
+send_data_request(Destination, Data)->
+    gen_server:call(?PROTOCOL_NAME, {data_request_message, {extract_address(Destination), tuple_to_list(Data)}}).
+
 
 send_data_reply(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {Destination, Data}}, ?TIMEOUT).
+    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {extract_address(Destination), tuple_to_list(Data)}}).
 
-%essential for protocol to be aware of uppel apllication layer
-hand_shake(ApplicationPid) ->
-    gen_server:call(?PROTOCOL_NAME, {hand_shake, ApplicationPid}).
+
+%essential for protocol to be aware of upper apllication layer
+hand_shake(ApplicationPid, Timeout) ->  % App_type might be dc or sem
+   gen_server:call(?PROTOCOL_NAME, {hand_shake, ApplicationPid} , Timeout).
+
+extract_address(NodeNameAtom)->
+    case NodeNameAtom of
+        node_10 -> 10;
+        node_4 -> 4;
+        node_1 -> 1
+    end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
 
 update_configuration(OptionsList)->
     gen_server:call(?PROTOCOL_NAME, {update_configuration, OptionsList}).

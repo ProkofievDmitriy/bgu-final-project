@@ -1,4 +1,5 @@
--define(MODULES_TO_FILTER, [load_ng, node, transport, stats_server_interface, report]).
+-define(MODULES_TO_FILTER, [stats_server_interface, report]).
+% -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
 
@@ -11,7 +12,9 @@
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).
 -define(DATA_LINK, data_link).
--define(APPLICATION, simple_app).
+% -define(APPLICATION, simple_app).
+% -define(APPLICATION, dc).
+-define(APPLICATION, am_sem).
 -define(REPORT_UNIT, report).
 -define(MODEM_PORT, modem_port).
 -define(PROTOCOL, protocol_interface).
@@ -33,6 +36,7 @@
                          node_control_interface,
                          stub_data_server,
                          isg_time,
+                         dc, am_sem,
                          stats_server_interface]).
 
 
@@ -42,7 +46,7 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 20000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 500000).
 -define(NODE_STATUS_TIMER_INTERVAL, 2000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS * 2).
 
@@ -91,7 +95,7 @@
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
        %                          {data_server_ip, "132.73.205.115"}
-                                 {data_server_ip, "192.168.1.19"}
+                                 {data_server_ip, "132.73.205.115"}
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
 
@@ -99,10 +103,11 @@
 
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
--define(MESSAGE_SEND_INTERVAL, 5). % in second
+-define(MESSAGE_SEND_INTERVAL, 30). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
-                         {role, data_concentration_server}
+                         {role, data_concentration_server},
+                         {meters_list, [node_10, node_4]}
                         ]).

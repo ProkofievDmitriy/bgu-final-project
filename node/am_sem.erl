@@ -13,7 +13,7 @@
 -include("app_macros.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -33,10 +33,12 @@
 %%% API
 %%%===================================================================
 
-start_link(My_node, My_protocol,_Meters) ->
+start_link({My_node, My_protocol,_Meters}) ->
   My_name = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
   log:info("~p created ~n",[My_name]),
-  gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []).
+  timer:sleep(1500),
+  {ok, PID} = gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []),
+  PID.
 
 %%%===================================================================
 %%% gen_fsm callbacks
