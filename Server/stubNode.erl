@@ -16,7 +16,7 @@
   handle_info/2,
   terminate/2,
   code_change/3]).
-  
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -58,18 +58,18 @@ simulate()->
 			%addRoute('node_2@127.0.0.1', 2),
 			spawn(fun run_simulate_c/0)
 	end.
-	
 
-run_simulate_a(Id) -> 
+
+run_simulate_a(Id) ->
 	receive
 		stop->ok
 	after 5000 ->
-		sendDataMsg(3,2,Id),
+		sendDataMsg('node_1@127.0.0.1','node_2@127.0.0.1',Id),
 		run_simulate_a(Id+1)
 	end.
 
 
-run_simulate_c() -> 
+run_simulate_c() ->
 	receive
 		stop->ok
 	after 5000 ->
@@ -97,12 +97,12 @@ simulate_rand() ->
 			%addRoute('node_1@127.0.0.1', 1),
 			%addRoute('node_3@127.0.0.1', 2);
 		'node_3@127.0.0.1' -> update_configuration('node_3@127.0.0.1', plc_only)%,
-			
+
 			%addRoute('node_2@127.0.0.1', 2)
 	end,
 	spawn(fun run_simulate_rand/0).
 
-run_simulate_rand() -> 
+run_simulate_rand() ->
 	receive
 		stop->ok
 	after 5000 ->
@@ -164,13 +164,13 @@ start_link(Name) ->
     gen_server:start_link({local,?MODULE}, ?MODULE, [Name], []).
 
 start() ->
-	net_kernel:connect('stats_server@192.168.1.19'),
+	net_kernel:connect('stats_server@127.0.0.1'),
 	Name = node(),
 	io:format("AStarting ~p~n",[Name]),
-	
+
     start_link(Name).
-    
-stop() -> 
+
+stop() ->
   gen_server:cast(?MODULE, stop).
 
 
@@ -192,7 +192,7 @@ handle_call(Req, From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({received_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
+handle_cast({received_management_message, Source, Destination,Type}, State = #state{name = Name}) ->
 	stats_server_interface:report({management_message,received_message},  [{source, Source},
  											   			{destination, Destination},
 										   				{message_type, Type}]),
@@ -200,7 +200,7 @@ handle_cast({received_management_message, Source, Destination,Type}, State = #st
 
     {noreply, State};
 
-handle_cast({sent_management_message, Source, Destination,Type}, State = #state{name = Name}) -> 
+handle_cast({sent_management_message, Source, Destination,Type}, State = #state{name = Name}) ->
 	stats_server_interface:report({management_message,send_message}, [{source, Source},
  											   			{destination, Destination},
 										   				{message_type, Type}]),
@@ -216,7 +216,7 @@ handle_cast({sent_management_message, Source, Destination,Type}, State = #state{
 
     {noreply, State};
 
-handle_cast({received_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
+handle_cast({received_data_message, Source, Destination,Id}, State = #state{name = Name}) ->
 	%stats_server_interface:received_data_message(Name, From, Msg),
 	stats_server_interface:report({data_message,received_message}, [{source, Source},
 									   			{destination, Destination},
@@ -225,7 +225,7 @@ handle_cast({received_data_message, Source, Destination,Id}, State = #state{name
 
     {noreply, State};
 
-handle_cast({sent_data_message, Source, Destination,Id}, State = #state{name = Name}) -> 
+handle_cast({sent_data_message, Source, Destination,Id}, State = #state{name = Name}) ->
 
 
 	%stats_server_interface:sent_data_message(Name, To, Msg),
@@ -243,36 +243,36 @@ handle_cast({sent_data_message, Source, Destination,Id}, State = #state{name = N
 
     {noreply, State};
 
-handle_cast({state, Medium_mode}, State = #state{name = Name}) -> 
+handle_cast({state, Medium_mode}, State = #state{name = Name}) ->
 	io:format("~p changing State: Medium_mode: ~p~n",[Name, Medium_mode]),
     {noreply, State#state{medium_mode = Medium_mode}};
 
 
 
-handle_cast({reset_node}, State = #state{name = Name}) -> 
+handle_cast({reset_node}, State = #state{name = Name}) ->
 	io:format("~n~p deleting Table!~n~n",[Name]),
     {noreply, State};
 
 
-handle_cast({initiate_transaction, To,Msg}, State = #state{name = Name}) -> 
+handle_cast({initiate_transaction, To,Msg}, State = #state{name = Name}) ->
 	io:format("~p sending Msg: ~p, TO: ~p~n",[Name, Msg,To]),
     {noreply, State};
 
-handle_cast({addRoute, Dest,Next, Medium}, State = #state{name = Name, routing_set = Routing_set}) -> 
+handle_cast({addRoute, Dest,Next, Medium}, State = #state{name = Name, routing_set = Routing_set}) ->
 	io:format("Adding: Dest: ~p, Next: ~p, with: ~p~n",[Dest, Next, Medium]),
-	
+
 	NewRS = [{{destination, Dest}, {next_address, Next}, {medium, Medium}}|Routing_set],
     {noreply, State#state{routing_set = NewRS}};
 
 
 
 
-handle_cast(stop, State) -> 
+handle_cast(stop, State) ->
     io:format("STOP~n"),
     stats_server_interface:node_is_down(State#state.name),
     {stop, normal,State};
 
-handle_cast(Msg, State) -> 
+handle_cast(Msg, State) ->
     io:format("stats_server got cast with bad arg:~p~n", [Msg]),
     {noreply, State}.
 
@@ -334,6 +334,3 @@ terminate(_Reason, _State) ->
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
-
-
-

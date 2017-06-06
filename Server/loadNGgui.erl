@@ -10,22 +10,16 @@
 -define(CIRCE_RADIUS, 15).
 -define(CIRCE_RADIUS_SQURE, ?CIRCE_RADIUS*?CIRCE_RADIUS).
 
-
 -export([start/0, init/1, terminate/2,  code_change/3,
 handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]).
 
 -record(state,
-	{frame,panel, mapEts, nodesEts, canvas, dc, log, nodeChoice, selectedNode = all, numberOfNodes, buttons,%}).
+	{frame,panel, mapEts, nodesEts, canvas, log, nodeChoice, selectedNode = all, numberOfNodes, buttons,%}).
 %-record(buttons, {
-    counters,
-    configButtons, updateLocation,
+    counters, configButtons, updateLocation,
     buttonExport, buttonFullMap, buttonDeleteTable,buttonSendConfig, buttonSendMSG, txtMsgSend, cmbTo}).
 
 -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
-
-
-
-
 
 
 %%%%%%%%%%%%
@@ -41,15 +35,10 @@ start() ->
     wx_object:start_link({global, ?SERVER}, ?MODULE, WxServer, []).
 
 
-
-
-
 init(WxServer) ->
-
-
     NodesEts = ets:new(nodesEts,[set,named_table]),
     MapEts = ets:new(mapEts,[set,named_table]),  % {NodeNameAtom,{Location, Medium ,RoutingSet}}
-	io:format("init 1 ~n"),
+		io:format("init 1 ~n"),
 
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %%                          GUI Setup:                          %%
@@ -76,11 +65,6 @@ init(WxServer) ->
     wxSizer:addSpacer(ManagementSz, 20),
     wxSizer:add(ManagementSz, ManagementSzRightP),
 
-    %NodesSz = wxBoxSizer:new(?wxVERTICAL),
-    %ManagementSz = wxBoxSizer:new(?wxVERTICAL),
-
-
-
     %% create widgets
     MikraPLC = wxStaticText:new(Panel, ?wxID_ANY," PLC |",[{style, ? wxALIGN_RIGHT}]),
     MikraRF = wxStaticText:new(Panel, ?wxID_ANY," RF   |",[{style, ? wxALIGN_RIGHT}]),
@@ -89,7 +73,6 @@ init(WxServer) ->
     wxStaticText:setForegroundColour(MikraPLC, ?wxBLUE),
     wxStaticText:setForegroundColour(MikraRF, ?wxRED),
     Title = wxStaticText:new(Panel, ?wxID_ANY,"Smart Meter Network Management Tool:",[{style, ?wxALIGN_CENTER}]),
-
 
     %%Setup Buttons:
     ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Routes Table"}]),
@@ -151,7 +134,6 @@ init(WxServer) ->
     %% Nodes:
     wxSizer:add(NodesSz, Canvas),
     wxPanel:connect (Canvas, left_up),
-		wxPanel:connect (Canvas, left_down),
 
     wxSizer:addSpacer(NodesSz, 10),
 
@@ -185,15 +167,11 @@ init(WxServer) ->
 %% Now 'set' OuterSz into the Panel
     wxPanel:setSizer(Panel, SuperSz),
 
-
-    %% TEST let DC be always alive
-    DC = wxWindowDC:new(Canvas),
-
     wxFrame:show(Frame),
     erlang:send_after(?REFRESH_TIME,self(),timer),
 
     {Frame,#state{frame=Frame,panel=Panel,mapEts = MapEts, nodesEts = NodesEts, log = Log,canvas = Canvas,
-                    dc = DC, cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodeChoice = NodeChoice, numberOfNodes = 0,
+                    cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodeChoice = NodeChoice, numberOfNodes = 0,
                     buttonSendConfig = ButtonSendConfig,
                     %buttons = #buttons{
                     counters = Counters,
@@ -202,9 +180,7 @@ init(WxServer) ->
                                         buttonFullMap = wxButton:getId(ButtonFullMap),
                                         updateLocation = UpdateLocation,
                                         buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
-                                        buttonSendMSG = wxButton:getId(ButtonSendMSG)
-                                        %}
-                    }}.
+                                        buttonSendMSG = wxButton:getId(ButtonSendMSG) }}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -256,83 +232,52 @@ handle_sync_event(_Event,_,State) ->
 
 handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{nodesEts = NodesEts, updateLocation = UpdateLocation}) ->
 		W = wxToggleButton:getValue(UpdateLocation),
-		io:format("wxToggleButton:getValue(UpdateLocation) - ~p~n",[W]),
+		io:format("~n~nwxToggleButton:getValue(UpdateLocation) - ~p~n",[W]),
 
 		case	wxToggleButton:getValue(UpdateLocation) of
 			false ->
-				io:format("Pick up node from On: ~p,~p~n",[X,Y]),
+				io:format("~n~nPick up node from On: ~p,~p~n",[X,Y]),
 				Node = find_node(State#state.nodesEts,ets:first(NodesEts), {X,Y}),
 				case Node of
 					ok -> {noreply,State};
 					N ->
 						wxChoice:setStringSelection(State#state.nodeChoice,atom_to_list(N)),
-				    DC = wxWindowDC:new(State#state.canvas),
-				    wxDC:clear(DC),
+						update_map(State#state.canvas, N, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
 
-				    switch_to_node(DC, N,ets:first(NodesEts), NodesEts),
-				    [{N,{_, MediumMode,_}}] = ets:lookup(NodesEts,N),
-				    configButtonUpdate(MediumMode,State#state.configButtons),
-				    wxWindowDC:destroy(DC),
-						wxToggleButton:setValue(UpdateLocation,false),
 					%		{noreply,State#state{selectedNode = N}}
 						{noreply,State#state{selectedNode = N}}
 				end;
 			true ->
             [{_,{_, Mode,RoutingSet}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
-            io:format("Update location SelectedNode: ~p~n", [State#state.selectedNode]),
+            io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
             ets:insert(State#state.nodesEts,{State#state.selectedNode,{{X,Y}, Mode,RoutingSet}}),
 						io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 						wxToggleButton:setValue(UpdateLocation,false),
 						{noreply,State}
 			end;
 
-handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}, State = #state{nodesEts = NodesEts, configButtons = ConfigButtons}) ->
+handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}, State) ->
     io:format("command_choice_selected ~p~n",[Ex]),
-
     SelectedNode = list_to_atom(Ex),
-    DC = wxWindowDC:new(State#state.canvas),
-    wxDC:clear(DC),
-
-    switch_to_node(DC, SelectedNode,ets:first(NodesEts), NodesEts),
-    [{SelectedNode,{_, MediumMode,_}}] = ets:lookup(NodesEts,SelectedNode),
-    configButtonUpdate(MediumMode,ConfigButtons),
-    wxWindowDC:destroy(DC),
-		wxToggleButton:setValue(State#state.updateLocation,false),
-  %  wxTextCtrl:appendText(Log, "Selected node ID: " ++ NodeName ++"\n"),
+		update_map(State#state.canvas, SelectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
 
 {noreply,State#state{selectedNode = SelectedNode}};
 
 handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
-	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap, updateLocation = UpdateLocation,
-                buttonDeleteTable = ButtonDeleteTable,
-                buttonSendConfig = ButtonSendConfig,
-                buttonExport = ButtonExport,
-                buttonSendMSG = ButtonSendMSG
-         }) ->
-
-
+	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap,
+                buttonDeleteTable = ButtonDeleteTable, buttonSendConfig = ButtonSendConfig,
+                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG}) ->
     case ID of
         ButtonFullMap ->
             io:format("Showing full map~n"),
-            DC = wxWindowDC:new(State#state.canvas),
-            wxDC:clear(DC),
-            draw_circle(DC,ets:first(State#state.nodesEts), State#state.nodesEts),
-
-            switch_to_full_map(DC, ets:first(State#state.mapEts), State#state.mapEts, State#state.nodesEts),
-						wxChoice:setStringSelection(State#state.nodeChoice,""),
-			%      {_,L} = wxChoice:getSelections(State#state.nodeChoice),
-      %      lists:map(fun (X) -> wxChoice:deselect(State#state.nodeChoice,X) end,L),
-            wxWindowDC:destroy(DC),
-						wxToggleButton:setValue(UpdateLocation,false),
+						update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
             {noreply,State#state{selectedNode = all}};
-
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
                     %A = rpc:call('node_11@192.168.1.26', node_control_interface, reset_node, [SelectedNode]),
                     node_control_interface:reset_node(SelectedNode),
                     %io:format("buttonDeleteTable delete ~p res ~p~n",[SelectedNode, A]),
                     {noreply,State};
-                    %{initiate_transaction, [{destination, Destination}]]
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
 
@@ -365,14 +310,10 @@ handle_event(_, State) -> io:format("graphic handle_event nothing interesting~n"
 %% Handling cast messages
 %%      {node_state,Data}:
 %%          node new state, Data contains name of node, routing set of node and medium mode.
-%%
+%%%%Data:{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = CmbTo}) ->
-
-    %%Data:{node_state,[{node_name,node_24},{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
-  %  io:format ("loadNggui: node_state Data - ~p~n",[Data]),
-  %  io:format ("loadNggui: node_state Data~n"),
 
     NodeNameAtom = proplists:get_value(node_name, Data),
     NodeNameList = atom_to_list(NodeNameAtom),
@@ -416,24 +357,21 @@ handle_cast(_A, State) ->
 handle_info(timer, State) ->
  % io:format("loadNG: timer~n"),
   stats_server:stats_request(self()),
-    DC = wxWindowDC:new(State#state.canvas),
-  	wxDC:clear(DC),
-  	switch_to_node(DC, State#state.selectedNode,ets:first(State#state.nodesEts), State#state.nodesEts),
-    wxWindowDC:destroy(DC),
+	update_map(State#state.canvas, State#state.selectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,ok),
 
   erlang:send_after(?REFRESH_TIME,self(),timer),
   {noreply, State};
 
-handle_info({Counters = #counters{}, Avg}, State) ->
+handle_info({Counters = #counters{}, AvgTime,AvgLength}, State) ->
   io:format("loadNG: Got State Update~p~n",[Counters]),
   wxStaticText:setLabel(State#state.counters,
-                "numberOfManagementMsgSent = " ++ integer_to_list(Counters#counters.numberOfManagementMsgSent) ++
-                "\nnumberOfManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
-                "\nnumberOfDataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
-                "\nnumberOfDataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
-                "\nnumberOfRelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nAverage time: " ++ float_to_list(Avg)
-                ),
+                "Number Of ManagementMsgSent = " ++ integer_to_list(Counters#counters.numberOfManagementMsgSent) ++
+                "\nNumber Of ManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
+                "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
+                "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
+                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
+                "\nAverage time: " ++ float_to_list(AvgTime) ++
+								"\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
   {noreply, State};
 handle_info(E, State) ->
 	io:format("handle_info _Event ~p~n",[E]),
@@ -489,14 +427,15 @@ printNodesEts(Node, Ets) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Internal Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
 update_map_ets(_, _, [])-> ok;
 update_map_ets(MapEts, Node, [{{destination,0},{next_address,0},{medium,_}}|NodeRoutingMap])->
     update_map_ets(MapEts, Node, NodeRoutingMap);
-update_map_ets(MapEts, Node, [{{destination,DestNode},{next_address,NextNode},{medium,Medium}}|NodeRoutingMap])->
-    NextNodeAtom = makeAtom(NextNode),
-    DestNodeAtom = makeAtom(DestNode),
+update_map_ets(MapEts, Node, [{_,{next_address,NextNode},{medium,Medium}}|NodeRoutingMap])->
+    NextNodeAtom = makeAtom(NextNode), %  DestNodeAtom = makeAtom(DestNode),ets:insert(MapEts,{{Node, {NextNodeAtom, DestNodeAtom}},{0}}),
     ets:insert(MapEts,{{Node, NextNodeAtom},{Medium}}),
-  %  ets:insert(MapEts,{{Node, {NextNodeAtom, DestNodeAtom}},{0}}),
+
     update_map_ets(MapEts, Node, NodeRoutingMap).
 
 find_node(_,'$end_of_table',_) -> ok;
@@ -505,12 +444,40 @@ find_node(NodesEts,Key, MouseLocation) ->
 		case distance(KeyLocation, MouseLocation) of
 				N when N =< ?CIRCE_RADIUS_SQURE ->
 					Key;
-				N ->
+				_ ->
 					find_node(NodesEts,ets:next(NodesEts,Key), MouseLocation)
 				end.
 
 distance({X1,Y1}, {X2,Y2}) ->
     math:pow(X1-X2, 2) + math:pow(Y1-Y2, 2).
+
+
+%update_map(Canvas, all, NodesEts,ConfigButtons,UpdateLocation) -> ok;
+update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation) ->
+		DC = wxWindowDC:new(Canvas),
+		wxDC:clear(DC),
+		case SelectedNode of
+			all -> 	switch_to_full_map(DC, ets:first(MapEts), MapEts, NodesEts);
+			_ ->
+				[{SelectedNode,{{X,Y}, MediumMode,RoutingSet}}] = ets:lookup(NodesEts,SelectedNode),
+				draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
+				configButtonUpdate(MediumMode,ConfigButtons)
+		end,
+
+		draw_nodes(DC, SelectedNode ,ets:first(NodesEts), NodesEts),
+		if UpdateLocation =/= ok -> wxToggleButton:setValue(UpdateLocation,false); true -> ok end,
+		wxWindowDC:destroy(DC).
+
+	%%%%
+	%%  Draws all nodes
+	%%%%
+draw_nodes(_, _, '$end_of_table', _) -> ok;
+draw_nodes(DC, SelectedNode, NodeKey, NodesEts) ->
+		[{NodeKey,{{X,Y}, _MediumMode,_}}] = ets:lookup(NodesEts,NodeKey),
+		wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
+		wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50}),
+		draw_nodes(DC, SelectedNode, ets:next(NodesEts,NodeKey), NodesEts).
+
 
 %%%%
 %%  Draws The full map of all the nodes
@@ -519,85 +486,43 @@ switch_to_full_map(_, '$end_of_table', _, _) -> ok;
 switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
     [{{Node,NextNode},{Medium}}] = ets:lookup(MapEts,MapEtsKey),
     io:format("Node: ~p NextNode: ~p~n",[Node,NextNode]),
-
-    %case NextNode of
-    %    NextNode when is_atom(NextNode) ->
-    [{Node,{NodeLocation,_, _}}] = ets:lookup(NodesEts,Node),
-    [{NextNode,{NextNodeLocation,_, _}}] = ets:lookup(NodesEts,NextNode),
-    draw_route(DC, NodeLocation,NextNodeLocation, Medium),
-    %    NextNode -> ok
-    %end,
+		case {ets:lookup(NodesEts,Node), ets:lookup(NodesEts,NextNode)} of
+			{[{Node,{NodeLocation,_, _}}], [{NextNode,{NextNodeLocation,_, _}}]} ->
+				draw_route(DC, NodeLocation,NextNodeLocation, Medium);
+				A -> io:format("switch_to_full_map: Node ~p or NextNode ~p are not in ETS ~p~n",[Node, NextNode, A]), ok
+		end,
     switch_to_full_map(DC, ets:next(MapEts,MapEtsKey), MapEts, NodesEts).
-
-%%%%
-%%  Draws the map as seen from Node
-%%%%
-switch_to_node(_, _,'$end_of_table', _) -> ok;
-switch_to_node(DC, all,Key, NodesEts) -> ok;
-switch_to_node(DC, Node,Node, NodesEts) ->
-
-    [{Node,{{X,Y}, _MediumMode,RoutingSet}}] = ets:lookup(NodesEts,Node),
-    io:format("switch_to_node 2 Node: ~p at X-~p Y~p~n",[Node,X,Y]),
-    wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
-	wxDC:drawLabel(DC,atom_to_list(Node), {X-10,Y-10,X+50,Y+50}),
-
-
-    draw_routs(DC, Node, {X,Y},NodesEts,RoutingSet),
-
-    switch_to_node(DC, Node,ets:next(NodesEts,Node),NodesEts);
-
-switch_to_node(DC, Node,Key, NodesEts) ->
-    io:format("switch_to_node3 Node: ~p Key ~p~n",[Node,Key]),
-
-    [{Key,{{X,Y}, _MediumMode,_RoutingSet}}] = ets:lookup(NodesEts,Key),
-    wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
-	wxDC:drawLabel(DC,atom_to_list(Key), {X-10,Y-10,X+50,Y+50}),
-    switch_to_node(DC, Node,ets:next(NodesEts,Key),NodesEts).
 
 %%%%
 %%  Draws all routes the SelectedNode familiar
 %%%%
-draw_routs(_, _, _,_,[]) ->     io:format("draw_routs ends~n"),
+draw_routes_from_node(_, _, _,_,[]) ->     io:format("draw_routes_from_node ends~n"),
 ok;
-draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, 0},_, _}|RoutingSet]) ->
-	draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
-draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
-
+draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, 0},_, _}|RoutingSet]) ->
+	draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
+draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
     AtomNode = makeAtom(Node),
-    %AtomNode = Node,
-    %AtomNode = list_to_atom("node_" ++ integer_to_list(Node)),
-    io:format("draw_routsB N: ~p~n~n",[AtomNode]),
+    io:format("draw_routes_from_node N: ~p~n~n",[AtomNode]),
 
     [{AtomNode,{NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
 
     draw_route(DC, Location,NextLocation, Medium),
-    draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet);
+    draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
 
 
-draw_routs(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
-
-    %AtomNode1 = Node1,  % = list_to_atom("node_" ++ integer_to_list(Node1)),
+draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
     AtomNode1 = makeAtom(Node1),
-        io:format("draw_routsC N: ~p~n~n",[AtomNode1]),
+    io:format("draw_routes_from_node N: ~p~n~n",[AtomNode1]),
 
     [{AtomNode1,{Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
     AtomNode2 = makeAtom(Node2),
-    %AtomNode2 = Node2,% = list_to_atom("node_" ++ integer_to_list(Node2)),
 
     [{AtomNode2,{Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
 
     draw_route(DC, Location,Location2, Medium),
     draw_route(DC, Location1,Location2, 0),
 
-    draw_routs(DC, SelectedNode, Location, NodesEts,RoutingSet).
-
-
-draw_circle(_,'$end_of_table', _)-> ok;
-draw_circle(DC,Node, NodesEts)->
-    [{Key,{{X,Y}, _MediumMode,_RoutingSet}}] = ets:lookup(NodesEts,Node),
-    wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
-    wxDC:drawLabel(DC,atom_to_list(Key), {X-10,Y-10,X+50,Y+50}),
-    draw_circle(DC,ets:next(NodesEts,Node), NodesEts).
+    draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet).
 
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
@@ -616,7 +541,7 @@ draw_route(DC, Location1,Location2, Medium) ->
     wxDC:drawLine(DC, Location1, Location2),
     wxDC:setPen(DC, wxPen:new(?wxBLACK)).
 
-makeAtom(NodeNumber) -> list_to_atom("node_" ++ integer_to_list(NodeNumber) ++ "@127.0.0.1").
+makeAtom(NodeNumber) -> list_to_atom("node_" ++ integer_to_list(NodeNumber)).
 
 configButtonUpdate(idle, [PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
 configButtonUpdate(rf_only, [PlcOff,_,_,RfOn])->selectRadio(PlcOff,RfOn);
@@ -636,17 +561,14 @@ checkRadio([_,PLC,_,RF]) ->checkRadio(wxRadioButton:getValue(PLC), wxRadioButton
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 create_radio_buttons(Panel) ->
-    RadioButtonSizer =
-        wxStaticBoxSizer:new(?wxVERTICAL, Panel,
-            [{label, "wxRadioButton"}]),
+    RadioButtonSizer = wxStaticBoxSizer:new(?wxVERTICAL, Panel, [{label, "wxRadioButton"}]),
     Buttons =
         [wxRadioButton:new(Panel, ?wxID_ANY, "PLC OFF",[{style, ?wxRB_GROUP}]),
         wxRadioButton:new(Panel, ?wxID_ANY, "PLC ON", []),
         wxRadioButton:new(Panel, ?wxID_ANY, "RF OFF",[{style, ?wxRB_GROUP}]),
         wxRadioButton:new(Panel, ?wxID_ANY, "RF ON", [])],
 
-    Fun =
-        fun(Item) ->
+    Fun =fun(Item) ->
             wxSizer:add(RadioButtonSizer, Item)
         end,
     wx:foreach(Fun, Buttons),
