@@ -32,3 +32,12 @@
 -define(TERMINATION_TIMEOUT, 3000).
 
 -define(PROTOCOL_REQUEST_TIMEOUT, 10000).
+
+
+
+
+-define(DREQ_BIT, 0).
+-define(DREP_BIT, 0).
+-define(NODE_BITS,6).
+-define(READING_BITS, 26).
+-define(SEQ_BITS,8).

@@ -187,7 +187,9 @@ send_drep(My_protocol,Data,Seq) ->
     integrated ->
       log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
      % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Seq})),
+      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+      log:debug ("sending bit message: ~p~n" , [Bit_message]),
+      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,Bit_message)),
       case Reply of
         ok -> ok;
         Err -> log:critical("error in gen_server:call in send_drep : ~p~n",[Err])
@@ -203,9 +205,38 @@ send_dreq(My_protocol, To, Seq) ->
     integrated ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [To,Seq]) ,
       %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-      Reply = (catch protocol_interface:send_data_request(To,{dreq, To, Seq})),
+      Bit_message = message_to_bit({dreq, To, Seq}),
+      log:debug ("sending bit message: ~p~n" , [Bit_message]),
+      Reply = (catch protocol_interface:send_data_request(To,Bit_message)),
       case Reply of
         ok -> ok;
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
       end
   end.
+
+
+message_to_bit({dreq,To,Seq}) ->
+  Type_b = <<?DREQ_BIT:1>>,
+  Dest = extract_address(To),
+  Dest_b = <<Dest:?NODE_BITS>>,
+  Seq_b = <<Seq:?SEQ_BITS>>,
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b,bitstring>>;
+
+message_to_bit({drep,To,Data,Seq})->
+  Data_b = data_to_bits(Data,<<>>),
+  Type_b = <<?DREQ_BIT:1>>,
+  Dest = extract_address(To),
+  Dest_b = <<Dest:?NODE_BITS>>,
+  Seq_b = <<Seq:?SEQ_BITS>>,
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b,bitstring, Data_b/bitstring>>.
+
+
+
+%%% readings order will be reversed at the end of this -> at the receiving side will be reversed back.
+data_to_bits([],String) ->String;
+data_to_bits([{Meter,Reading}|T],String)->
+  Meter_b = <<Meter:?NODE_BITS>>,
+  Reading_b = <<Reading:?READING_BITS>>,
+  NewString = <<Meter_b/bitstring, Reading_b/bitstring, String/bitstring>>,
+  data_to_bits(T,NewString).
+
