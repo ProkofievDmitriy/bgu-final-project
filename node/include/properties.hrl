@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [stats_server_interface, report]).
+-define(MODULES_TO_FILTER, [stats_server_interface, report, node, transprot]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 %-define(MODULES_TO_FILTER, [report, load_ng, transport]).
 
@@ -56,8 +56,9 @@
 -define(MESSAGE_UUID_LENGHT, 8). % number of bits to store address
 -define(SESSION_MANAGEMENT_LENGTH, 8). % number of bits to store address
 -define(DATA_LENGTH_SIZE, 8). % number of bits to store address
--define(MAX_FRAME_LENGTH, 60 * 8). % number of bits to store address
+-define(MAX_FRAME_LENGTH, 54 * 8). % number of bits to store address
 -define(MAX_DATA_LENGTH, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 4 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_UUID_LENGHT + ?MESSAGE_TYPE_LENGTH + ?DATA_LENGTH_SIZE)) / 8). % number of BYTES for data
+-define(MAX_DATA_LENGTH_IN_BITS, (?MAX_FRAME_LENGTH - (?ADDRESS_LENGTH * 4 + ?SESSION_MANAGEMENT_LENGTH + ?MESSAGE_UUID_LENGHT + ?MESSAGE_TYPE_LENGTH + ?DATA_LENGTH_SIZE))). % number of BYTES for data
 -define(NET_TRAVERSAL_TIME, 500).
 -define(TIMEOUT, ?NET_TRAVERSAL_TIME * 3).
 -define(ACK_REQUIRED, 0). % 0 = false, 1 = true

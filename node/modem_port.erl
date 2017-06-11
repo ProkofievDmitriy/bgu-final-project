@@ -281,7 +281,7 @@ close_c_port_program(OS_PID)->
 sendMsg(Port, MSG) ->
 	[H|T] = MSG,
 	backoff(H),
-	?LOGGER:debug("[~p]: sendMsg: MSG is: ~w~n", [?MODULE, MSG]),
+	?LOGGER:debug("[~p]: sendMsg ~w bytes, MSG: ~w~n", [?MODULE, length(MSG), MSG]),
 	sendByte(Port, H, ?START_BYTE),
 	sendMSG2(Port, T).
 
@@ -321,10 +321,10 @@ prepare_payload([Channel, _ | Rest]) ->
 	Result = case PAD of
 	    too_large ->
             ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~w.~n", [?MODULE, Size]),
-	        too_large;
+	        {error, too_large};
         List ->
             L = pad_list(Rest, PAD),
-            ?LOGGER:preciseDebug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
+            ?LOGGER:debug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
             BinaryZero = <<0:8>>,
@@ -352,7 +352,7 @@ getPaddingList(Size)->
 		        lists:seq(1,X);
 		        true -> []
             end;
-		S2 when S2 =< 60 ->
+		S2 when S2 =< 54 ->
 		    X = 60 - Size - 4 - 2,
 		    if X > 0 ->
 		        lists:seq(1,X);

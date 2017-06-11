@@ -27,6 +27,7 @@
                   mac,
                   application_monitor_ref,
                   application_properties,
+                  application_type,
                   protocol_monitor_ref,
                   protocol_properties,
                   report_unit_monitor_ref,
@@ -107,9 +108,10 @@ init(GlobalProperties) ->
 
     %initialize application
     ApplicationProperties = proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties),
+    ApplicationType = proplists:get_value(role, ApplicationProperties),
     Meters_list = proplists:get_value(meters_list, ApplicationProperties),
 	% Application_Pid = ?APPLICATION:start(ApplicationProperties),
-	Application_Pid = ?APPLICATION:start_link({list_to_atom(NodeName), Protocol_Pid, Meters_list}),
+	Application_Pid = ApplicationType:start_link({list_to_atom(NodeName), Protocol_Pid, Meters_list}),
     % ?PROTOCOL:hand_shake(Application_Pid),
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
@@ -127,6 +129,7 @@ init(GlobalProperties) ->
         protocol_properties = ProtocolProperties,
         application_monitor_ref = Application_Monitor_Reference,
         application_properties = {list_to_atom(NodeName), Protocol_Pid, Meters_list},
+        application_type = ApplicationType,
         % application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
@@ -176,7 +179,8 @@ handle_cast(Request, Context) ->
 %case Application crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:debug("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
-    Application_Pid = ?APPLICATION:start_link(Context#context.application_properties),
+    ApplicationType = Context#context.application_type,
+    Application_Pid = ApplicationType:start_link(Context#context.application_properties),
     % Application_Pid = ?APPLICATION:start(Context#context.application_properties),
     % ?PROTOCOL:hand_shake(Application_Pid),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
@@ -228,7 +232,7 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 read_props() ->
     ApplicationProperties = ?APP_PROPS_LIST,
     NodeProperties = ?NODE_PROPS_LIST,
-    ProtocolProperties = ?PROTOCOL_PROPS_LIST,
+     ProtocolProperties = ?PROTOCOL_PROPS_LIST,
     ReportUnitProperties = ?REPORT_UNIT_PROPS_LIST,
 
     [{?APPLICATION_PROPERTIES, ApplicationProperties},

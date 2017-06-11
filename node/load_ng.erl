@@ -98,25 +98,25 @@ init(Properties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Data}}, From, Context) ->
-    ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_request_message, {Destination, Data}}, From, Context) ->
-    ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Context#context.transport_pid, Context]),
+    ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_reply_message, {Destination, Data}}, From, Context) ->
-    ?LOGGER:info("[~p]: data_reply_message, Message: {~w, ~w}, transport pid = ~p, Context: ~w~n", [?MODULE, Destination, Data, Context#context.transport_pid, Context]),
+    ?LOGGER:info("[~p]: data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({hand_shake, ApplicationPid}, From, Context) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p, Context: ~w~n", [?MODULE, ApplicationPid, From, Context]),
+    ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p~n", [?MODULE, ApplicationPid, From]),
     %TODO implement hand_shake with application
     NewContext = Context#context{application_pid = ApplicationPid},
     ?TRANSPORT:updateUpperLevelPid(NewContext#context.transport_pid, NewContext#context.application_pid),
@@ -138,7 +138,7 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  handle_cast({update_configuration, OptionsList}, Context) ->
-     ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w, Context: ~w ~n", [?MODULE, OptionsList, Context]),
+     ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w~n", [?MODULE, OptionsList]),
 
      {noreply, Context};
 

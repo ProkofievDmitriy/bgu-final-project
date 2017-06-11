@@ -147,45 +147,10 @@ idle(Request, _From, StateData)->
 
 active(disable, _From, StateData)->
     {reply, ok, idle, StateData};
-%
-% active({send_message, {?DREQ, Destination, []}}, _From, StateData) ->
-% ?LOGGER:debug("[~p]: ACTIVE - Request(send_message DREQ) Destination: ~p ~n", [?MODULE, Destination]),
-% NextHop = get_next_hop(Destination, StateData), % {Medium, NextHopAddress}
-% case NextHop of
-%     {error, ErrorMessage} ->
-%         {reply, {error, ErrorMessage}, active, StateData};
-%     #routing_set_entry{} = Hop ->
-%         Packet = build_new_packet(?DREQ, Destination, Data, StateData),
-%         Payload = serialize_packet(Packet),
-%
-%       UUID = generate_uuid(),
-%       Data = [UUID],
-%         Payload = prepare_payload(StateData#state.self_address,
-%                                   StateData#state.self_address,
-%                                   Destination,
-%                                   ?DREQ,
-%                                   Data), %% <<Destination/bitstring, MessageType/bitstring, Data/bitstring>>
-%         case Payload of
-%             {error, ErrorMessage} ->
-%                {reply, {error, ErrorMessage}, active, StateData};
-%             _ ->
-%                 if Destination =:= ?BROADCAST_ADDRESS ->
-%                     update_dreq_table(UUID, StateData);
-%                     true -> ok end,
-%                 Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-%                 %TODO Create report
-%                 % report_data_message_sent(Packet, StateData),
-%                 {reply, Result, active, StateData}
-%         end;
-%     Else ->
-%         ?LOGGER:critical("[~p]: ACTIVE - Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
-%         {reply, Else, active, StateData}
-% end;
-
 
 %DATA, DREP
 active({send_message, {Type, Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message) Destination: ~p, Data: ~p ~n", [?MODULE, Destination, Data]),
+    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message: ~p) Destination: ~p, Data: ~p ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
     NextHop = get_next_hop(Destination, StateData), % routing_set_entry
     case NextHop of
         {error, ErrorMessage} ->
@@ -202,7 +167,7 @@ active({send_message, {Type, Destination, Data}}, _From, StateData) ->
                     {reply, Result, active, StateData}
             end;
         Else ->
-            ?LOGGER:critical("[~p]: ACTIVE -Request(send_message)  - Enexpected error: ~p .~n", [?MODULE, Else]),
+            ?LOGGER:critical("[~p]: ACTIVE -Request(send_message: ~p) - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
             {reply, Else, active, StateData}
     end.
 %% ============================================================================================
@@ -371,7 +336,7 @@ active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
     {next_state, active, StateData};
 
 active({received_message, #load_ng_packet{type = ?DREQ} = Packet}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
+    ?LOGGER:debug("[~p]: ACTIVE - DREQ Packet : ~w .~n", [?MODULE, Packet]),
     update_routing_set_entry(Packet, StateData), % route maintanace
     AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
     if  AmIDestination ->
@@ -383,23 +348,23 @@ active({received_message, #load_ng_packet{type = ?DREQ} = Packet}, StateData) ->
             Result = forward_packet(Packet, StateData),
             case Result of
                 {ok, sent, _Some } ->
-                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
+                    ?LOGGER:debug("[~p]: DREQ Packet successfully forwarded .~n", [?MODULE]),
                     report_data_message_forwarded(Packet, StateData);
                 {error, Error, #routing_set_entry{} = FailedHop} ->
-                    ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
+                    ?LOGGER:debug("[~p]: DREQ Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
                     generate_RERR({Packet#load_ng_packet.originator,
                                    FailedHop#routing_set_entry.r_seq_number,
                                    ?RERR_HOST_UNREACHABLE,
                                    Packet#load_ng_packet.destination});
                Else ->
-                   ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
+                   ?LOGGER:critical("[~p]: ACTIVE - DREQ NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
                end;
         true -> ok end, % not eligible to forward, skip
     {next_state, active, StateData};
 
 
 active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
+    ?LOGGER:debug("[~p]: ACTIVE - DREP Packet : ~w .~n", [?MODULE, Packet]),
     update_routing_set_entry(Packet, StateData), % route maintanace
     % AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
     % if  AmIDestination ->
@@ -580,38 +545,6 @@ get_next_hop(Destination, State)->
     ?LOGGER:debug("[~p]: get_next_hop Result: ~p.~n", [?MODULE, Result]),
     Result.
 
-
-% build LoadNG Packet : <<Type:?MESSAGE_TYPE_LENGTH, Source:?ADDRESS_LENGTH, Destination:?ADDRESS_LENGTH, BinaryDataLengthInBytes:8, Data:BinaryDataLengthInBytes>>
-prepare_payload(Source, Originator, Destination, MessageType, Data)->
-    %TODO Remove Headers - meaningless
-    BinaryDestination = <<Destination:?ADDRESS_LENGTH>>,
-    BinarySource = <<Source:?ADDRESS_LENGTH>>,
-    BinaryOriginator = <<Originator:?ADDRESS_LENGTH>>,
-    BinaryMessageType = <<MessageType:?MESSAGE_TYPE_LENGTH>>,
-    BinaryData = list_to_binary(Data),
-    BinaryDataLengthInBytes = byte_size(BinaryData),
-    ?LOGGER:debug("[~p]: prepare_payload : MessageType: ~p, Originator: ~p, Source: ~p , Destination: ~p, DataLengthInBytes: ~p~n", [?MODULE,
-                                                                                                                     BinaryMessageType,
-                                                                                                                     BinaryOriginator,
-                                                                                                                     BinarySource,
-                                                                                                                     BinaryDestination,
-                                                                                                                     BinaryDataLengthInBytes]),
-    if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
-            Payload = <<BinaryMessageType/bitstring,
-                        BinarySource/bitstring,
-                        BinaryOriginator/bitstring,
-                        BinaryDestination/bitstring,
-                        BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
-                        BinaryData/bitstring>>,
-            ?LOGGER:debug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
-            Payload;
-        true ->
-            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
-                                                                                                                      BinaryDataLengthInBytes,
-                                                                                                                      ?MAX_DATA_LENGTH]),
-            {error, "Binary Data Length exceeded"}
-    end.
-
 build_new_packet(Type, Destination, Data, State)->
   NewPacket = #load_ng_packet{
     type = Type,
@@ -643,7 +576,10 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
                                                                                                                    BinaryDestination,
                                                                                                                    BinaryDataLengthInBytes,
                                                                                                                    BinaryUUID]),
-  if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
+  BitLength = bit_size(BinaryData),
+
+  % if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
+  if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
           Payload = <<BinaryMessageType/bitstring,
                       BinarySource/bitstring,
                       BinaryOriginator/bitstring,
@@ -651,7 +587,8 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
                       BinaryUUID/bitstring,
                       BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
                       BinaryData/bitstring>>,
-          ?LOGGER:debug("[~p]: serialize_packet Payload: ~w.~n", [?MODULE, Payload]),
+          ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , MAX_DATA_LENGTH = ~w ,~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, ?MAX_DATA_LENGTH]),
+          ?LOGGER:debug("[~p]: serialize_packet Data bits: ~w, Payload(~w bits): ~w.~n", [?MODULE, BitLength, bit_size(Payload), Payload]),
           Payload;
       true ->
           ?LOGGER:err("[~p]: serialize_packet Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
@@ -883,7 +820,7 @@ forward_packet(Packet, StateData) ->
 forward_packet(Packet, StateData, NextHop) ->
     Payload = serialize_packet(Packet#load_ng_packet{source = StateData#state.self_address}),
     {SendStatus, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
-    ?LOGGER:info("[~p]: packet forwarded to ~w, Packet uuid: ~w.~n", [?MODULE, NextHop, Packet#load_ng_packet.uuid]),
+    ?LOGGER:info("[~p]: ~p packet forwarded to ~w, Packet uuid: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Packet#load_ng_packet.type), NextHop, Packet#load_ng_packet.uuid]),
     {SendStatus, Message, NextHop}.
 
 

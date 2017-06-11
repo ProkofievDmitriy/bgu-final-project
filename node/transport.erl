@@ -48,6 +48,8 @@ handle_incoming_message(FsmPid, Message)->
 %% ====================================================================
 -record(state, {upper_level_pid, bottom_level_pid}).
 
+-record(transport_header, {max, seq, id}).
+
 %% ============================================================================================
 %% =========================================== Init ==========================================
 %% ============================================================================================
@@ -77,7 +79,9 @@ idle(enable, StateData) ->
 
 %Synchronous event call
 idle({send, {Type, Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
+    ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}~n", [?MODULE, Destination, Data]),
+    MessagesList = get_messages_list(Data),
+    [ ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, X}) || X <- MessagesList],
      {reply, ok, idle, StateData}.
 
 
@@ -154,3 +158,27 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ============================================================================================
 %% ======================================== UTILS =============================================
 %% ============================================================================================
+
+generate_uuid()->
+  TimeStamp = get_current_millis(),
+  UUID = erlang:phash2(TimeStamp),
+  Binary = <<UUID:?MESSAGE_UUID_LENGHT>>,
+  <<FinalUUID:?MESSAGE_UUID_LENGHT>> = Binary,
+  FinalUUID.
+
+
+
+get_current_millis() ->
+    {Mega, Sec, Micro} = os:timestamp(),
+    (Mega*1000000 + Sec)*1000 + round(Micro/1000).
+
+
+get_messages_list(Data)->
+    BinaryData = term_to_binary(Data),
+    BitLength = bit_size(BinaryData),
+    if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
+        % TransprotHeader = transport_header#{max = 1, seq = 1, id = generate_uuid()},
+         [Data];
+        true ->
+        []
+    end.
