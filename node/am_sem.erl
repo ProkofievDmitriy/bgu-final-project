@@ -70,7 +70,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
   %% if the dreq was meant to me
   if To == My_node ->
     %% if the dreq has a bigger sequence number - send reading and update my sn
-    if Sn<Seq ->
+    if Sn=<Seq ->
       %% sending reading
       log:info("~p is sending reading ~n", [My_name] ),
       _Ok = send_drep (My_protocol,[{My_name,Counter}|[]],Seq),
@@ -78,7 +78,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
     %% if seq lower or equals - ignore
       true ->
-        log:debug("~p received dreq ,with Seq ~p, local Sn ~p, ignoring~n", [Seq,Sn,My_name] ),
+        log:debug("~p received dreq ,with Seq ~p, local Sn ~p, ignoring~n", [My_name,Seq,Sn] ),
         {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
     end;
     %% if the dreq was not meant to me pass it back
