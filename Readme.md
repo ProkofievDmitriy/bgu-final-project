@@ -63,7 +63,7 @@ erl setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -r
 |5     |90:b6:86:03:62:f5   |	132.73.199.228|Valid|
 |6     |90:b6:86:09:6c:64   |	132.73.199.225|Valid|
 |7     |90:b6:86:0e:f6:11   |	132.73.199.234||
-|8     |90:b6:86:0e:8c:dd   |	132.73.199.235||
+|8     |90:b6:86:0e:8c:dd   |	132.73.199.235|not working - Read Only File System - need reflash|
 |9     |90:b6:86:04:31:0a   |	132.73.199.238|Valid|
 |10    |90:b6:86:0a:4e:1d   |	132.73.199.232|Valid|		
 |11    |78:4b:87:ac:dc:7b   |	132.73.192.104||
