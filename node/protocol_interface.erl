@@ -51,9 +51,22 @@ hand_shake(ApplicationPid, Timeout) ->  % App_type might be dc or sem
    gen_server:call(?PROTOCOL_NAME, {hand_shake, ApplicationPid} , Timeout).
 
 extract_address(NodeNameAtom)->
+%TODO implement generic !!!!!
     case NodeNameAtom of
+        node_15 -> 15;
+        node_14 -> 14;
+        node_13 -> 13;
+        node_12 -> 12;
+        node_11 -> 11;
         node_10 -> 10;
+        node_9 -> 9;
+        node_8 -> 8;
+        node_7 -> 7;
+        node_6 -> 6;
+        node_5 -> 5;
         node_4 -> 4;
+        node_3 -> 3;
+        node_2 -> 2;
         node_1 -> 1
     end.
 
