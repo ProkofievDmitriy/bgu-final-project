@@ -12,7 +12,7 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_link/3]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -45,9 +45,10 @@
 %% @end
 %%-------------------------------------------------------------------------------
 
-start_link(My_node, My_protocol,Meters) ->
+start_link({My_node, My_protocol, Meters}) ->
    Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
    log:info("~p created ~n",[Me]),
+   timer:sleep(1500),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
@@ -89,8 +90,10 @@ init({Me, My_protocol,My_node,Meters}) ->
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
       log:info("first dreq sent, Rd are ~p~n",[Rd]),
-      Timerpid = erlang:spawn(?MODULE,timer,[Me]),        % 1/12
+      Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
+      log:info("AFTER TIMER SPAWN : ~w~n",[Timerpid]),
       {ok, discovering, {Me, My_protocol,My_node,Meters,Nrs1,Rd,[],0,Timerpid}};
+
     {terminate, Reason} -> log:critical("handshake with ~p failed with message:
      ~p~n", [My_protocol,Reason]),
       {stop,{handshake_failure,Reason}}
@@ -120,6 +123,7 @@ init({Me, My_protocol,My_node,Meters}) ->
 
 %% phase 1 of AMR - AM
 discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
+    log:debug("enter discovering : ~w~n", [self()]) ,
   if To =/=My_node ->
     log:err("dc recived drep with dest address of: ~p, in state discovering ignoring~n", [To]),
     {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
@@ -502,12 +506,20 @@ hand_shake(Me,My_protocol,Times) ->
 
 
 
+ get_current_millis() ->
+   {Mega, Sec, Micro} = os:timestamp(),
+   (Mega*1000000 + Sec)*1000 + round(Micro/1000).
 
 my_rand(Number) ->
   %rand:seed(erlang:timestamp()),
-  {A,B,C} = erlang:timestamp(),
-  {RandomNumber, _Seed} = rand:uniform_s(Number, rand:seed(exs1024,{A,B,C})),
-  RandomNumber.
+  % {A,B,C} = erlang:timestamp(),
+  % {A,B,C} = erlang:now(),
+  % {RandomNumber, _Seed} = rand:uniform_s(Number, rand:seed(exs1024,{A,B,C})),
+  RandomNumber = erlang:phash2(get_current_millis()) rem Number,
+  case RandomNumber of
+      0 -> 1;
+      _ -> RandomNumber
+  end.
 
 
 random_indexes(_,0,List) -> List;
@@ -548,17 +560,26 @@ send_dreq(My_protocol, [H|T], Seq) ->
       case Reply of
         {ok, sent} ->
                send_dreq(My_protocol, T, Seq);
+        {error, timeout_exceeded} ->  send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
+
       end
 
 
   end.
 
 timer(Me) ->
+  log:debug("INSIDE TIMER : ~w~n", [self()]) ,
   receive
-    stop -> erlang:exit(stopped);
-    restart -> timer(Me)
-  after ?TIMEOUT -> gen_fsm:send_event(Me,timeout)
+    stop ->
+        log:debug("STOP TIMER : ~w~n", [self()]) ,
+        erlang:exit(stopped);
+    restart ->
+        log:debug("RESTART TIMER : ~w~n", [self()]) ,
+        timer(Me)
+  after ?TIMER_TIMEOUT ->
+      log:debug("TIMER TIMEOUT : ~w~n", [self()]) ,
+      gen_fsm:send_event(Me,timeout)
   end.
 
 

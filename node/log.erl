@@ -57,6 +57,6 @@ warn(Message) ->
     warn(Message, []).
 
 
-isValidModule([])-> false;
+isValidModule([])-> true;
 isValidModule(Params)->
     not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).
