@@ -567,7 +567,7 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
     BinaryUUID = <<UUID:?MESSAGE_UUID_LENGHT>>,
     %TODO - packet Data should be binary
     % BinaryData = list_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
-    BinaryData = term_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
+    BinaryData = get_packet_to_binary(Packet#load_ng_packet.type, Packet#load_ng_packet.data),
     BinaryDataLengthInBytes = byte_size(BinaryData),
     ?LOGGER:debug("[~p]: serialize_packet : MessageType: ~w, Originator: ~w, Source: ~w , Destination: ~w, DataLengthInBytes: ~w, UUID: ~w~n", [?MODULE,
                                                                                                                    BinaryMessageType,
@@ -578,24 +578,34 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
                                                                                                                    BinaryUUID]),
   BitLength = bit_size(BinaryData),
 
+
+  <<BinaryMessageType/bitstring,
+              BinarySource/bitstring,
+              BinaryOriginator/bitstring,
+              BinaryDestination/bitstring,
+              BinaryUUID/bitstring,
+              BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
+              BinaryData/bitstring>>.
+
+
   % if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
-  if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
-          Payload = <<BinaryMessageType/bitstring,
-                      BinarySource/bitstring,
-                      BinaryOriginator/bitstring,
-                      BinaryDestination/bitstring,
-                      BinaryUUID/bitstring,
-                      BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
-                      BinaryData/bitstring>>,
-          ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , MAX_DATA_LENGTH = ~w ,~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, ?MAX_DATA_LENGTH]),
-          ?LOGGER:debug("[~p]: serialize_packet Data bits: ~w, Payload(~w bits): ~w.~n", [?MODULE, BitLength, bit_size(Payload), Payload]),
-          Payload;
-      true ->
-          ?LOGGER:err("[~p]: serialize_packet Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
-                                                                                                                    BinaryDataLengthInBytes,
-                                                                                                                    ?MAX_DATA_LENGTH]),
-          {error, "Binary Data Length exceeded"}
-  end.
+  % if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
+  %         Payload = <<BinaryMessageType/bitstring,
+  %                     BinarySource/bitstring,
+  %                     BinaryOriginator/bitstring,
+  %                     BinaryDestination/bitstring,
+  %                     BinaryUUID/bitstring,
+  %                     BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
+  %                     BinaryData/bitstring>>,
+  %         ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , MAX_DATA_LENGTH = ~w ,~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, ?MAX_DATA_LENGTH]),
+  %         ?LOGGER:debug("[~p]: serialize_packet Data bits: ~w, Payload(~w bits): ~w.~n", [?MODULE, BitLength, bit_size(Payload), Payload]),
+  %         Payload;
+  %     true ->
+  %         ?LOGGER:err("[~p]: serialize_packet Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
+  %                                                                                                                   BinaryDataLengthInBytes,
+  %                                                                                                                   ?MAX_DATA_LENGTH]),
+  %         {error, "Binary Data Length exceeded"}
+  % end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Packet deserialization utilities %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -690,40 +700,27 @@ deserializeMessage(#load_ng_packet{type = ?RACK} = Packet, Data)->
         hop_count = HopCount,
         r_seq_number = RACKSequenceNumber
     },
-
     Packet#load_ng_packet{data = RACKMessage};
 
-% deserializeMessage(#load_ng_packet{type = ?DREQ} = Packet, Data)->
-%     ?LOGGER:preciseDebug("[~p]: deserializeMessage DREQ : Data : ~w ~n", [?MODULE, Data]),
-%     DREQMessageData = binary_to_list(Data),
-%     DREQ_UUID = lists:nth(1, DREQMessageData),
-%
-%     DREQMessage = #dreq_message{
-%         uuid = DREQ_UUID
-%     },
-%     Packet#load_ng_packet{data = DREQMessage};
-
+%DATA MESSAGES
 deserializeMessage(#load_ng_packet{} = Packet, Data)->
-    Packet#load_ng_packet{data=binary_to_term(Data)}.
+    Packet#load_ng_packet{data=Data}.
 
 
-% get_packet_data_as_list(?DREQ, Data) ->
-%     [Data#dreq_message.uuid];
+get_packet_to_binary(?RREQ, Data) ->
+  term_to_binary([Data#rreq_message.r_seq_number, Data#rreq_message.originator, Data#rreq_message.destination, Data#rreq_message.hop_count]);
 
-get_packet_data_as_list(?RREQ, Data) ->
-  [Data#rreq_message.r_seq_number, Data#rreq_message.originator, Data#rreq_message.destination, Data#rreq_message.hop_count];
+get_packet_to_binary(?RREP, Data) ->
+  term_to_binary([Data#rrep_message.r_seq_number, Data#rrep_message.originator, Data#rrep_message.hop_count,  Data#rrep_message.ack_required, Data#rrep_message.destination]);
 
-get_packet_data_as_list(?RREP, Data) ->
-  [Data#rrep_message.r_seq_number, Data#rrep_message.originator, Data#rrep_message.hop_count,  Data#rrep_message.ack_required, Data#rrep_message.destination];
+get_packet_to_binary(?RERR, Data) ->
+  term_to_binary([Data#rerr_message.r_seq_number, Data#rerr_message.originator, Data#rerr_message.unreachable_address, Data#rerr_message.error_code, Data#rerr_message.destination]);
 
-get_packet_data_as_list(?RERR, Data) ->
-  [Data#rerr_message.r_seq_number, Data#rerr_message.originator, Data#rerr_message.unreachable_address, Data#rerr_message.error_code, Data#rerr_message.destination];
-
-get_packet_data_as_list(?RACK, Data) ->
-  [Data#rack_message.r_seq_number, Data#rack_message.originator, Data#rack_message.hop_count, Data#rack_message.destination];
+get_packet_to_binary(?RACK, Data) ->
+  term_to_binary([Data#rack_message.r_seq_number, Data#rack_message.originator, Data#rack_message.hop_count, Data#rack_message.destination]);
 
 
-get_packet_data_as_list( _ , Data) ->
+get_packet_to_binary( _ , Data) ->
     Data.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

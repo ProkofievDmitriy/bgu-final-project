@@ -44,6 +44,8 @@ rise_message(ApplicationName, Data)->
     gen_fsm:send_event(ApplicationName, Data).
 
 
+% rise_message(ApplicationName, Data)->
+%     gen_fsm:send_event(ApplicationName, {received_message, Data}).
 % rise_dreq_to_app({dreq, Destination, Seq_num}, ApplicationName) -> % use only if Destination == ?NODE_NAME
 % 	gen_fsm:send_event(ApplicationName, {dreq, Destination, Seq_num}).
 %
