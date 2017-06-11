@@ -6,6 +6,8 @@
 -define(X_SIZE, 1080).
 -define(Y_SIZE, 680).
 -define(REFRESH_TIME, 1000).
+-define(TIMEOUT, 10000000000).
+
 -define( LOG_DIR,"./logger/").
 -define(CIRCE_RADIUS, 15).
 -define(CIRCE_RADIUS_SQURE, ?CIRCE_RADIUS*?CIRCE_RADIUS).
@@ -242,15 +244,15 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 					ok -> {noreply,State};
 					N ->
 						wxChoice:setStringSelection(State#state.nodeChoice,atom_to_list(N)),
-						update_map(State#state.canvas, N, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
+						update_map(State#state.canvas, N, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
 
 					%		{noreply,State#state{selectedNode = N}}
 						{noreply,State#state{selectedNode = N}}
 				end;
 			true ->
-            [{_,{_, Mode,RoutingSet}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
+            [{_,{Time, _, Mode,RoutingSet}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
             io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
-            ets:insert(State#state.nodesEts,{State#state.selectedNode,{{X,Y}, Mode,RoutingSet}}),
+            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet}}),
 						io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 						wxToggleButton:setValue(UpdateLocation,false),
 						{noreply,State}
@@ -259,7 +261,7 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}, State) ->
     io:format("command_choice_selected ~p~n",[Ex]),
     SelectedNode = list_to_atom(Ex),
-		update_map(State#state.canvas, SelectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
+		update_map(State#state.canvas, SelectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
 
 {noreply,State#state{selectedNode = SelectedNode}};
 
@@ -270,7 +272,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
     case ID of
         ButtonFullMap ->
             io:format("Showing full map~n"),
-						update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation),
+						update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
             {noreply,State#state{selectedNode = all}};
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
@@ -328,9 +330,10 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             Location = {rand:uniform(500),rand:uniform(500)};
         true ->
             io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
-            [{NodeNameAtom,{Location, _,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
+            [{NodeNameAtom,{_,Location, _,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
     end,
-    ets:insert(State#state.nodesEts,{NodeNameAtom,{Location, proplists:get_value(medium_mode, Data),RoutingSet}}),
+		Time = erlang:monotonic_time(),
+    ets:insert(State#state.nodesEts,{NodeNameAtom,{Time, Location, proplists:get_value(medium_mode, Data),RoutingSet}}),
     update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
     {noreply, State};
 
@@ -357,7 +360,7 @@ handle_cast(_A, State) ->
 handle_info(timer, State) ->
  % io:format("loadNG: timer~n"),
   stats_server:stats_request(self()),
-	update_map(State#state.canvas, State#state.selectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,ok),
+	update_map(State#state.canvas, State#state.selectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,ok,State#state.nodeChoice, State#state.cmbTo),
 
   erlang:send_after(?REFRESH_TIME,self(),timer),
   {noreply, State};
@@ -440,7 +443,7 @@ update_map_ets(MapEts, Node, [{_,{next_address,NextNode},{medium,Medium}}|NodeRo
 
 find_node(_,'$end_of_table',_) -> ok;
 find_node(NodesEts,Key, MouseLocation) ->
-		[{Key,{KeyLocation,_, _}}] = ets:lookup(NodesEts,Key),
+		[{Key,{_, KeyLocation,_, _}}] = ets:lookup(NodesEts,Key),
 		case distance(KeyLocation, MouseLocation) of
 				N when N =< ?CIRCE_RADIUS_SQURE ->
 					Key;
@@ -453,30 +456,37 @@ distance({X1,Y1}, {X2,Y2}) ->
 
 
 %update_map(Canvas, all, NodesEts,ConfigButtons,UpdateLocation) -> ok;
-update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation) ->
+update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,NodeChoice, CmbTo) ->
 		DC = wxWindowDC:new(Canvas),
 		wxDC:clear(DC),
 		case SelectedNode of
 			all -> 	switch_to_full_map(DC, ets:first(MapEts), MapEts, NodesEts);
 			_ ->
-				[{SelectedNode,{{X,Y}, MediumMode,RoutingSet}}] = ets:lookup(NodesEts,SelectedNode),
+				[{SelectedNode,{_, {X,Y}, MediumMode,RoutingSet}}] = ets:lookup(NodesEts,SelectedNode),
 				draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
 				configButtonUpdate(MediumMode,ConfigButtons)
 		end,
 
-		draw_nodes(DC, SelectedNode ,ets:first(NodesEts), NodesEts),
+		draw_nodes(DC, SelectedNode ,ets:first(NodesEts), NodesEts,NodeChoice, CmbTo),
 		if UpdateLocation =/= ok -> wxToggleButton:setValue(UpdateLocation,false); true -> ok end,
 		wxWindowDC:destroy(DC).
 
 	%%%%
 	%%  Draws all nodes
 	%%%%
-draw_nodes(_, _, '$end_of_table', _) -> ok;
-draw_nodes(DC, SelectedNode, NodeKey, NodesEts) ->
-		[{NodeKey,{{X,Y}, _MediumMode,_}}] = ets:lookup(NodesEts,NodeKey),
-		wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
-		wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50}),
-		draw_nodes(DC, SelectedNode, ets:next(NodesEts,NodeKey), NodesEts).
+draw_nodes(_, _, '$end_of_table', _,_,_) -> ok;
+draw_nodes(DC, SelectedNode, NodeKey, NodesEts,NodeChoice, CmbTo) ->
+		[{NodeKey,{OldTime, {X,Y}, _MediumMode,_}}] = ets:lookup(NodesEts,NodeKey),
+		Time = erlang:monotonic_time(),
+		if Time - OldTime < ?TIMEOUT ->
+				wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
+				wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50});
+			Time - OldTime >= ?TIMEOUT ->
+				io:format("TIMEOUT ~p~n",[NodeKey]),
+				wxChoice:delete(NodeChoice,wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
+				wxChoice:delete(CmbTo,wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
+			end,
+		draw_nodes(DC, SelectedNode, ets:next(NodesEts,NodeKey), NodesEts,NodeChoice, CmbTo).
 
 
 %%%%
@@ -487,7 +497,7 @@ switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
     [{{Node,NextNode},{Medium}}] = ets:lookup(MapEts,MapEtsKey),
     io:format("Node: ~p NextNode: ~p~n",[Node,NextNode]),
 		case {ets:lookup(NodesEts,Node), ets:lookup(NodesEts,NextNode)} of
-			{[{Node,{NodeLocation,_, _}}], [{NextNode,{NextNodeLocation,_, _}}]} ->
+			{[{Node,{_, NodeLocation,_, _}}], [{NextNode,{_, NextNodeLocation,_, _}}]} ->
 				draw_route(DC, NodeLocation,NextNodeLocation, Medium);
 				A -> io:format("switch_to_full_map: Node ~p or NextNode ~p are not in ETS ~p~n",[Node, NextNode, A]), ok
 		end,
@@ -504,7 +514,7 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node}
     AtomNode = makeAtom(Node),
     io:format("draw_routes_from_node N: ~p~n~n",[AtomNode]),
 
-    [{AtomNode,{NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
+    [{AtomNode,{_, NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
 
     draw_route(DC, Location,NextLocation, Medium),
     draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
@@ -514,10 +524,10 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
     AtomNode1 = makeAtom(Node1),
     io:format("draw_routes_from_node N: ~p~n~n",[AtomNode1]),
 
-    [{AtomNode1,{Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
+    [{AtomNode1,{_, Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
     AtomNode2 = makeAtom(Node2),
 
-    [{AtomNode2,{Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
+    [{AtomNode2,{_, Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
 
     draw_route(DC, Location,Location2, Medium),
     draw_route(DC, Location1,Location2, 0),
