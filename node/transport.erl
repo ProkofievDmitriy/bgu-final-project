@@ -219,7 +219,7 @@ trim_data(BinaryData, List, SeqNum)->
         true ->
             <<Data/bitstring>> = BinaryData,
             <<BinaryTrim:?MAX_DATA_LENGTH_IN_BITS, Rest/bitstring>> = Data,
-            ?LOGGER:debug("[~p]: trim_data  Data: ~w, BinaryTrim~w, Rest: ~w~n", [?MODULE, Data, BinaryTrim, Rest]),
+            ?LOGGER:debug("[~p]: trim_data  Data: ~w, BinaryTrim: ~w, Rest: ~w~n", [?MODULE, Data, BinaryTrim, Rest]),
             % BinaryPacketData = <<BinaryTrim/bitstring, BinaryData/bitstring>>,
             trim_data(Rest, [BinaryTrim] ++ List, SeqNum + 1)
     end.

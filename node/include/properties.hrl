@@ -84,7 +84,7 @@
                                {default_state, rf_only},
                                {timeout, ?TIMEOUT}
                                ]).
--define(TRANSPORT_PROPS_LIST, [{default_state, idle},
+-define(TRANSPORT_PROPS_LIST, [{default_state, disable},
                                {timeout, ?TIMEOUT}
                                ]).
 
