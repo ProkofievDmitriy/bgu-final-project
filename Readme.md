@@ -1,6 +1,6 @@
 ![](http://in.bgu.ac.il/Style%20Library/he-IL/Images/logotextfull.gif)![Alt text](http://in.bgu.ac.il/Style%20Library/Images/bgu/general/logo-simbol.gif)
 ####Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)               
-#####Reports :    [PDR](https://drive.google.com/open?id=0BwYXH0n9ZthMblJyOXNEZzBxWjg)      [PRE](https://drive.google.com/open?id=0BwYXH0n9ZthMT1l1dHlhZEI4Szg)       [PROGRESS1](https://drive.google.com/open?id=0BwYXH0n9ZthMdjl2YnhHRHBxdEE)       [PROGRESS2]()       [FINAL]()       [POSTER]()
+#####Reports :    [PDR](https://drive.google.com/open?id=0BwYXH0n9ZthMblJyOXNEZzBxWjg)      [PRE](https://drive.google.com/open?id=0BwYXH0n9ZthMT1l1dHlhZEI4Szg)       [PROGRESS1](https://drive.google.com/open?id=0BwYXH0n9ZthMdjl2YnhHRHBxdEE)       [PROGRESS2](https://drive.google.com/open?id=0BwYXH0n9ZthMOS13ck54SldrLUE)       [FINAL]()       [POSTER](https://drive.google.com/open?id=0B-tdbX-lO15iUGMxUEpsMDJFeHc)
 ---
 #### Node setup proggress:
 >TODO
@@ -18,7 +18,7 @@ erl -name node_1@132.73.198.5 -setcookie load_ng_project -run c c node -run node
 stub_data_server:
 erl -name stub_data_server@132.73.198.5 -setcookie load_ng_project -run c c stub_data_server -run c c log -run stub_data_server start
 
-erl setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -run loadNGgui start
+erl -setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -run loadNGgui start
 
 
 ```
