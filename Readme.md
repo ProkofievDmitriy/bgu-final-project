@@ -8,9 +8,9 @@
 >
 ```bash
 cd final-project/node
-scripts/start_node.sh 132.73.199.156 node_1 data_concentration_server plc_only
-scripts/start_node.sh 132.73.199.232 node_10 data_concentration_server dual
-scripts/start_node.sh 132.73.199.200 node_4 smart_meter rf_only
+scripts/start_node.sh 132.73.199.156 node_1 dc plc_only
+scripts/start_node.sh 132.73.199.232 node_10 am_sem dual
+scripts/start_node.sh 132.73.199.200 node_4 am_sem rf_only
 
 local:
 erl -name node_1@132.73.198.5 -setcookie load_ng_project -run c c node -run node start node_1 smart_meter dual
