@@ -1,6 +1,7 @@
-Meters = [m1,m2,m3,m4,m5,m6,m7,m8,m9,m10].
+Meters = [node_2,node_3,node_4,node_5,node_6,node_7,node_8,node_9,node_10].
 
 c(dc).
+node_
 
 spawn(dc,start_link,[dc_node,self(),Meters]). 
 
@@ -22,11 +23,17 @@ dc_node_app ! ok.
 5:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5}],0}).
 
+
+gen_fsm:send_event(node_1_app,{received_message, <<0:1,1:6,0:8,5:6,5:16>>})
+
+
 6:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m6,6}],0}).
 
 7:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7}],0}).
+ 
+ gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:6,0:8,7:6,7:16,3:6,3:16>>}).
 
 8:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7},{m8,8}],0}).

@@ -187,13 +187,12 @@ send_drep(My_protocol,Data,Seq) ->
     integrated ->
       log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
      % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
-<<<<<<< HEAD
+
       Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
       log:debug ("sending bit message: ~p~n" , [Bit_message]),
       Reply = (catch protocol_interface:send_data_reply(?DC_NODE,Bit_message)),
-=======
-      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Data,Seq})),
->>>>>>> 4eea552e0bd611118b22eb6584e178bc53d8b823
+
+    %  Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Data,Seq})),
       case Reply of
         {ok, sent} -> ok;
         Err -> log:critical("error in gen_server:call in send_drep : ~p~n",[Err])
