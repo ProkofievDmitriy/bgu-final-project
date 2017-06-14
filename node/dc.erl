@@ -48,7 +48,7 @@
 start_link({My_node, My_protocol, Meters}) ->
    Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
    log:info("~p created ~n",[Me]),
-   timer:sleep(1500),
+   % timer:sleep(1500),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 

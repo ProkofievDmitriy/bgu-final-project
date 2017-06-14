@@ -44,7 +44,7 @@
 start_link({My_node, My_protocol, Meters}) ->
   Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
   log:info("~p created ~n",[Me]),
-  timer:sleep(1500),
+  % timer:sleep(3000),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
@@ -69,8 +69,10 @@ init({Me, My_protocol,My_node,Meters}) ->
       Nrs = Meters,
       Rd = Meters,                         % 1/4+9c
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
-      _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-      log:info("first dreq sent, Rd are ~p~n",[Rd]),
+    %   timer:sleep(3000),
+
+    %   Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
+    %   log:info("first dreq sent, Rd are ~p, result: ~w~n",[Rd, Ok]),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs,Rd,0,Timerpid}};
 
@@ -560,4 +562,3 @@ extract_nodes_from_drep(List,[{Node,_}|T]) ->
   extract_nodes_from_drep([Node|List],T).
 
 %%TODO
-

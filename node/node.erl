@@ -58,8 +58,6 @@ start(ScriptPropertiesList) ->
 
 
 internal_start(Properties) when is_list(Properties)->
-%TODO change global name to node name.
-
     compile_resources(),
     NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
     NodeName = proplists:get_value(node_name, Properties),

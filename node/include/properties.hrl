@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [stats_server_interface, protocol_interface, modem_port, transport, report, node, data_link, utils]).
+-define(MODULES_TO_FILTER, [stats_server_interface, protocol_interface, modem_port, transport, report, data_link, utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
@@ -37,7 +37,7 @@
                          node_control_interface,
                          stub_data_server,
                          isg_time,
-                         dc, am_sem,
+                         dc, am_sem, sem_naive, dc_naive,
                          stats_server_interface]).
 
 
