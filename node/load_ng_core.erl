@@ -150,7 +150,7 @@ active(disable, _From, StateData)->
 
 %DATA, DREP
 active({send_message, {Type, Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message: ~p) Destination: ~p, Data: ~p ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
+    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message: ~p) Destination: ~w, Data: ~w ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
     NextHop = get_next_hop(Destination, StateData), % routing_set_entry
     case NextHop of
         {error, ErrorMessage} ->

@@ -1,6 +1,6 @@
--define(MODULES_TO_FILTER, [stats_server_interface, report, node, transprot]).
+-define(MODULES_TO_FILTER, [stats_server_interface, report, node, protocol_interface, modem_port, load_ng, data_link]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
-%-define(MODULES_TO_FILTER, [report, load_ng, transport]).
+% -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
 
 

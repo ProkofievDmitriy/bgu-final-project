@@ -2,6 +2,7 @@
 -behaviour(gen_fsm).
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
+-include("./include/macros.hrl").
 
 %include libraries to support qlc requests
 -include_lib("stdlib/include/ms_transform.hrl").
@@ -82,7 +83,7 @@ idle({received_message, Data}, StateData) ->
             ?LOGGER:info("[~p]: IDLE - Message Complete, Sending to upper level, Data: ~w~n", [?MODULE, MessageData]),
             gen_fsm:send_event(StateData#state.upper_level_pid, list_to_tuple(MessageData));
         {not_complete_message, PiecesReceived} ->
-            ?LOGGER:debug("[~p]: IDLE - Message NOT Complete: ~w / ~w~n", [?MODULE, PiecesReceived, TrasportHeader#transport_header.max])
+            ?LOGGER:info("[~p]: IDLE - Message NOT Complete: ~w / ~w~n", [?MODULE, PiecesReceived, TrasportHeader#transport_header.max])
     end,
     {next_state, idle, StateData};
 
@@ -99,7 +100,11 @@ idle(enable, StateData) ->
 idle({send, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}~n", [?MODULE, Destination, Data]),
     MessagesList = get_messages_list(Data),
-    ResultsList = [ ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, X}) || X <- MessagesList],
+    SendFunc = fun(X) -> Res = ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, X}),
+                         ?LOGGER:info("[~p]: Sending Message: {~p, ~w, ~w}, Result: ~w~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, X, Res]),
+                         timer:sleep(50),
+                         Res end,
+    ResultsList = [ SendFunc(X) || X <- MessagesList],
     Result = lists:foldl(fun(X, Acc) -> case Acc of
                                             {ok, sent} -> X;
                                             {error, _} -> Acc
@@ -194,34 +199,33 @@ get_current_millis() ->
 get_messages_list(Data)->
     ?LOGGER:debug("[~p]: get_messages_list  Data: ~w~n", [?MODULE, Data]),
     BinaryData = term_to_binary(Data),
-    trim_data(BinaryData).
+    MessagesList = trim_data(BinaryData),
+    ?LOGGER:debug("[~p]: Number of messages to send : ~w~n", [?MODULE, length(MessagesList)]),
+    MessagesList.
 
 trim_data(BinaryData)->
-    trim_data(BinaryData, [], 1).
+    trim_data(BinaryData, [], 1, generate_uuid()).
 
-trim_data(BinaryData, List, SeqNum)->
-    % TransprotHeader = #transport_header{max = SeqNum, seq = SeqNum, id = generate_uuid()},
-    % BinaryTransportHeader = serialize_header(TransprotHeader),
+trim_data(BinaryData, List, SeqNum, UUID)->
     BitLength = bit_size(BinaryData),
     ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , Data bits: ~w, MAX_DATA_LENGTH = ~w, List: ~w~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, BitLength, ?MAX_DATA_LENGTH, List]),
     if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
             {_ , NewList} = lists:foldl(fun(X, {Num, Temp}) ->
-                TH = #transport_header{max = SeqNum, seq = Num, id = generate_uuid()},
+                TH = #transport_header{max = SeqNum, seq = Num, id = UUID},
                 BTH = serialize_header(TH),
                 BPD = <<BTH/bitstring, X/bitstring>>,
                 {Num + 1, [BPD |Temp]}
             end, {1, []}, List),
             ?LOGGER:debug("[~p]: trim_data  NewList: ~w~n", [?MODULE, NewList]),
-            TransprotHeader = #transport_header{max = SeqNum, seq = SeqNum, id = generate_uuid()},
+            TransprotHeader = #transport_header{max = SeqNum, seq = SeqNum, id = UUID},
             BinaryTransportHeader = serialize_header(TransprotHeader),
             BinaryPacketData = <<BinaryTransportHeader/bitstring, BinaryData/bitstring>>,
             [BinaryPacketData | NewList];
         true ->
-            <<Data/bitstring>> = BinaryData,
-            <<BinaryTrim:?MAX_DATA_LENGTH_IN_BITS, Rest/bitstring>> = Data,
-            ?LOGGER:debug("[~p]: trim_data  Data: ~w, BinaryTrim: ~w, Rest: ~w~n", [?MODULE, Data, BinaryTrim, Rest]),
-            % BinaryPacketData = <<BinaryTrim/bitstring, BinaryData/bitstring>>,
-            trim_data(Rest, [BinaryTrim] ++ List, SeqNum + 1)
+            <<Trim:?MAX_DATA_LENGTH_IN_BITS, Rest/bitstring>> = BinaryData,
+            BinaryTrim = <<Trim:?MAX_DATA_LENGTH_IN_BITS>>,
+            ?LOGGER:debug("[~p]: trim_data  Data: ~w, BinaryTrim: ~w, Rest: ~w~n", [?MODULE, BinaryData, BinaryTrim, Rest]),
+            trim_data(Rest, [BinaryTrim] ++ List, SeqNum + 1, UUID)
     end.
 
 serialize_header(#transport_header{} = Header)->
@@ -258,8 +262,9 @@ get_full_message(DB, Message)->
                     {not_complete_message, length(MessagesList)};
                 false ->
                     AllFragments = length(MessagesList) + 1 =:=  Message#transport_message.header#transport_header.max,
+                    ?LOGGER:debug("[~p]: Already Received: ~w, Current Header: ~w ,AllFragments: ~w.~n", [?MODULE, length(MessagesList), Message#transport_message.header, AllFragments]),
                     if  AllFragments ->
-                            Data = assemble_data(MessagesList ++ [Message]),
+                            Data = assemble_data(MessagesList ++ [{Message#transport_message.header#transport_header.seq, Message}]),
                             ets:delete(DB, Message#transport_message.header#transport_header.id),
                             {complete, Data};
                         true ->
@@ -269,7 +274,7 @@ get_full_message(DB, Message)->
             end;
 
         [] ->
-            ?LOGGER:debug("[~p]: [].~n", [?MODULE]),
+            ?LOGGER:debug("[~p]: First Message from sequence: ~w.~n", [?MODULE, Message#transport_message.header#transport_header.id]),
             ets:insert(DB, {Message#transport_message.header#transport_header.id, [{Message#transport_message.header#transport_header.seq, Message}]}),
             {not_complete_message, 1};
         Else ->
