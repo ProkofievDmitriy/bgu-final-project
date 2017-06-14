@@ -38,6 +38,6 @@
 
 -define(DREQ_BIT, 0).
 -define(DREP_BIT, 1).
--define(NODE_BITS,6).
--define(READING_BITS, 16).
+-define(NODE_BITS,7).
+-define(READING_BITS, 17).
 -define(SEQ_BITS,8).

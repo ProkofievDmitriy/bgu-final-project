@@ -289,6 +289,30 @@ discovering( Event , State_data) ->
 
 %%TODO update drep format in phase 2
 
+collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+  log:info("received bit string: ~p~n", [Bit_string]),
+  <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
+ % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
+  To = extract_name(To_n),
+  %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
+  case Type of
+    ?DREQ_BIT -> gen_fsm:send_event(Me, {dreq,To,Seq}),
+     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+    ?DREP_BIT ->
+      Data_size = bit_size(Data_b),
+      Entry_size = ?NODE_BITS+?READING_BITS,
+      if Data_size rem Entry_size =/= 0 ->
+        log:err("received invalid data of size ~p, dropping drep~n",[Data_size]),
+        {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+        true ->
+          Data = bit_to_data(Data_b,[]),
+          gen_fsm:send_event(Me, {drep, To,Data,Seq}),
+          {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}}
+      end
+  end;
+
+
+
 collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   if To =/= My_node ->
     log:err("dc recived drep with destination address of: ~p, ignoring~n",[To]),
@@ -484,7 +508,7 @@ handle_info(Info, StateName, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, {Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+terminate(Reason, StateName, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
   log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [Reason,StateName,{Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),

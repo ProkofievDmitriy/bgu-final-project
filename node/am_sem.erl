@@ -62,7 +62,11 @@ counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}
   log:info("received bit string: ~p~n", [Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
+  log:debug("Extracted values: Type: ~w, To_n: ~w, Seq: ~w, Data_b ~w ~n", [Type, To_n, Seq, Data_b ]),
+
   To = extract_name(To_n),
+  log:debug("Extracted name: ~p~n", [To]),
+
   %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
   case Type of
     ?DREQ_BIT -> gen_fsm:send_event(My_name, {dreq,To,Seq}),
@@ -76,7 +80,7 @@ counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}
         true ->
           Data = bit_to_data(Data_b,[]),
           gen_fsm:send_event(My_name, {drep, To,Data,Seq}),
-          next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}
+          {next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}}
       end
   end;
 

@@ -39,11 +39,11 @@ send(Destination, Data)->
 
 
 send_data_request(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_request_message, {extract_address(Destination), tuple_to_list(Data)}}).
+    gen_server:call(?PROTOCOL_NAME, {data_request_message, {extract_address(Destination), Data}}).
 
 
 send_data_reply(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {extract_address(Destination), tuple_to_list(Data)}}).
+    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {extract_address(Destination), Data}}).
 
 
 %essential for protocol to be aware of upper apllication layer

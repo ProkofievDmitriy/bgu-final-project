@@ -79,9 +79,9 @@ idle({received_message, Data}, StateData) ->
     MessageResult = get_full_message(StateData#state.sessions_db, #transport_message{header = TrasportHeader, binary_data = BinaryData}),
     case MessageResult of
         {complete, Message} ->
-            MessageData = binary_to_term(Message),
-            ?LOGGER:info("[~p]: IDLE - Message Complete, Sending to upper level, Data: ~w~n", [?MODULE, MessageData]),
-            gen_fsm:send_event(StateData#state.upper_level_pid, list_to_tuple(MessageData));
+            % MessageData = binary_to_term(Message),
+            ?LOGGER:info("[~p]: IDLE - Message Complete, Sending to upper level, Data: ~w~n", [?MODULE, Message]),
+            gen_fsm:send_event(StateData#state.upper_level_pid, {received_message, Message});
         {not_complete_message, PiecesReceived} ->
             ?LOGGER:info("[~p]: IDLE - Message NOT Complete: ~w / ~w~n", [?MODULE, PiecesReceived, TrasportHeader#transport_header.max])
     end,
@@ -117,7 +117,7 @@ idle({send, {Type, Destination, Data}}, _From, StateData) ->
 disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
     % StateData#state.upper_level_pid ! Message,
-    gen_fsm:send_event(StateData#state.upper_level_pid, list_to_tuple(Message)),
+    gen_fsm:send_event(StateData#state.upper_level_pid,  {received_message, Message}),
     {next_state, disable, StateData};
 
 disable(disable, StateData) ->
@@ -198,8 +198,8 @@ get_current_millis() ->
 
 get_messages_list(Data)->
     ?LOGGER:debug("[~p]: get_messages_list  Data: ~w~n", [?MODULE, Data]),
-    BinaryData = term_to_binary(Data),
-    MessagesList = trim_data(BinaryData),
+    % BinaryData = term_to_binary(Data),
+    MessagesList = trim_data(Data),
     ?LOGGER:debug("[~p]: Number of messages to send : ~w~n", [?MODULE, length(MessagesList)]),
     MessagesList.
 

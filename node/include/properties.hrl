@@ -6,7 +6,7 @@
 
 
 %%% SYSTEM PROPERTIES
--define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
+-define(CURRENT_LOG_LEVEL, 1). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
 -define(LOAD_NG, load_ng).
@@ -84,7 +84,7 @@
                                {default_state, rf_only},
                                {timeout, ?TIMEOUT}
                                ]).
--define(TRANSPORT_PROPS_LIST, [{default_state, disable},
+-define(TRANSPORT_PROPS_LIST, [{default_state, idle},
                                {timeout, ?TIMEOUT}
                                ]).
 
@@ -112,5 +112,6 @@
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
-                         {meters_list, [node_10, node_4]}
+                        %  {meters_list, [node_10, node_4]}
+                         {meters_list, [node_10, node_4, node_6, node_7, node_9]}
                         ]).

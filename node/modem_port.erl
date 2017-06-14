@@ -324,6 +324,7 @@ prepare_payload([Channel, _ | Rest]) ->
 	        {error, too_large};
         List ->
             L = pad_list(Rest, PAD),
+            %TODO - padding by bit size and not byte
             ?LOGGER:debug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
