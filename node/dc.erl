@@ -91,7 +91,6 @@ init({Me, My_protocol,My_node,Meters}) ->
       _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
       log:info("first dreq sent, Rd are ~p~n",[Rd]),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
-      log:info("AFTER TIMER SPAWN : ~w~n",[Timerpid]),
       {ok, discovering, {Me, My_protocol,My_node,Meters,Nrs1,Rd,[],0,Timerpid}};
 
     {terminate, Reason} -> log:critical("handshake with ~p failed with message:
@@ -168,11 +167,6 @@ discovering({received_message, Bit_string},{Me, My_protocol,My_node,Meters,Nrs,R
       end
   end;
 
-
-
-
-
-
 %% phase 1 of AMR - AM
 discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
     log:debug("enter discovering : ~w~n", [self()]) ,
@@ -182,28 +176,28 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
     true ->
  % ok, drep received with destination address of dc
   {V,_} = lists:last(Data),
-  case Seq of
-  % the seq num of the drep is higher than expected -> error, ignore(maybe not?)
-    Seq when Seq>Sn ->
-      log:err("received drep from ~p in state discovering with higher seq of
-      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
-       [V,Seq,Nrs,Rd,Ter,Sn]),
-      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
-    Seq when Seq<Sn ->
-      % the seq num of the drep is lower than expected -> error,check
-      log:err("received drep from ~p in state discovering with lower seq of
-      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
-       [V,Seq,Nrs,Rd,Ter,Sn]),
-      _Ok = check_reading_and_log_time(),       %%todo
-      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
-    Seq when Seq==Sn ->
-     log:debug("received drep from: ~p, in state discovering ~n state data:
-      Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n",
-      [V,Nrs,Rd,Ter,Sn]),
+%%  case Seq of
+%%  % the seq num of the drep is higher than expected -> error, ignore(maybe not?)
+%%    Seq when Seq>Sn ->
+%%      log:err("received drep from ~p in state discovering with higher seq of
+%%      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
+%%       [V,Seq,Nrs,Rd,Ter,Sn]),
+%%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+%%    Seq when Seq<Sn ->
+%%      % the seq num of the drep is lower than expected -> error,check
+%%      log:err("received drep from ~p in state discovering with lower seq of
+%%      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
+%%       [V,Seq,Nrs,Rd,Ter,Sn]),
+%%      _Ok = check_reading_and_log_time(),       %%todo
+%%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
+%%    Seq when Seq==Sn ->
+     log:info("received drep from: ~p, with Seq: ~p in state discovering ~n state data:
+      Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
+      [V,Seq,Nrs,Rd,Ter,Sn]),
       Rd1 = lists:delete(V,Rd),                         % 1/15
       Ter1 = lists:umerge([Ter,[V]]),                   % 1/16-18
       Nodes = extract_nodes_from_drep([], Data),
-      log:debug("extarcting nodes from drep: ~p~n",[Nodes]),
+      log:info("extarcting nodes from drep: ~p~n",[Nodes]),
       Nodes1 = lists:delete(V,Nodes),
       Ter2 = lists:subtract(Ter1,Nodes1),               % 1/19                    ,
       Nrs1 = lists:subtract(Nrs, Nodes),                % 1/21
@@ -216,7 +210,7 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
         true -> {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs1,Rd2,Ter2,Sn,
          Timerpid}}
       end
-    end
+%%    end
   end;
 
 %% Rd = [] , prepare for another iteration of external loop
@@ -239,7 +233,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
     Nrs1  ->              %% otherwise prepare for next iteration
-      log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
+      log:info("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                  % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
@@ -260,13 +254,13 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Nrs2 = Meters,                                 % 2/4
       Ter8 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter8,Sn1]),
+      log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
-      log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
+      log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                   % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),             % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
@@ -279,15 +273,10 @@ discovering( Event , State_data) ->
   log:err("UNEXPECTED EVENT: ~p in state discovering with state data: ~p~n", [Event,State_data]),
   {next_state, discovering, State_data}.
 
-
-
 %%===================================================================================
 %%=================================  PHASE 2 ========================================
 %%===================================================================================
 
-%%TODO handle info
-
-%%TODO update drep format in phase 2
 
 collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   log:info("received bit string: ~p~n", [Bit_string]),
@@ -315,26 +304,26 @@ collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Te
 
 collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   if To =/= My_node ->
-    log:err("dc recived drep with destination address of: ~p, ignoring~n",[To]),
+    log:err("dc received drep with destination address of: ~p, ignoring~n",[To]),
     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
     true ->
   {V,_} = lists:last(Data),                          % 2/10
-  case Seq of
-    Seq when Seq>Sn ->
-      log:err("received drep from ~p in state collecting with higher seq of
-      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
-      [V,Seq,Nrs,Ter8,Ter,Sn]),
-      next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid};
-    Seq when Seq<Sn ->
-      % the seq num of the drep is lower than expected -> error,check
-      log:err("received drep from ~p in state collecting with lower seq of
-      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
-       [V,Seq,Nrs,Ter8,Ter,Sn]),
-      _Ok = check_reading_and_log_time(),       %%todo
-      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid}};
-    Seq when Seq==Sn ->
-      log:debug("received drep from: ~p, in state collecting ~n state data: Nrs:
-       ~p,Ter* = ~p, Ter: ~p, Sn: ~p~n", [V,Nrs,Ter8,Ter,Sn]),
+%%  case Seq of
+%%    Seq when Seq>Sn ->
+%%      log:err("received drep from ~p in state collecting with higher seq of
+%%      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
+%%      [V,Seq,Nrs,Ter8,Ter,Sn]),
+%%      next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid};
+%%    Seq when Seq<Sn ->
+%%      % the seq num of the drep is lower than expected -> error,check
+%%      log:err("received drep from ~p in state collecting with lower seq of
+%%      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
+%%       [V,Seq,Nrs,Ter8,Ter,Sn]),
+%%      _Ok = check_reading_and_log_time(),       %%todo
+%%      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid}};
+%%    Seq when Seq==Sn ->
+      log:info("received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
+       ~p,Ter* = ~p, Ter: ~p, Sn: ~p~n", [V,Seq,Nrs,Ter8,Ter,Sn]),
       Ter81 = lists:delete(V,Ter8),
       Ter1 = lists:umerge([Ter,[V]]),                    % 2/11
       Nodes = extract_nodes_from_drep([], Data),
@@ -348,7 +337,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
          Timerpid}};
         true -> {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
          Timerpid}}
-      end
+%%      end
    end
  end;
 
@@ -365,7 +354,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       Nrs1 = Meters,                                 % 2/4
       Ter82 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-       log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
+       log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter82,Sn1]),
       _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
@@ -401,8 +390,11 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
       _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid1}}
-  end.
+  end;
 
+collecting( Event , State_data) ->
+  log:err("UNEXPECTED EVENT: ~p in state collecting with state data: ~p~n", [Event,State_data]),
+  {next_state, collecting, State_data}.
 
 
 %%--------------------------------------------------------------------
@@ -511,7 +503,7 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, StateName, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
   log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
-    [Reason,StateName,{Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
+    [Reason,StateName,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
   ok.
 
 %%--------------------------------------------------------------------
@@ -744,9 +736,6 @@ extract_name(Number) ->
     14 -> node_14;
     15 -> node_15
   end.
-
-
-
 
 
 timer(Me) ->
