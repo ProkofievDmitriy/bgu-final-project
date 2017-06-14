@@ -174,11 +174,11 @@ init(WxServer) ->
 
     {Frame,#state{frame=Frame,panel=Panel,mapEts = MapEts, nodesEts = NodesEts, log = Log,canvas = Canvas,
                     cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodeChoice = NodeChoice, numberOfNodes = 0,
-                    buttonSendConfig = ButtonSendConfig,
                     %buttons = #buttons{
                     counters = Counters,
                     buttonExport = wxButton:getId(ButtonExport),
                                         configButtons = ConfigButtons,
+										buttonSendConfig = wxButton:getId(ButtonSendConfig),
                                         buttonFullMap = wxButton:getId(ButtonFullMap),
                                         updateLocation = UpdateLocation,
                                         buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
@@ -272,7 +272,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
     case ID of
         ButtonFullMap ->
             io:format("Showing full map~n"),
-						update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
+					update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
             {noreply,State#state{selectedNode = all}};
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
@@ -283,13 +283,15 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
 
-                    rpc:cast(SelectedNode, node_control_interface, initiate_transaction, [SelectedNode, wxChoice:getStringSelection(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
-                    %node_control_interface:initiate_transaction(SelectedNode, wxComboBox:getValue(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)),
+                    %rpc:cast(SelectedNode, node_control_interface, initiate_transaction, [SelectedNode, wxChoice:getStringSelection(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
+                    node_control_interface:initiate_transaction(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), wxTextCtrl:getValue(State#state.txtMsgSend)),
                     wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonSendConfig ->
                     %node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
-                    rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
+					io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
+					node_control_interface:update_configuration(SelectedNode,checkRadio(State#state.configButtons)),
+					%rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
         ButtonExport ->
@@ -360,7 +362,7 @@ handle_cast(_A, State) ->
 handle_info(timer, State) ->
  % io:format("loadNG: timer~n"),
   stats_server:stats_request(self()),
-	update_map(State#state.canvas, State#state.selectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,ok,State#state.nodeChoice, State#state.cmbTo),
+	update_map(State#state.canvas, State#state.selectedNode, State#state.nodesEts,State#state.mapEts,ok,ok,State#state.nodeChoice, State#state.cmbTo),
 
   erlang:send_after(?REFRESH_TIME,self(),timer),
   {noreply, State};
@@ -372,9 +374,9 @@ handle_info({Counters = #counters{}, AvgTime,AvgLength}, State) ->
                 "\nNumber Of ManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
-                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg)),
-                % "\nAverage time: " ++ float_to_list(AvgTime) ++
-								% "\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
+                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
+                "\nAverage time: " ++ float_to_list(AvgTime) ++
+								"\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
   {noreply, State};
 handle_info(E, State) ->
 	io:format("handle_info _Event ~p~n",[E]),
@@ -514,24 +516,26 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node}
     AtomNode = makeAtom(Node),
     io:format("draw_routes_from_node N: ~p~n~n",[AtomNode]),
 
-    [{AtomNode,{_, NextLocation, _,_}}] = ets:lookup(NodesEts,AtomNode),
-
-    draw_route(DC, Location,NextLocation, Medium),
-    draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
+	case ets:lookup(NodesEts,AtomNode) of
+		[{AtomNode,{_, NextLocation, _,_}}] ->
+			draw_route(DC, Location,NextLocation, Medium);
+		[] -> io:format("draw_routes_from_node not found node")
+	end,
+	draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
 
 
 draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1}, {next_address, Node2}, {medium, Medium}}|RoutingSet]) ->
-    AtomNode1 = makeAtom(Node1),
-    io:format("draw_routes_from_node N: ~p~n~n",[AtomNode1]),
+	AtomNode1 = makeAtom(Node1),
+	io:format("draw_routes_from_node N: ~p~n~n",[AtomNode1]),
+	AtomNode2 = makeAtom(Node2),
+		case { ets:lookup(NodesEts,AtomNode1),ets:lookup(NodesEts,AtomNode2)}of
+			{[{AtomNode1,{_, Location1, _,_}}], [{AtomNode2,{_, Location2,_,_}}]} ->
 
-    [{AtomNode1,{_, Location1, _,_}}] = ets:lookup(NodesEts,AtomNode1),
-    AtomNode2 = makeAtom(Node2),
+			    draw_route(DC, Location,Location2, Medium),
+			    draw_route(DC, Location1,Location2, 0);
 
-    [{AtomNode2,{_, Location2,_,_}}] = ets:lookup(NodesEts,AtomNode2),
-
-    draw_route(DC, Location,Location2, Medium),
-    draw_route(DC, Location1,Location2, 0),
-
+			_ -> io:format("draw_routes_from_node not found node")
+		end,
     draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet).
 
 %%%%
@@ -553,6 +557,7 @@ draw_route(DC, Location1,Location2, Medium) ->
 
 makeAtom(NodeNumber) -> list_to_atom("node_" ++ integer_to_list(NodeNumber)).
 
+configButtonUpdate(_, ok)->ok;
 configButtonUpdate(idle, [PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
 configButtonUpdate(rf_only, [PlcOff,_,_,RfOn])->selectRadio(PlcOff,RfOn);
 configButtonUpdate(plc_only, [_,PlcOn,RfOff,_])->selectRadio(PlcOn,RfOff);
@@ -560,11 +565,12 @@ configButtonUpdate(dual, [_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn).
 
 selectRadio(Plc,Rf) -> wxRadioButton:setValue(Plc,true), wxRadioButton:setValue(Rf,true).
 
-checkRadio(0,0) -> idle;
-checkRadio(0,1) -> rf_only;
-checkRadio(1,0) -> plc_only;
-checkRadio(1,1) -> dual;
+checkRadio(false,false) -> idle;
+checkRadio(false,true) -> rf_only;
+checkRadio(true,false) -> plc_only;
+checkRadio(true,true) -> dual;
 checkRadio(Plc,Rf) -> {wxRadioButton:getValue(Plc), wxRadioButton:getValue(Rf)}.
+
 checkRadio([_,PLC,_,RF]) ->checkRadio(wxRadioButton:getValue(PLC), wxRadioButton:getValue(RF)).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Create Form Functions:

@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [stats_server_interface, report, node, protocol_interface, modem_port, load_ng, data_link]).
+-define(MODULES_TO_FILTER, [stats_server_interface, protocol_interface, modem_port, transport, report, node, data_link, utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
@@ -6,7 +6,7 @@
 
 
 %%% SYSTEM PROPERTIES
--define(CURRENT_LOG_LEVEL, 1). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
+-define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
 -define(LOAD_NG, load_ng).
@@ -33,6 +33,7 @@
                          ?LOAD_NG,
                          ?MODEM_PORT,
                          ?APPLICATION,
+                         utils,
                          node_control_interface,
                          stub_data_server,
                          isg_time,
@@ -113,5 +114,5 @@
 %                         {role, smart_meter}
                          {role, data_concentration_server},
                         %  {meters_list, [node_10, node_4]}
-                         {meters_list, [node_10, node_4, node_6, node_7, node_9]}
+                         {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14]}
                         ]).

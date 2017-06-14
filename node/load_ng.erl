@@ -124,10 +124,14 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
 
 handle_call(get_status, _From, Context) ->
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
-    %TODO implement hand_shake with application
     NetworkStatus = ?NETWORK:get_status(Context#context.network_pid),
     DataLinkStatus = ?DATA_LINK:get_status(Context#context.data_link_pid),
     {reply, NetworkStatus ++ DataLinkStatus , Context};
+
+handle_call(reset, _From, Context) ->
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
+    ResetStatus = ?NETWORK:reset(Context#context.network_pid),
+    {reply, ResetStatus , Context};
 
 
 handle_call(Request, From, Context) ->
@@ -139,7 +143,7 @@ handle_call(Request, From, Context) ->
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  handle_cast({update_configuration, OptionsList}, Context) ->
      ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w~n", [?MODULE, OptionsList]),
-
+     ?DATA_LINK:set_state(Context#context.data_link_pid, OptionsList),
      {noreply, Context};
 
 handle_cast(Request, Context) ->

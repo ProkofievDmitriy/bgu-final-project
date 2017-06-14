@@ -10,7 +10,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1 ]).
+-export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -83,6 +83,8 @@ get_status(FsmPid) ->
     gen_fsm:sync_send_all_state_event(FsmPid, get_status).
 
 
+reset(FsmPid) ->
+    gen_fsm:sync_send_all_state_event(FsmPid, reset).
 %% ====================================================================
 %% Internal events
 %% ====================================================================
@@ -486,6 +488,13 @@ handle_sync_event(get_status, _From, StateName, State) ->
          {next_address, RoutingSetEntry#routing_set_entry.next_addr},
          {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
     {reply, [{routing_set, RoutingSetList}], StateName, State};
+
+handle_sync_event(reset, _From, StateName, State) ->
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
+    Query = ets:fun2ms(fun({Key, Entry})-> Key end),
+    RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
+    [ets:delete(State#state.routing_set, X) || X <- RoutingSet ],
+    {reply, ok, StateName, State};
 
 
 handle_sync_event(Event, _From, StateName, StateData) ->

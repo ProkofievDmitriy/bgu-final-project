@@ -70,12 +70,12 @@ internal_report(Type, Data)->
     end.
 
 report(Type, Data) ->
-    try internal_report(Type, Data) of
-        Result -> {ok, Result}
-    catch
-        Throw ->
-            ?LOGGER:critical("[~p]: Error catched: ~w ~n", [?MODULE, Throw]),
-            {error, Throw}
+    case internal_report(Type, Data) of
+        ok -> {ok , all_good};
+        {ok, _} -> {ok , all_good};
+        Error ->
+            ?LOGGER:critical("[~p]: Error catched: ~w ~n", [?MODULE, Error]),
+            {error, Error}
     end.
 
 %%  ------------------------------------------------------------------

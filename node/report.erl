@@ -47,7 +47,7 @@ connect_to_data_server() -> gen_server:cast(?MODULE, connect_to_data_server).
 %   callbacks
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(Properties) ->
-	?LOGGER:debug("[~p]: Starting REPORT with props: ~w~n", [?MODULE, Properties]),
+	?LOGGER:debug("[~w]: Starting REPORT with props: ~w~n", [?MODULE, Properties]),
     DataServerInterface = proplists:get_value(data_server_interface, Properties),
     DataServerName = proplists:get_value(data_server_name, Properties),
     DataServerIp = proplists:get_value(data_server_ip, Properties),
@@ -65,7 +65,7 @@ init(Properties) ->
 %   HANDLE CALL's synchronprepare_message_dataous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:debug("[~w]: STUB Handle CALL Request(~w) from ~w, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -74,53 +74,53 @@ handle_call(Request, From, Context) ->
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
-    ?LOGGER:debug("[~p]: REPORT, ServerModuleInterface: ~p, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
+    ?LOGGER:debug("[~w]: REPORT, ServerModuleInterface: ~w, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
     ReportResult = ServerModuleInterface:report(Type, ReportMessageData),
     case ReportResult of
         {ok, _} -> {noreply, Context};
         {error, Throw} ->
-            ?LOGGER:warn("[~p]: ServerModuleInterface: ~w unavailable: ~p.~n", [?MODULE, ServerModuleInterface, Throw]),
+            ?LOGGER:warn("[~w]: ServerModuleInterface: ~w unavailable: ~w.~n", [?MODULE, ServerModuleInterface, Throw]),
             {noreply, Context#context{connected_to_server = false}};
         Else ->
-            ?LOGGER:critical("[~p]: ServerModuleInterface: ~w UNXEPECTED RESULT: ~w.~n", [?MODULE, ServerModuleInterface, Else]),
+            ?LOGGER:critical("[~w]: ServerModuleInterface: ~w UNXEPECTED RESULT: ~w.~n", [?MODULE, ServerModuleInterface, Else]),
             {noreply, Context#context{connected_to_server = false}}
     end;
 
 handle_cast({report, ReportMessage }, #context{connected_to_server = false} = Context) ->
-    ?LOGGER:warn("[~p]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, ReportMessage]),
+    ?LOGGER:warn("[~w]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, ReportMessage]),
     connect_to_data_server(),
     {noreply, Context};
 
 
 handle_cast(connect_to_data_server, #context{connected_to_server = false} = Context) ->
 %TODO Pattern match in function definition to only not connected to server state
-    ?LOGGER:debug("[~p]: Handle ResultCAST Request(connect_to_data_server) ~n", [?MODULE]),
+    ?LOGGER:debug("[~w]: Handle ResultCAST Request(connect_to_data_server) ~n", [?MODULE]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
     test_connection(ServerNodeName),
     Ans = net_kernel:connect_node(ServerNodeName),
     timer:sleep(1000),
     case Ans of
         true ->
-            ?LOGGER:debug("[~p]: connected to server: ~p, erlang-wise (Ans is true)~n", [?MODULE, ServerNodeName]),
+            ?LOGGER:debug("[~w]: connected to server: ~w, erlang-wise (Ans is true)~n", [?MODULE, ServerNodeName]),
             NewContext = Context#context{connected_to_server = true},
             {noreply, NewContext};
         Else ->
-%    		?LOGGER:err("[~p]: ERROR: ~p, on connection to server: ~p~n", [?MODULE, Else, ServerNodeName]),
-            ?LOGGER:err("[~p]: ERROR: ~p, on connection to server: ~p~n", [?MODULE, Else, ServerNodeName]),
+%    		?LOGGER:err("[~w]: ERROR: ~w, on connection to server: ~w~n", [?MODULE, Else, ServerNodeName]),
+            ?LOGGER:err("[~w]: ERROR: ~w, on connection to server: ~w~n", [?MODULE, Else, ServerNodeName]),
             timer:sleep(10000),
             connect_to_data_server(),
             {noreply, Context}
     end;
 
 handle_cast(connect_to_data_server, #context{connected_to_server = true} = Context) ->
-    ?LOGGER:debug("[~p]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
+    ?LOGGER:debug("[~w]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
     {noreply, Context};
 
 
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~w]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -133,13 +133,13 @@ handle_cast(Request, Context) ->
 %   HANDLE INFO's
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~p~n", [?MODULE, Request, Context]),
+    ?LOGGER:debug("[~w]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 
 
 terminate(Reason, Context) ->
-    ?LOGGER:debug("[~p]: STUB terminating, reason ~p, state ~p~n", [?MODULE, Reason, Context]),
+    ?LOGGER:debug("[~w]: STUB terminating, reason ~w, state ~w~n", [?MODULE, Reason, Context]),
     ok.
 
 code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
@@ -155,7 +155,7 @@ prepare_message_data(DataList , Context)->
 
 test_connection(Address)->
    case net_adm:ping(Address) of
-     pong-> ?LOGGER:debug("[~p]: Node ~p is UP ~n", [?MODULE, Address]);
-     pang-> ?LOGGER:debug("[~p]: Can't reach node ~p~n", [?MODULE, Address]);
-     Other-> ?LOGGER:debug("[~p]: ERROR :  ~p~n", [?MODULE, Other])
+     pong-> ?LOGGER:debug("[~w]: Node ~w is UP ~n", [?MODULE, Address]);
+     pang-> ?LOGGER:debug("[~w]: Can't reach node ~w~n", [?MODULE, Address]);
+     Other-> ?LOGGER:debug("[~w]: ERROR :  ~w~n", [?MODULE, Other])
     end.

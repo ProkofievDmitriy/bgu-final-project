@@ -65,7 +65,7 @@ internal_start(Properties) when is_list(Properties)->
     NodeName = proplists:get_value(node_name, Properties),
     Timeout = proplists:get_value(timeout, NodeProperties),
     ?LOGGER:info("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
-    {ok, NodePID} = gen_server:start_link({global, NodeName}, ?MODULE, Properties, [{timeout, Timeout * 3}]),
+    {ok, NodePID} = gen_server:start_link({global, list_to_atom(NodeName)}, ?MODULE, Properties, [{timeout, Timeout * 3}]),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
     NodePID.
@@ -86,10 +86,10 @@ init(GlobalProperties) ->
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
 	NodeName = proplists:get_value(node_name, GlobalProperties),
 	?LOGGER:debug("[~p]: Node Name: ~p~n", [?MODULE, NodeName]),
-    NodeAddress = get_node_number(NodeName),
+    NodeAddress = utils:get_node_number(NodeName),
 	%extract muchine's parameters (MAC Address, IP Address, Host name & Serial ID number
-	MAC = get_mac(),
-	IP = get_ip(),
+	MAC = utils:get_mac(),
+	IP = utils:get_ip(),
 	?LOGGER:debug("[~p]: Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [?MODULE, NodeName, NodeAddress, IP, MAC]),
 
 	%initialize reporting-unit
@@ -162,7 +162,7 @@ handle_cast({reset_node}, Context) ->
 
 handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
     ?LOGGER:debug("[~p]: CAST Request(initiate_transaction), Destination:~p, Data: ~p, Context: ~w ~n", [?MODULE, Destination, Data, Context]),
-    ?PROTOCOL:send({Destination, Data}),
+    ?PROTOCOL:send(utils:get_node_number(Destination), term_to_binary(Data)),
     {noreply, Context};
 
 
@@ -208,9 +208,6 @@ handle_info(send_node_status, Context)  ->
     ?LOGGER:debug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
     Status = ?PROTOCOL:get_status(),
     ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
-    % ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
-    % Server = global:whereis_name(loadNGgui),
-    % wx_object:cast(Server, {node_is_up,{Context#context.node_name}}),
 	{noreply, Context};
 
 handle_info(Request, Context)  ->
@@ -260,43 +257,6 @@ injectProperties(GlobalProperties, DestinationPropertiesListName, {Key, Value})-
     NewList = proplists:delete(Key,  DestinationPropertiesList),
     [{DestinationPropertiesListName, [{Key,Value} | NewList] } | NewGlobalList].
 
-
-get_node_number(NodeName)->
-%    NodeNameAsList = atom_to_list(NodeName),
-    ?LOGGER:debug("[~p]: get_node_number NodeName: ~p~n", [?MODULE, NodeName]),
-    {Address, []} = string:to_integer(cut_list_from_delimiter(NodeName, 95)), % 95 = "_".
-    Address.
-
-get_mac() ->
-	M = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep -o -E '([[:xdigit:]]{1,2}:){5}[[:xdigit:]]{1,2}'"),
-    ?LOGGER:debug("[~p]: get_mac: mac is:~p~n", [?MODULE, M]),
-	remove_end_of_line(M).
-
-get_ip() ->
-    I = os:cmd("ifconfig " ++ ?NETWORK_DEVICE ++ " | grep \"inet addr\" | cut -d ':' -f 2 | cut -d ' ' -f 1"),
-    ?LOGGER:debug("[~p]: get_ip: ip is:~p~n", [?MODULE, I]),
-	remove_end_of_line(I).
-
-remove_end_of_line([])-> none;
-remove_end_of_line([H|Tail])->
-    case Tail == "\n" of
-        true -> H;
-        _ -> remove_end_of_line([H], Tail)
-    end.
-
-remove_end_of_line(Result, [H | []]) -> Result++[H];
-remove_end_of_line(Result, [H | Tail]) when Tail =:= "\n" -> Result++[H];
-remove_end_of_line(Result, [H | Tail]) -> remove_end_of_line(Result ++ [H], Tail).
-
-cut_list_from_delimiter([], _Delimiter)-> [];
-cut_list_from_delimiter([H|Tail], Delimiter)->
-    ?LOGGER:preciseDebug("[~p]: cut_list_from_delimiter H: ~p, Tail: ~p, Delimiter: ~p ~n", [?MODULE, H, Tail, Delimiter]),
-    case H == Delimiter of
-        true ->
-            ?LOGGER:preciseDebug("[~p]: cut_list_from_delimiter Result: ~p~n", [?MODULE, Tail]),
-            Tail;
-        _ -> cut_list_from_delimiter(Tail, Delimiter)
-    end.
 
 % no compilation errors handling, should not be errors
 compile_resources() ->

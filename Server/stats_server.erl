@@ -266,7 +266,8 @@ handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = C
 
 handle_cast({states, From}, State) ->
     {AvgTime,AvgLength} = avrages(State#state.dm_ets),
-        io:format("Stats avg: ~p~n",[AvgTime]),
+        io:format("Stats AvgTime: ~p~n",[AvgTime]),
+        io:format("Stats AvgLength: ~p~n",[AvgLength]),
 
     From!{State#state.counters,AvgTime,AvgLength},
     {noreply, State};
@@ -431,9 +432,10 @@ export_db(DB, File_Name) ->
 %{AvgTime,AvgLength} = avrages(State#state.dm_ets),
 
 avrages(DB) ->
-    avrages(DB, ets:first(DB),0,0,0,0).
+    avrages(DB, ets:first(DB),0.0,0,0.0,0).
 
-avrages(_, '$end_of_table',0,0, 0,0) -> {0.0,0.0};
+avrages(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
+avrages(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
 avrages(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> {SumTime/NumberTime,SumLength/NumberLength};
 avrages(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
   [{Key,Data}] = ets:lookup(DB,Key),

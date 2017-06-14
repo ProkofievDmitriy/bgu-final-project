@@ -21,10 +21,13 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_configuration(NodeName, OptionsList)->
-    gen_server:cast({global, NodeName}, {update_configuration, OptionsList}).
+
+    gen_server:cast(global:whereis_name(NodeName), {update_configuration, OptionsList}).
 
 initiate_transaction(NodeName, Destination, Data)->
-    gen_server:cast({global, NodeName}, {initiate_transaction, {Destination, Data}}).
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {initiate_transaction, {Destination, Data}}).
+
 
 reset_node(NodeName)->
     io:format("~nAAAA3: ~p~n",[NodeName]),
