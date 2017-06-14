@@ -58,6 +58,27 @@ init({My_name,My_protocol,My_node}) ->
       {stop,{handshake_failure,Reason}}
   end.
 
+counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}) ->
+  log:info("received bit string: ~p~n", [Bit_string]),
+  <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
+  % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
+  To = extract_name(To_n),
+  %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
+  case Type of
+    ?DREQ_BIT -> gen_fsm:send_event(My_name, {dreq,To,Seq}),
+      {next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}} ;
+    ?DREP_BIT ->
+      Data_size = bit_size(Data_b),
+      Entry_size = ?NODE_BITS+?READING_BITS,
+      if Data_size rem Entry_size =/= 0 ->
+        log:err("received invalid data of size ~p, dropping drep~n",[Data_size]),
+        {next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}};
+        true ->
+          Data = bit_to_data(Data_b,[]),
+          gen_fsm:send_event(My_name, {drep, To,Data,Seq}),
+          next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}
+      end
+  end;
 
 %%TODO - trigger increment event
 counting(increment, {My_name,My_protocol,My_node,Counter,Sn}) ->
@@ -73,7 +94,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
     if Sn=<Seq ->
       %% sending reading
       log:info("~p is sending reading ~n", [My_name] ),
-      _Ok = send_drep (My_protocol,[{My_name,Counter}|[]],Seq),
+      _Ok = send_drep (My_protocol,[{My_node,Counter}|[]],Seq),
       %% returning to the same state with updated sequence number
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
     %% if seq lower or equals - ignore
@@ -182,7 +203,9 @@ hand_shake(Me,My_protocol,Times) ->
 send_drep(My_protocol,Data,Seq) ->
   case ?TEST_MODE of
     local ->
-      My_protocol ! {drep,?DC_NODE,Data,Seq},
+      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+      log:debug ("sending bit message: ~p~n" , [Bit_message]),
+      My_protocol ! Bit_message,
       ok;
     integrated ->
       log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
@@ -202,7 +225,9 @@ send_drep(My_protocol,Data,Seq) ->
 send_dreq(My_protocol, To, Seq) ->
   case ?TEST_MODE of
     local ->
-      My_protocol! {dreq, To,Seq},
+      Bit_message = message_to_bit({dreq, To,Seq}),
+      log:debug ("sending bit message: ~p~n" , [Bit_message]),
+      My_protocol! Bit_message,
       ok;
 
     integrated ->
@@ -223,23 +248,92 @@ message_to_bit({dreq,To,Seq}) ->
   Dest = extract_address(To),
   Dest_b = <<Dest:?NODE_BITS>>,
   Seq_b = <<Seq:?SEQ_BITS>>,
-  <<Type_b/bitstring, Dest_b/bitstring, Seq_b,bitstring>>;
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>;
 
 message_to_bit({drep,To,Data,Seq})->
   Data_b = data_to_bits(Data,<<>>),
-  Type_b = <<?DREQ_BIT:1>>,
+  Type_b = <<?DREP_BIT:1>>,
   Dest = extract_address(To),
   Dest_b = <<Dest:?NODE_BITS>>,
   Seq_b = <<Seq:?SEQ_BITS>>,
-  <<Type_b/bitstring, Dest_b/bitstring, Seq_b,bitstring, Data_b/bitstring>>.
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring, Data_b/bitstring>>.
+
+
+
+%%bit_to_data(<<>>, List) -> List;
+%%bit_to_data(Data_b, List) ->
+%%  <<Meter_b:?NODE_BITS,Reading_b:?READING_BITS, Tail/bitstring>> = Data_b,
+%%  Meter_n = erlang:binary_to_integer(bitstring_to_binary(Meter_b),2),
+%%  Meter = extract_name(Meter_n),
+%%  Reading = erlang:binary_to_integer(bitstring_to_binary(Reading_b)),
+%%  bit_to_data(Tail,[{Meter,Reading}|List]).
+
+bit_to_data(<<>>, List) -> List;
+bit_to_data(Data_b, List) ->
+  <<Meter_b:?NODE_BITS,Reading:?READING_BITS, Tail/bitstring>> = Data_b,
+  Meter = extract_name(Meter_b),
+  bit_to_data(Tail,[{Meter,Reading}|List]).
 
 
 
 %%% readings order will be reversed at the end of this -> at the receiving side will be reversed back.
 data_to_bits([],String) ->String;
 data_to_bits([{Meter,Reading}|T],String)->
-  Meter_b = <<Meter:?NODE_BITS>>,
+  Meter_n = extract_address(Meter),
+  Meter_b = <<Meter_n:?NODE_BITS>>,
   Reading_b = <<Reading:?READING_BITS>>,
   NewString = <<Meter_b/bitstring, Reading_b/bitstring, String/bitstring>>,
   data_to_bits(T,NewString).
 
+
+%%bitstring_to_binary(Bitstring) ->
+%%  Size = bit_size(Bitstring),
+%%  Stuff = 8 - (Size rem 8),
+%%  case Stuff of
+%%    0 -> Bitstring;
+%%    Other -> << 0:Other , Bitstring/bitstring>>
+%%  end.
+
+
+
+
+
+
+%% todo implement in a less stupid way
+extract_address(NodeNameAtom)->
+  case NodeNameAtom of
+    node_1 -> 1;
+    node_2-> 2;
+    node_3 -> 3;
+    node_4 -> 4;
+    node_5 -> 5;
+    node_6 -> 6;
+    node_7 -> 7;
+    node_8 -> 8;
+    node_9 -> 9;
+    node_10 -> 10;
+    node_11 -> 11;
+    node_12 -> 12;
+    node_13 -> 13;
+    node_14 -> 14;
+    node_15 -> 15
+  end.
+
+extract_name(Number) ->
+  case Number of
+    1 -> node_1;
+    2 -> node_2;
+    3 -> node_3;
+    4 -> node_4;
+    5 -> node_5;
+    6 -> node_6;
+    7 -> node_7;
+    8 -> node_8;
+    9 -> node_9;
+    10 -> node_10;
+    11 -> node_11;
+    12 -> node_12;
+    13 -> node_13;
+    14 -> node_14;
+    15 -> node_15
+  end.

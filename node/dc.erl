@@ -563,11 +563,14 @@ hand_shake(Me,My_protocol,Times) ->
    (Mega*1000000 + Sec)*1000 + round(Micro/1000).
 
 my_rand(Number) ->
-  %rand:seed(erlang:timestamp()),
-  % {A,B,C} = erlang:timestamp(),
-  % {A,B,C} = erlang:now(),
-  % {RandomNumber, _Seed} = rand:uniform_s(Number, rand:seed(exs1024,{A,B,C})),
+%%  rand:seed(erlang:timestamp()),
+%% {A,B,C} = erlang:timestamp(),
+%%   {A,B,C} = erlang:now(),
+%%   {RandomNumber, _Seed} = random:uniform_s(Number, random:seed(exs1024,{A,B,C})),
+
+%%  RandomNumber.
   RandomNumber = erlang:phash2(get_current_millis()) rem Number,
+  log:debug("randomizing ~p~n", [RandomNumber]),
   case RandomNumber of
       0 -> 1;
       _ -> RandomNumber

@@ -14,7 +14,7 @@
 -define(DC_MODULE, dc).
 -define(SEM_MODULE, am_sem).
 
--define(DC_NODE, node_1).
+-define(DC_NODE, node_11).
 
 
 
@@ -26,7 +26,7 @@
 
 -define(TEST_MODE, local). % local - no OTP behavior | integrated - with OTP behavior
 
--define(TIMER_TIMEOUT, 18000).
+-define(TIMER_TIMEOUT, 180000).
 -define(HAND_SHAKE_MAX_TRIES,3).
 -define(HAND_SHAKE_TIMEOUT, 30000).
 -define(TERMINATION_TIMEOUT, 3000).

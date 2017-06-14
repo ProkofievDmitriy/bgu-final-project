@@ -1,52 +1,60 @@
-Meters = [node_2,node_3,node_4,node_5,node_6,node_7,node_8,node_9,node_10].
+Meters = [node_1,node_2,node_3,node_4,node_5,node_6,node_7,node_8,node_9,node_10].
 
 c(dc).
-node_
 
-spawn(dc,start_link,[dc_node,self(),Meters]). 
 
-dc_node_app ! ok.
+spawn(dc,start_link,[{node_11,self(),Meters}]). 
 
+spawn(am_sem,start_link,[{node_2,self(),Meters}]). 
+
+
+node_11_app ! ok.
+
+
+gen_fsm:send_event(node_2_app,{received_message,<<4,0:7>>}).
 
 1:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m1,1}],0}).
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,1:6,1:16>>}).
 
 2:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m1,1},{m2,2}],0}).
-
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,2:6,2:16,1:6,1:16>>}).
+ 
 3:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3}],0}).
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,3:6,3:16>>}).
 
 4:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m4,4}],0}).
-
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,4:6,4:16,3:6,3:16>>}).
+ 
 5:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5}],0}).
-
-
-gen_fsm:send_event(node_1_app,{received_message, <<0:1,1:6,0:8,5:6,5:16>>})
-
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,5:6,5:16>>}).
 
 6:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m6,6}],0}).
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,6:6,6:16,5:6,5:16>>}).
 
 7:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7}],0}).
- 
- gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:6,0:8,7:6,7:16,3:6,3:16>>}).
+ gen_fsm:send_event(node_1_app,{received_message, <<1:1,11:6,0:8,7:6,7:16,3:6,3:16>>}).
 
 8:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m3,3},{m7,7},{m8,8}],0}).
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,8:6,8:16,7:6,7:16,3:6,3:16>>}).
 
 9:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m9,9}],0}).
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,9:6,9:16,5:6,5:16>>}).
 
 10:
  gen_fsm:send_event(dc_node_app,{drep,m11,[{m5,5},{m9,9},{m10,10}],0}).
-
+ gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,10:6,10:16,9:6,9:16,5:6,5:16>>}).
  
  
- gen_fsm:stop(dc_node_app).
+ gen_fsm:stop(node_11_app).
  
  ==============================================================
  
