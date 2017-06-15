@@ -266,8 +266,8 @@ handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = C
 
 handle_cast({states, From}, State) ->
     {AvgTime,AvgLength} = avrages(State#state.dm_ets),
-        io:format("Stats AvgTime: ~p~n",[AvgTime]),
-        io:format("Stats AvgLength: ~p~n",[AvgLength]),
+        %io:format("Stats AvgTime: ~p~n",[AvgTime]),
+        %io:format("Stats AvgLength: ~p~n",[AvgLength]),
 
     From!{State#state.counters,AvgTime,AvgLength},
     {noreply, State};
