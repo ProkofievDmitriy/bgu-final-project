@@ -31,6 +31,10 @@
 -define(HAND_SHAKE_TIMEOUT, 30000).
 -define(TERMINATION_TIMEOUT, 3000).
 
+-define(MAX_DREQ_TRIES, 10).
+
+
+
 -define(PROTOCOL_REQUEST_TIMEOUT, 10000).
 
 
@@ -41,3 +45,4 @@
 -define(NODE_BITS,7).
 -define(READING_BITS, 17).
 -define(SEQ_BITS,8).
+
