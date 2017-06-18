@@ -66,12 +66,15 @@ init({Me, My_protocol,My_node,Meters}) ->
   case Hand_shake of
     ready ->
       log:info("~p initialized~n", [Me]),
-      [Rd|Nrs] = Meters,                         % 1/4+9c
+      [Rd1|Nrs] = Meters,                         % 1/4+9c
+      Rd= [Rd1],
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
-       timer:sleep(3000),
-
-       Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-       log:info("first dreq sent, Rd are ~p, result: ~w~n",[Rd, Ok]),
+      ets:new(stats,[ordered_set,named_table,public]),
+       _Ok = send_dreq(My_protocol,[Rd],0),                    % 1/11
+       log:info("first dreq sent, Rd are ~p~n",Rd),
+      _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
+      log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [0, 0, erlang:length(Rd)]),
+      _OK2 = ets:insert(stats, {avg_round_time,{ 0, 0, get_current_millis()}}),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs,Rd,0,Timerpid}};
 
@@ -156,19 +159,25 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
   if Nrs1 == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
+    _Ok = report_averages(),
       Timerpid! stop,
       Sn1 = Sn+1,
-      [Rd1|Nrs2]= Meters,     % 2/5
+      [Rd2|Nrs2]= Meters,     % 2/5
+      Rd1=[Rd2],
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn1]),
       _Ok = send_dreq(My_protocol,Rd1,Sn1),           % 2/7
+      _Ok1 = insert_requests( Rd1, Sn1),
+      _Ok2 = insert_time(Sn1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd1|Nrs2] = Nrs1,                  % 1/9
+      [Rd2|Nrs2] = Nrs1,
+      Rd1 = [Rd2],
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
+      _Ok1 = insert_requests( Rd1, Sn),
       Timerpid!restart,                              % 1/12
       {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid}}
   end;
@@ -180,19 +189,25 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
   if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
     log:info("=========FINISHED round ~p of collecting,, preparing for next round ========~n",[Sn]),
+    _Ok = report_averages(),
     Timerpid!stop,
     Sn1=Sn+1,
-    [Rd1|Nrs2]= Meters,                         % 1/4+9c
-    _Ok = send_dreq(My_protocol,Rd1,0),                    % 1/11
+    [Rd2|Nrs2]= Meters,
+    Rd1= [Rd2],
+    _Ok = send_dreq(My_protocol,Rd1,Sn1),                    % 1/11
     log:info("sending dreq, Rd are ~p~n",[Rd]),
+    _Ok1 = insert_requests( Rd, Sn1),
+    _Ok2 = insert_time(Sn1),
     Timerpid1 = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
     {next_state,collecting,
       {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd1|Nrs2] =Nrs1,                   % 1/9
+      [Rd2|Nrs2] =Nrs1,
+      Rd1= [Rd2],
       log:info("sending dreq to: ~p with sn ~p~n", [Rd,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
+      _Ok1 = insert_requests( Rd1, Sn),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid1}}
@@ -414,6 +429,8 @@ delete_elements(List,[H|T])->
 
 send_dreq(_,[],_) -> ok;
 send_dreq(My_protocol, [H|T], Seq) ->
+  log:debug("entering send_dreq ~p ~p~n", [H,Seq]),
+
   case ?TEST_MODE of
     local ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
@@ -555,4 +572,54 @@ extract_nodes_from_drep(List,[]) -> List;
 extract_nodes_from_drep(List,[{Node,_}|T]) ->
   extract_nodes_from_drep([Node|List],T).
 
-%%TODO
+report_averages() ->
+  Avg_reqs = extract_avg_reqs(),
+  Avg_time = extract_avg_time(),
+  _Ok = report_to_server([{average_data_requests_per_round, Avg_reqs}, {average_time_per_round,Avg_time}]),
+  ok.
+
+extract_avg_reqs() ->
+  [{_,{Avg,Round,Count}}] = ets:lookup(stats,avg_reqs),
+  New_avg = (Avg* (Round) +Count) / (Round+1),
+  _Ok = ets:insert(stats, {avg_reqs,{New_avg,Round+1,0}}),
+  New_avg.
+
+extract_avg_time() ->
+  [{_,{Avg,Round,Start}}] = ets:lookup(stats,avg_round_time),
+  End = get_current_millis(),
+  Current = End-Start,
+  New_avg = (Avg* (Round) +Current) / (Round+1),
+  _Ok = ets:insert(stats, {avg_round_time,{New_avg, Round+1,0}}),
+  New_avg.
+
+insert_requests(Nodes, Sn) ->
+  [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
+  Current = erlang:length(Nodes),
+  if Round =/= Sn ->
+    log:error("insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[Round,Sn]),
+    ok;
+
+    true ->
+      _Ok = ets:insert(stats, {avg_reqs, {Avg, Round, Count+Current}}),
+      log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [Avg, Round, Count+Current]),
+      ok
+  end.
+
+
+insert_time(Sn) ->
+  [{_,{Avg,Round,_Start}}] = ets:lookup(stats,avg_round_time),
+  if Round =/= Sn ->
+    log:err("insert_time Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[Round,Sn]),
+    ok;
+    true ->
+      _Ok = ets:insert(stats, {avg_round_time,{Avg,Round,get_current_millis()}}),
+      log:debug("current time info: Avg ~p, Sn ~p , Start ~p~n", [Avg, Round, get_current_millis()]),
+      ok
+  end.
+
+
+
+report_to_server(List) ->
+  log:info("sending stats report: ~p~n",[List]),
+  ok.
+
