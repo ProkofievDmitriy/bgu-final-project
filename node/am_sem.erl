@@ -207,9 +207,10 @@ hand_shake(Me,My_protocol,Times) ->
 send_drep(My_protocol,Data,Seq) ->
   case ?TEST_MODE of
     local ->
-      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
-      log:debug ("sending bit message: ~p~n" , [Bit_message]),
-      My_protocol ! Bit_message,
+      log:debug("sending drep to ~p with seq ~p",[?DC_NODE, Seq]),
+%%      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+%%      My_protocol ! Bit_message,
+        My_protocol! {drep,?DC_NODE,Data,Seq},
       ok;
     integrated ->
       log:debug("sending drep to: ~p with sequence ~p~n",[?DC_NODE,Seq]) ,
@@ -229,9 +230,10 @@ send_drep(My_protocol,Data,Seq) ->
 send_dreq(My_protocol, To, Seq) ->
   case ?TEST_MODE of
     local ->
-      Bit_message = message_to_bit({dreq, To,Seq}),
-      log:debug ("sending bit message: ~p~n" , [Bit_message]),
-      My_protocol! Bit_message,
+      log:debug ("sending dreq To ~p with Seq: ~p~n" , [To,Seq]),
+%%      Bit_message = message_to_bit({dreq, To,Seq}),
+%%      My_protocol! Bit_message,
+        My_protocol ! {dreq, To, Seq},
       ok;
 
     integrated ->

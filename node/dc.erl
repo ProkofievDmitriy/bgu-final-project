@@ -87,9 +87,14 @@ init({Me, My_protocol,My_node,Meters}) ->
       Nrs = Meters,
       Rd = random_elements (Nrs),                         % 1/4+9c
       Nrs1 = delete_elements (Nrs, Rd),                   % 1/3+10
+      log:debug("here~n") ,
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
+      ets:new(stats,[ordered_set,named_table,public]),
       _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
       log:info("first dreq sent, Rd are ~p~n",[Rd]),
+      _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
+      log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [0, 0, erlang:length(Rd)]),
+      _OK2 = ets:insert(stats, {avg_round_time,{ 0, 0, get_current_millis()}}),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, discovering, {Me, My_protocol,My_node,Meters,Nrs1,Rd,[],0,Timerpid}};
 
@@ -222,6 +227,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   case  Nrs1 of
     [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
+      _Ok = report_averages(),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
@@ -229,6 +235,8 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
+      _Ok1 = insert_requests( Ter8, Sn1),
+      _Ok2 = insert_time(Sn1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
@@ -238,6 +246,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
+      _Ok1 = insert_requests( Rd1, Sn),
       Timerpid!restart,                              % 1/12
       {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid}}
   end;
@@ -249,6 +258,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
   if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
+      _Ok = report_averages(),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
@@ -256,6 +266,8 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
+      _Ok1 = insert_requests( Ter8, Sn1),
+      _Ok2 = insert_time(Sn1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
@@ -265,6 +277,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Nrs2 = delete_elements (Nrs1, Rd1),             % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
+      _Ok1 = insert_requests( Rd1, Sn),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
       {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid1}}
   end;
@@ -349,6 +362,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
   if
     Nrs == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
+      _Ok = report_averages(),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -356,6 +370,8 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       Ter1 = [],                                     % 2/5
        log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter82,Sn1]),
       _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
+      _Ok1 = insert_requests( Ter82, Sn1),
+      _Ok2 = insert_time(Sn1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
@@ -363,6 +379,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
       _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
+      _Ok1 = insert_requests( Ter81, Sn),
       Timerpid ! restart,
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid}}
   end;
@@ -374,6 +391,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
   if
     Nrs == []->
       log:info("===== FINISHED ROUND ~p of collecting, preparing for next round~====== n",[Sn]),
+      _Ok = report_averages(),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -381,6 +399,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
       Ter1 = [],                                     % 2/5
       log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
       _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
+      _Ok1 = insert_requests( Ter82, Sn1),
+      _Ok2 = insert_time(Sn1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
@@ -388,6 +408,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
       _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
+      _Ok1 = insert_requests( Ter81, Sn),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid1}}
   end;
@@ -586,7 +607,7 @@ my_rand(Number) ->
 
 %%  RandomNumber.
   RandomNumber = erlang:phash2(get_current_millis()) rem Number,
-  log:debug("randomizing ~p~n", [RandomNumber]),
+%%  log:debug("randomizing ~p~n", [RandomNumber]),
   case RandomNumber of
       0 -> 1;
       _ -> RandomNumber
@@ -620,8 +641,9 @@ send_dreq(My_protocol, [H|T], Seq) ->
   case ?TEST_MODE of
     local ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
-      Bit_message = message_to_bit ({dreq,H,Seq}),
-      My_protocol ! Bit_message,
+%%      Bit_message = message_to_bit ({dreq,H,Seq}),
+%%      My_protocol ! Bit_message,
+        My_protocol ! {dreq,H,Seq},
       send_dreq(My_protocol, T, Seq);
 
     integrated ->
@@ -739,7 +761,7 @@ extract_name(Number) ->
 
 
 timer(Me) ->
-  log:debug("INSIDE TIMER : ~w~n", [self()]) ,
+%%  log:debug("INSIDE TIMER : ~w~n", [self()]) ,
   receive
     stop ->
         log:debug("STOP TIMER : ~w~n", [self()]) ,
@@ -760,3 +782,55 @@ extract_nodes_from_drep(List,[{Node,_}|T]) ->
  %%TODO
 check_reading_and_log_time() ->
   ok.
+
+report_averages() ->
+  Avg_reqs = extract_avg_reqs(),
+  Avg_time = extract_avg_time(),
+  _Ok = report_to_server([{average_data_requests_per_round, Avg_reqs}, {average_time_per_round,Avg_time}]),
+  ok.
+
+extract_avg_reqs() ->
+  [{_,{Avg,Round,Count}}] = ets:lookup(stats,avg_reqs),
+  New_avg = (Avg* (Round) +Count) / (Round+1),
+  _Ok = ets:insert(stats, {avg_reqs,{New_avg,Round+1,0}}),
+  New_avg.
+
+extract_avg_time() ->
+  [{_,{Avg,Round,Start}}] = ets:lookup(stats,avg_round_time),
+  End = get_current_millis(),
+  Current = End-Start,
+  New_avg = (Avg* (Round) +Current) / (Round+1),
+  _Ok = ets:insert(stats, {avg_round_time,{New_avg, Round+1,0}}),
+  New_avg.
+
+insert_requests(Nodes, Sn) ->
+  [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
+  Current = erlang:length(Nodes),
+  if Round =/= Sn ->
+    log:error("insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[Round,Sn]),
+    ok;
+
+    true ->
+      _Ok = ets:insert(stats, {avg_reqs, {Avg, Round, Count+Current}}),
+      log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [Avg, Round, Count+Current]),
+      ok
+  end.
+
+
+insert_time(Sn) ->
+  [{_,{Avg,Round,_Start}}] = ets:lookup(stats,avg_round_time),
+  if Round =/= Sn ->
+    log:err("insert_time Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[Round,Sn]),
+    ok;
+    true ->
+      _Ok = ets:insert(stats, {avg_round_time,{Avg,Round,get_current_millis()}}),
+      log:debug("current time info: Avg ~p, Sn ~p , Start ~p~n", [Avg, Round, get_current_millis()]),
+      ok
+  end.
+
+
+
+report_to_server(List) ->
+  log:info("sending stats report: ~p~n",[List]),
+  ok.
+

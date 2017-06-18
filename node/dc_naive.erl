@@ -66,13 +66,12 @@ init({Me, My_protocol,My_node,Meters}) ->
   case Hand_shake of
     ready ->
       log:info("~p initialized~n", [Me]),
-      Nrs = Meters,
-      Rd = Meters,                         % 1/4+9c
+      [Rd|Nrs] = Meters,                         % 1/4+9c
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
-    %   timer:sleep(3000),
+       timer:sleep(3000),
 
-    %   Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-    %   log:info("first dreq sent, Rd are ~p, result: ~w~n",[Rd, Ok]),
+       Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
+       log:info("first dreq sent, Rd are ~p, result: ~w~n",[Rd, Ok]),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs,Rd,0,Timerpid}};
 
@@ -154,29 +153,25 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerp
 collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   log:debug("received rd_empy event in state collecting,~n State data:
     Nrs: ~p, Rd: ~p, Sn: ~p~n" , [Nrs,Rd,Sn]),
-%%  Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
-%%  if
-%%    Nrs1 == []->
+  Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
+  if Nrs1 == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
       Timerpid! stop,
       Sn1 = Sn+1,
-      Nrs2 = Meters,                                 % 2/4
-      Rd3 = Nrs2,                         % 1/4+9c
-%%      Nrs3 = delete_elements (Nrs2, Rd3),                                      % 2/5
-      log:info("sending dreq to: ~p with sn ~p~n", [Rd3,Sn1]),
-      _Ok = send_dreq(My_protocol,Rd3,Sn1),           % 2/7
+      [Rd1|Nrs2]= Meters,     % 2/5
+      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn1]),
+      _Ok = send_dreq(My_protocol,Rd1,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs2,Rd3,Sn1,Timerpid1}};
-%%    true ->
-%%      log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-%%      Rd1 = random_elements (Nrs1),                  % 1/9
-%%      Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
-%%      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
-%%      _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
-%%      Timerpid!restart,                              % 1/12
-%%      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid}}
-%%  end;
+        {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
+    true ->
+      log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
+      [Rd1|Nrs2] = Nrs1,                  % 1/9
+      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
+      _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
+      Timerpid!restart,                              % 1/12
+      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid}}
+  end;
 
 %% timeout elapsed, prepare for another iteration of external loop
 collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
@@ -187,22 +182,20 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     log:info("=========FINISHED round ~p of collecting,, preparing for next round ========~n",[Sn]),
     Timerpid!stop,
     Sn1=Sn+1,
-    Nrs2 = Meters,
-    Rd1 = Meters,                         % 1/4+9c
-    _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
+    [Rd1|Nrs2]= Meters,                         % 1/4+9c
+    _Ok = send_dreq(My_protocol,Rd1,0),                    % 1/11
     log:info("sending dreq, Rd are ~p~n",[Rd]),
     Timerpid1 = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
     {next_state,collecting,
       {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-%%      Rd1 = random_elements (Nrs1),                   % 1/9
-%%      Nrs2 = delete_elements (Nrs1, Rd1),             % 1/10
+      [Rd1|Nrs2] =Nrs1,                   % 1/9
       log:info("sending dreq to: ~p with sn ~p~n", [Rd,Sn]),
-      _Ok = send_dreq(My_protocol,Rd,Sn),              % 1/11
+      _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs1,Rd,Sn,Timerpid1}}
+        {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid1}}
   end;
 
 collecting( Event , State_data) ->
@@ -424,8 +417,9 @@ send_dreq(My_protocol, [H|T], Seq) ->
   case ?TEST_MODE of
     local ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
-      Bit_message = message_to_bit ({dreq,H,Seq}),
-      My_protocol ! Bit_message,
+%%      Bit_message = message_to_bit ({dreq,H,Seq}),
+%%      My_protocol ! Bit_message,
+        My_protocol! {dreq,H,Seq},
       send_dreq(My_protocol, T, Seq);
 
     integrated ->
