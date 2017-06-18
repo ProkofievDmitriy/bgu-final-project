@@ -32,7 +32,7 @@
 -define(MANAGMENT_SERVER, loadNGgui).
 
 %% API
--export([report/2, report/1, printStats/0]).
+-export([report/3, report/2, report/1, printStats/0]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -57,19 +57,26 @@ report(Message) ->
 
 internal_report(Type, Data)->
     UTIME = isg_time:now_now(),
-    ?LOGGER:info("[~p]: REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[?MODULE, Type, UTIME, Data]),
+    ?LOGGER:preciseDebug("[~p]: REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[?MODULE, Type, UTIME, Data]),
     case Type of
         node_state ->
             Server = global:whereis_name(loadNGgui),
-            ?LOGGER:info("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
+            ?LOGGER:preciseDebug("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
             Reply =(catch wx_object:cast(Server, {Type, [{utime, UTIME} | Data]})),
                 Reply;
         _ ->
             Reply =(catch gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })),
                 Reply
     end.
-
 report(Type, Data) ->
+    report(Type, Data, undefined).
+
+report(Type, Data, GrafanaServerIP)->
+    case GrafanaServerIP of
+        undefined -> ok;
+        _ -> grafana_report(Type,GrafanaServerIP)
+    end,
+
     case internal_report(Type, Data) of
         ok -> {ok , all_good};
         {ok, _} -> {ok , all_good};
@@ -77,6 +84,23 @@ report(Type, Data) ->
             ?LOGGER:critical("[~p]: Error catched: ~w ~n", [?MODULE, Error]),
             {error, Error}
     end.
+
+grafana_report(Type, GrafanaServerIP)->
+    ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
+    case Type of
+        {management_message,send_message} ->
+            exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
+        {data_message,send_message} ->
+            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
+        {data_message,relay_message} ->
+            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
+
+        _ -> ok
+    end.
+
+exec_curl(GrafanaServerIP, DataBase, Table, Value)->
+    Result = os:cmd("curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" value=" ++ Value ++ "'"),
+    ?LOGGER:preciseDebug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------

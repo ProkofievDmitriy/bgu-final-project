@@ -203,20 +203,20 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_mo
     {noreply, NewContext};
 
 handle_info(send_node_status, Context)  ->
-    ?LOGGER:debug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
+    ?LOGGER:preciseDebug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
     Status = ?PROTOCOL:get_status(),
     ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
 	{noreply, Context};
 
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    ?LOGGER:info("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 
 
 terminate(Reason, Context) ->
     %TODO Proper termination of module with all consequences
-    ?LOGGER:debug("[~p]: STUB terminating, Reason ~p, State ~p.~n", [?MODULE, Reason, Context]),
+    ?LOGGER:info("[~p]: STUB terminating, Reason ~p, State ~p.~n", [?MODULE, Reason, Context]),
     ok.
 
 code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
@@ -265,8 +265,3 @@ compile_resources() ->
         true -> erlang:error("Compilation Error");
         false -> ?LOGGER:info("Resources compilation finished.~n")
     end.
-
-
-loadTestData()->
-
-ok.

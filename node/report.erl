@@ -75,7 +75,7 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
     ?LOGGER:debug("[~w]: REPORT, ServerModuleInterface: ~w, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
-    ReportResult = ServerModuleInterface:report(Type, ReportMessageData),
+    ReportResult = ServerModuleInterface:report(Type, ReportMessageData, Context#context.data_server_ip),
     case ReportResult of
         {ok, _} -> {noreply, Context};
         {error, Throw} ->

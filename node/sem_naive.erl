@@ -294,40 +294,9 @@ data_to_bits([{Meter,Reading}|T],String)->
 
 
 %% todo implement in a less stupid way
+%% todo implement in a less stupid way
 extract_address(NodeNameAtom)->
-  case NodeNameAtom of
-    node_1 -> 1;
-    node_2-> 2;
-    node_3 -> 3;
-    node_4 -> 4;
-    node_5 -> 5;
-    node_6 -> 6;
-    node_7 -> 7;
-    node_8 -> 8;
-    node_9 -> 9;
-    node_10 -> 10;
-    node_11 -> 11;
-    node_12 -> 12;
-    node_13 -> 13;
-    node_14 -> 14;
-    node_15 -> 15
-  end.
+  utils:get_node_number(NodeNameAtom).
 
 extract_name(Number) ->
-  case Number of
-    1 -> node_1;
-    2 -> node_2;
-    3 -> node_3;
-    4 -> node_4;
-    5 -> node_5;
-    6 -> node_6;
-    7 -> node_7;
-    8 -> node_8;
-    9 -> node_9;
-    10 -> node_10;
-    11 -> node_11;
-    12 -> node_12;
-    13 -> node_13;
-    14 -> node_14;
-    15 -> node_15
-  end.
+    utils:get_node_name(Number).

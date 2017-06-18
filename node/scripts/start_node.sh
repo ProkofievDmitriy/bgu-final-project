@@ -28,6 +28,7 @@ if [ -z "$4" ]
 fi
 
 
+
 PASSWORD="zSs3cfmx"
 
  	echo "INFO : On node $2@$1 password: $PASSWORD: Removing old files if exists..."

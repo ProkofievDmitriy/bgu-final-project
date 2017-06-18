@@ -186,7 +186,7 @@ active(remove_not_valid_routes, StateData)->
     case NotValidRoutes of
         [] -> {next_state, active, StateData};
         _ ->
-            ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~p.~n", [?MODULE, length(NotValidRoutes)]),
+            ?LOGGER:debug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~w.~n", [?MODULE, length(NotValidRoutes)]),
             lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
             {next_state, active, StateData}
     end;
@@ -197,7 +197,7 @@ active(update_expired_routes, StateData)->
     case ExpiredRoutes of
         [] -> {next_state, active, StateData};
         _ ->
-            ?LOGGER:preciseDebug("[~p]: ACTIVE - update_expired_routes Routes number =  ~p.~n", [?MODULE, length(ExpiredRoutes)]),
+            ?LOGGER:debug("[~p]: ACTIVE - update_expired_routes Routes number =  ~w.~n", [?MODULE, length(ExpiredRoutes)]),
             lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
             {next_state, active, StateData}
     end;
@@ -208,7 +208,7 @@ active(remove_expired_rreq, StateData)->
     case ExpiredRREQ of
         [] -> {next_state, active, StateData};
         _ ->
-            ?LOGGER:preciseDebug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~p.~n", [?MODULE, length(ExpiredRREQ)]),
+            ?LOGGER:debug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~w.~n", [?MODULE, length(ExpiredRREQ)]),
             lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
             {next_state, active, StateData}
     end;
@@ -394,9 +394,9 @@ active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREQ RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
-    report_received_management_message(Packet, StateData),
     IsValidPacket = isValidForProcessing(?RREQ, Packet, StateData),
     if  IsValidPacket ->
+        report_received_management_message(Packet, StateData),
         install_reverse_route(StateData, Packet),
         case amIDestination(Packet#load_ng_packet.data#rreq_message.destination, StateData#state.self_address) of
             true ->
@@ -416,9 +416,9 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
 
 active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RREP RECEIVED : Packet : ~w .~n", [?MODULE, Packet]),
-    report_received_management_message(Packet, StateData),
     IsValidPacket = isValidForProcessing(?RREP, Packet, StateData),
     if IsValidPacket ->
+        report_received_management_message(Packet, StateData),
         %TODO Remove rreq handling entry
         install_forward_route(StateData, Packet),
         case amIDestination(Packet#load_ng_packet.data#rrep_message.destination, StateData#state.self_address) of
@@ -483,6 +483,8 @@ handle_sync_event(get_status, _From, StateName, State) ->
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= true -> Entry end),
     RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
+    ?LOGGER:debug("[~p]: RoutingSetList(get_status) = ~w~n", [?MODULE, RoutingSet]),
+
     RoutingSetList = [
         {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
          {next_address, RoutingSetEntry#routing_set_entry.next_addr},

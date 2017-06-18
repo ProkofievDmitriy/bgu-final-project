@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [stats_server_interface, protocol_interface, modem_port, transport, report, data_link, utils]).
+-define(MODULES_TO_FILTER, [protocol_interface, modem_port, transport, report, data_link, utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
@@ -34,6 +34,7 @@
                          ?MODEM_PORT,
                          ?APPLICATION,
                          utils,
+                         application_interface,
                          node_control_interface,
                          stub_data_server,
                          isg_time,
@@ -98,15 +99,16 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-       %                          {data_server_ip, "132.73.205.115"}
-                                 {data_server_ip, "132.73.205.115"}
+                                %  {data_server_ip, "132.73.205.115"}
+                                 {data_server_ip, "192.168.14.30"}
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
 
 
 
 %%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_NAME, simple_application).
+% -define(APPLICATION_NAME, simple_application).
+-define(APPLICATION_NAME, other).
 -define(MESSAGE_SEND_INTERVAL, 30). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
@@ -114,5 +116,6 @@
 %                         {role, smart_meter}
                          {role, data_concentration_server},
                         %  {meters_list, [node_10, node_4]}
-                         {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14]}
+                        %  {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14]}
+                         {meters_list, [node_22, node_25]}
                         ]).
