@@ -30,6 +30,6 @@ fi
 IP=$(ip addr show $2 | grep "inet\b" | cut -d " " -f6 | cut -d/ -f1)
 
 echo "Current ip is '$IP'"
-ERLANG_COMMAND="/usr/local/lib/erlang/bin/erl -name $1@$IP -setcookie load_ng_project -run c cd ./node -run c c node -run node start $1 $3 $4"
+ERLANG_COMMAND="nohup /usr/local/lib/erlang/bin/erl -noshell -name $1@$IP -setcookie load_ng_project -run c cd ./node -run c c node -run node start $1 $3 $4"
 echo "Starting erlang Remotely with : $ERLANG_COMMAND"
-exec $ERLANG_COMMAND
+$ERLANG_COMMAND

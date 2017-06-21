@@ -86,8 +86,13 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
             {noreply, Context#context{connected_to_server = false}}
     end;
 
-handle_cast({report, ReportMessage }, #context{connected_to_server = false} = Context) ->
-    ?LOGGER:warn("[~w]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, ReportMessage]),
+handle_cast({report, {Type, DataList} }, #context{connected_to_server = false} = Context) ->
+    case  Context#context.data_server_ip of
+        undefined -> ok;
+        _ -> spawn(fun()-> grafana_report(Type, Context#context.data_server_ip) end)
+    end,
+
+    ?LOGGER:warn("[~w]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, {Type, DataList}]),
     connect_to_data_server(),
     {noreply, Context};
 
@@ -159,3 +164,24 @@ test_connection(Address)->
      pang-> ?LOGGER:debug("[~w]: Can't reach node ~w~n", [?MODULE, Address]);
      Other-> ?LOGGER:debug("[~w]: ERROR :  ~w~n", [?MODULE, Other])
     end.
+
+
+    grafana_report(Type, GrafanaServerIP)->
+        ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
+        case Type of
+            {management_message,send_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
+
+            {management_message,received_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
+
+            {data_message,send_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
+            {data_message,relay_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
+
+            {data_message,received_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
+
+            _ -> ok
+        end.

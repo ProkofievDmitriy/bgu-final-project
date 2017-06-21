@@ -30,6 +30,7 @@
                   application_type,
                   protocol_monitor_ref,
                   protocol_properties,
+                  logger_ref,
                   report_unit_monitor_ref,
                   report_unit_properties,
                   node_status_timer
@@ -62,7 +63,7 @@ internal_start(Properties) when is_list(Properties)->
     NodeProperties = proplists:get_value(?NODE_PROPERTIES, Properties),
     NodeName = proplists:get_value(node_name, Properties),
     Timeout = proplists:get_value(timeout, NodeProperties),
-    ?LOGGER:info("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
+    io:format("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
     {ok, NodePID} = gen_server:start_link({global, list_to_atom(NodeName)}, ?MODULE, Properties, [{timeout, Timeout * 3}]),
     %% Spawn Monitor
 %    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
@@ -81,6 +82,13 @@ init(GlobalProperties) ->
 %	process_flag(trap_exit, true),
 	group_leader(whereis(user),self()), %this process is a group leader for this node
 
+
+	%initialize reporting-unit
+	LoggerPID = ?LOGGER:start(),
+	LoggerREF = erlang:monitor(process, LoggerPID),
+	?LOGGER:debug("[~p]: Logger: ~p started with pid: ~p.~n", [?MODULE, ?LOGGER, LoggerPID]),
+
+
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
 	NodeName = proplists:get_value(node_name, GlobalProperties),
 	?LOGGER:debug("[~p]: Node Name: ~p~n", [?MODULE, NodeName]),
@@ -89,6 +97,8 @@ init(GlobalProperties) ->
 	MAC = utils:get_mac(),
 	IP = utils:get_ip(),
 	?LOGGER:debug("[~p]: Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [?MODULE, NodeName, NodeAddress, IP, MAC]),
+
+
 
 	%initialize reporting-unit
 	ReportUnitProperties = [{node_name, NodeName} | proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties)],
@@ -121,8 +131,6 @@ init(GlobalProperties) ->
     {ok, #context{
         node_properties = NodeProperties,
         node_name = NodeName,
-        mac = MAC,
-        ip = IP,
         protocol_monitor_ref = Protocol_Monitor_Reference,
         protocol_properties = ProtocolProperties,
         application_monitor_ref = Application_Monitor_Reference,
@@ -131,7 +139,8 @@ init(GlobalProperties) ->
         % application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
-        node_status_timer = Timer
+        node_status_timer = Timer,
+        logger_ref = LoggerREF
     }}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -200,6 +209,14 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_mo
     ProtocolPid = ?PROTOCOL:start(CurrentProtocol, Context#context.protocol_properties),
     Protocol_Monitor_Reference = erlang:monitor(process, ProtocolPid),
     NewContext = Context#context{application_monitor_ref = Protocol_Monitor_Reference},
+    {noreply, NewContext};
+
+%case Protocol crashed. restart it
+handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{logger_ref = Monitor_Ref} = Context)  ->
+    LoggerPID = ?LOGGER:start(),
+    ?LOGGER:debug("[~p]: Logger ~p crashed on node ~p, reason: ~p, restarting Logger.~n",[?MODULE, ?LOGGER, Context#context.node_name, Reason]),
+    LoggerREF = erlang:monitor(process, LoggerPID),
+    NewContext = Context#context{logger_ref = LoggerREF},
     {noreply, NewContext};
 
 handle_info(send_node_status, Context)  ->

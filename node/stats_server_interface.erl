@@ -90,27 +90,22 @@ grafana_report(Type, GrafanaServerIP)->
     ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
     case Type of
         {management_message,send_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
+            utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
 
         {management_message,received_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
+            utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
 
         {data_message,send_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
+            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
         {data_message,relay_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
+            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
 
         {data_message,received_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
+            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
 
         _ -> ok
     end.
 
-exec_curl(GrafanaServerIP, DataBase, Table, Value)->
-    CurlCmd = "curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" value=" ++ Value ++ "'",
-    ?LOGGER:debug("[~p]: exec_curl CurlCmd = : ~p ~n",[?MODULE, CurlCmd]),
-    Result = os:cmd(CurlCmd),
-    ?LOGGER:debug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------
