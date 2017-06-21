@@ -70,11 +70,15 @@ init({Me, My_protocol,My_node,Meters}) ->
       Rd= [Rd1],
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       ets:new(stats,[ordered_set,named_table,public]),
+      ets:new(tracker, [ordered_set,named_table,public]),
+      _Ok3 = insert_nodes_to_tracker(Meters),
        _Ok = send_dreq(My_protocol,[Rd],0),                    % 1/11
        log:info("first dreq sent, Rd are ~p~n",Rd),
       _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
       log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [0, 0, erlang:length(Rd)]),
       _OK2 = ets:insert(stats, {avg_round_time,{ 0, 0, get_current_millis()}}),
+      log:debug("current time info: Avg ~p, Sn ~p , Start ~p~n", [0, 0, get_current_millis()]),
+      _Ok4 = update_tracker(Rd),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs,Rd,0,Timerpid}};
 
@@ -157,10 +161,12 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   log:debug("received rd_empy event in state collecting,~n State data:
     Nrs: ~p, Rd: ~p, Sn: ~p~n" , [Nrs,Rd,Sn]),
   Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
-  if Nrs1 == []->
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  if Nrs_new == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
     _Ok = report_averages(),
-      Timerpid! stop,
+    _Ok4 = insert_nodes_to_tracker(Meters),
+    Timerpid! stop,
       Sn1 = Sn+1,
       [Rd2|Nrs2]= Meters,     % 2/5
       Rd1=[Rd2],
@@ -168,16 +174,18 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
       _Ok = send_dreq(My_protocol,Rd1,Sn1),           % 2/7
       _Ok1 = insert_requests( Rd1, Sn1),
       _Ok2 = insert_time(Sn1),
-      Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
+    _Ok3 = update_tracker(Rd1),
+    Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd2|Nrs2] = Nrs1,
+      [Rd2|Nrs2] = Nrs_new,
       Rd1 = [Rd2],
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
+      _Ok2 = update_tracker(Rd1),
       Timerpid!restart,                              % 1/12
       {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid}}
   end;
@@ -187,9 +195,13 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   log:debug("received timeout event in state discovering, State data:~n
    Nrs: ~p, Rd: ~p, Sn: ~p~n" , [Nrs,Rd,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
-  if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
+  log:debug ("Nrs1 is: ~p~n", [Nrs1]),
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  log:debug ("Nrs_new is: ~p~n", [Nrs_new]),
+  if Nrs_new == [] ->        %% external loop terminated, go ro phase 2
     log:info("=========FINISHED round ~p of collecting,, preparing for next round ========~n",[Sn]),
     _Ok = report_averages(),
+    _Ok4 = insert_nodes_to_tracker(Meters),
     Timerpid!stop,
     Sn1=Sn+1,
     [Rd2|Nrs2]= Meters,
@@ -198,16 +210,18 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     log:info("sending dreq, Rd are ~p~n",[Rd]),
     _Ok1 = insert_requests( Rd, Sn1),
     _Ok2 = insert_time(Sn1),
+    _Ok3 = update_tracker(Rd),
     Timerpid1 = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
     {next_state,collecting,
       {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd2|Nrs2] =Nrs1,
+      [Rd2|Nrs2] =Nrs_new,
       Rd1= [Rd2],
       log:info("sending dreq to: ~p with sn ~p~n", [Rd,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
+      _Ok2 = update_tracker(Rd1),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid1}}
@@ -429,18 +443,18 @@ delete_elements(List,[H|T])->
 
 send_dreq(_,[],_) -> ok;
 send_dreq(My_protocol, [H|T], Seq) ->
-  log:debug("entering send_dreq ~p ~p~n", [H,Seq]),
-
   case ?TEST_MODE of
     local ->
-      log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]),
+      [{H,Times}] = ets:lookup(tracker, H),
+      log:debug("sending dreq to: ~p for the ~p time with sequence ~p~n", [H,Times,Seq]),
 %%      Bit_message = message_to_bit ({dreq,H,Seq}),
 %%      My_protocol ! Bit_message,
-        My_protocol! {dreq,H,Seq},
+      My_protocol ! {dreq,H,Seq},
       send_dreq(My_protocol, T, Seq);
 
     integrated ->
-      log:debug("sending dreq to: ~p with sequence ~p~n", [H,Seq]) ,
+      [{H,Times}] = ets:lookup(tracker, H),
+      log:debug("sending dreq to: ~p for the ~p time with sequence ~p~n", [H,Times,Seq]),
       %   Reply = (catch gen_server:call(My_protocol, {dreq, H, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug(" sending bit message: ~p~n", [Bit_message]),
@@ -455,6 +469,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
 
 
   end.
+
 
 
 message_to_bit({dreq,To,Seq}) ->
@@ -623,3 +638,26 @@ report_to_server(List) ->
   log:info("sending stats report: ~p~n",[List]),
   ok.
 
+insert_nodes_to_tracker([]) -> ok;
+insert_nodes_to_tracker([H|T])->
+  _Ok = ets:insert(tracker, {H,0}),
+  insert_nodes_to_tracker(T).
+
+update_tracker([]) -> ok;
+update_tracker([H|T])->
+  [{H,Val}] = ets:lookup(tracker, H),
+  _Ok = ets:insert(tracker, {H,Val+1}),
+  update_tracker(T).
+
+
+
+delete_unresponsive_nodes([], Nrs) -> Nrs;
+delete_unresponsive_nodes([H|T], Nrs)->
+  [{H,Val}] = ets:lookup(tracker, H),
+  if Val < ?MAX_DREQ_TRIES ->
+    delete_unresponsive_nodes(T,Nrs);
+    true ->
+      log:debug(" WARNING ~p in unresponsive, removing from current round~n",[H]),
+      Nrs1=lists:delete(H,Nrs),
+      delete_unresponsive_nodes(T,Nrs1)
+  end.

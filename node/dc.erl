@@ -177,7 +177,6 @@ discovering({received_message, Bit_string},{Me, My_protocol,My_node,Meters,Nrs,R
 
 %% phase 1 of AMR - AM
 discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
-    log:debug("enter discovering : ~w~n", [self()]) ,
   if To =/=My_node ->
     log:err("dc recived drep with dest address of: ~p, in state discovering ignoring~n", [To]),
     {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
