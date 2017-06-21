@@ -56,7 +56,8 @@ report(Message) ->
     report(Type, ReportData).
 
 internal_report(Type, Data)->
-    UTIME = isg_time:now_now(),
+    % UTIME = isg_time:now_now(),
+    UTIME = ntp:ask(),
     ?LOGGER:preciseDebug("[~p]: REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[?MODULE, Type, UTIME, Data]),
     case Type of
         node_state ->
@@ -74,7 +75,7 @@ report(Type, Data) ->
 report(Type, Data, GrafanaServerIP)->
     case GrafanaServerIP of
         undefined -> ok;
-        _ -> grafana_report(Type,GrafanaServerIP)
+        _ -> spawn(fun()-> grafana_report(Type,GrafanaServerIP) end)
     end,
 
     case internal_report(Type, Data) of
@@ -90,17 +91,26 @@ grafana_report(Type, GrafanaServerIP)->
     case Type of
         {management_message,send_message} ->
             exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
+
+        {management_message,received_message} ->
+            exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
+
         {data_message,send_message} ->
             exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
         {data_message,relay_message} ->
-            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
+            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
+
+        {data_message,received_message} ->
+            exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
 
         _ -> ok
     end.
 
 exec_curl(GrafanaServerIP, DataBase, Table, Value)->
-    Result = os:cmd("curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" value=" ++ Value ++ "'"),
-    ?LOGGER:preciseDebug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
+    CurlCmd = "curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" value=" ++ Value ++ "'",
+    ?LOGGER:debug("[~p]: exec_curl CurlCmd = : ~p ~n",[?MODULE, CurlCmd]),
+    Result = os:cmd(CurlCmd),
+    ?LOGGER:debug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------
@@ -108,5 +118,4 @@ exec_curl(GrafanaServerIP, DataBase, Table, Value)->
 
 printStats () ->
 	io:format("Print Counters~n"),
-
 	gen_server:cast({global, ?STATS_SERVER}, {printStats}).

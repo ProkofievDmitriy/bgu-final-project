@@ -368,28 +368,8 @@ active({received_message, #load_ng_packet{type = ?DREQ} = Packet}, StateData) ->
 active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - DREP Packet : ~w .~n", [?MODULE, Packet]),
     update_routing_set_entry(Packet, StateData), % route maintanace
-    % AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
-    % if  AmIDestination ->
-            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
-            report_data_message_received(Packet, StateData),
-        % true -> ok end,
-    % ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
-    % if ShouldBeForwarded ->
-            % Result = forward_packet(Packet, StateData),
-            % case Result of
-                % {ok, sent, _Some } ->
-                    % ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
-                    % report_data_message_forwarded(Packet, StateData);
-                % {error, Error, #routing_set_entry{} = FailedHop} ->
-                    % ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
-                    % generate_RERR({Packet#load_ng_packet.originator,
-                                %    FailedHop#routing_set_entry.r_seq_number,
-                                %    ?RERR_HOST_UNREACHABLE,
-                                %    Packet#load_ng_packet.destination});
-            %    Else ->
-                %    ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
-            %    end;
-        % true -> ok end, % not eligible to forward, skip
+    ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+    report_data_message_received(Packet, StateData),
     {next_state, active, StateData};
 
 active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
@@ -493,7 +473,7 @@ handle_sync_event(get_status, _From, StateName, State) ->
 
 handle_sync_event(reset, _From, StateName, State) ->
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
-    Query = ets:fun2ms(fun({Key, Entry})-> Key end),
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =/= 0-> Key end),
     RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
     [ets:delete(State#state.routing_set, X) || X <- RoutingSet ],
     {reply, ok, StateName, State};

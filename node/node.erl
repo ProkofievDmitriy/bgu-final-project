@@ -227,7 +227,7 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 read_props() ->
     ApplicationProperties = ?APP_PROPS_LIST,
     NodeProperties = ?NODE_PROPS_LIST,
-     ProtocolProperties = ?PROTOCOL_PROPS_LIST,
+    ProtocolProperties = ?PROTOCOL_PROPS_LIST,
     ReportUnitProperties = ?REPORT_UNIT_PROPS_LIST,
 
     [{?APPLICATION_PROPERTIES, ApplicationProperties},
