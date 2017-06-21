@@ -87,7 +87,6 @@ init({Me, My_protocol,My_node,Meters}) ->
       Nrs = Meters,
       Rd = random_elements (Nrs),                         % 1/4+9c
       Nrs1 = delete_elements (Nrs, Rd),                   % 1/3+10
-      log:debug("here~n") ,
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       ets:new(stats,[ordered_set,named_table,public]),
       ets:new(tracker, [ordered_set,named_table,public]),
@@ -227,11 +226,12 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("received rd_empy event in state discovering,~n State data:
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                    % 1/23
-  log:debug("Nrs1 is ~p~n",[Nrs1]),
-  case  Nrs1 of
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  case  Nrs_new of
     [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
       _Ok = report_averages(),
+      _Ok4 = insert_nodes_to_tracker(Meters),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
@@ -245,12 +245,12 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
-    Nrs1  ->              %% otherwise prepare for next iteration
+    Nrs_new  ->              %% otherwise prepare for next iteration
       log:info("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      Rd1 = random_elements (Nrs1),                  % 1/9
-      Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
+      Rd1 = random_elements (Nrs_new),                   % 1/9
+      Nrs2 = delete_elements (Nrs_new, Rd1),             % 1/10
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
-      _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
+      _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
       _Ok2 = update_tracker(Rd1),
       Timerpid!restart,                              % 1/12
@@ -262,9 +262,13 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("received timeout event in state discovering, State data:~n
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
-  if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
+  log:debug ("Nrs1 is: ~p~n", [Nrs1]),
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  log:debug ("Nrs_new is: ~p~n", [Nrs_new]),
+  if Nrs_new == [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
       _Ok = report_averages(),
+      _Ok4 = insert_nodes_to_tracker(Meters),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
@@ -279,7 +283,6 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
-      Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs_new),                   % 1/9
       Nrs2 = delete_elements (Nrs_new, Rd1),             % 1/10
@@ -368,10 +371,13 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
    log:debug("received ter8_empy event in state collecting,~n State data:
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
+  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81),
+
   if
-    Nrs == []->
+    Ter8_new == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
       _Ok = report_averages(),
+      _Ok4 = insert_nodes_to_tracker(Meters),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -387,22 +393,25 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
-      _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
-      _Ok1 = insert_requests( Ter81, Sn),
-      _Ok2 = update_tracker(Ter81),
+      log:info("sending dreq to: ~p with sn ~p~n", [Ter8_new,Sn]),
+      _Ok = send_dreq(My_protocol,Ter8_new,Sn),           % 2/7
+      _Ok1 = insert_requests( Ter8_new, Sn),
+      _Ok2 = update_tracker(Ter8_new),
       Timerpid ! restart,
-      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Sn,Timerpid}}
   end;
 
 collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   log:debug("received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
+  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81),
+  Nrs_new = delete_unresponsive_nodes(Nrs, Ter81),
   if
-    Nrs == []->
-      log:info("===== FINISHED ROUND ~p of collecting, preparing for next round~====== n",[Sn]),
+    Nrs_new == []->
+      log:info("===== FINISHED ROUND ~p of collecting, preparing for next round======~n ",[Sn]),
       _Ok = report_averages(),
+      _Ok4 = insert_nodes_to_tracker(Meters),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -417,14 +426,14 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
+      % TODO matbe try to reach terminals more than once
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      Ter8_new = delete_unresponsive_nodes(Ter8, Ter81),
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
+      log:info("sending dreq to: ~p with sn ~p~n", [Ter8_new,Sn]),
       _Ok = send_dreq(My_protocol,Ter8_new,Sn),           % 2/7
       _Ok1 = insert_requests( Ter8_new, Sn),
       _Ok2 = update_tracker(Ter8_new),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
-      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Sn,Timerpid1}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Sn,Timerpid1}}
   end;
 
 collecting( Event , State_data) ->
@@ -654,7 +663,7 @@ send_dreq(_,[],_) -> ok;
 send_dreq(My_protocol, [H|T], Seq) ->
   case ?TEST_MODE of
     local ->
-      {H,Times} = ets:lookup(tracker, H),
+      [{H,Times}] = ets:lookup(tracker, H),
       log:debug("sending dreq to: ~p for the ~p time with sequence ~p~n", [H,Times,Seq]),
 %%      Bit_message = message_to_bit ({dreq,H,Seq}),
 %%      My_protocol ! Bit_message,
@@ -662,7 +671,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
       send_dreq(My_protocol, T, Seq);
 
     integrated ->
-      {H,Times} = ets:lookup(tracker, H),
+      [{H,Times}] = ets:lookup(tracker, H),
       log:debug("sending dreq to: ~p for the ~p time with sequence ~p~n", [H,Times,Seq]),
     %   Reply = (catch gen_server:call(My_protocol, {dreq, H, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
       Bit_message = message_to_bit ({dreq,H,Seq}),
@@ -848,16 +857,26 @@ report_to_server(List) ->
   log:info("sending stats report: ~p~n",[List]),
   ok.
 
-insert_nodes_to_tracker([]) -> ok.
+insert_nodes_to_tracker([]) -> ok;
 insert_nodes_to_tracker([H|T])->
   _Ok = ets:insert(tracker, {H,0}),
   insert_nodes_to_tracker(T).
 
-update_tracker([]) -> ok.
+update_tracker([]) -> ok;
 update_tracker([H|T])->
-  {H,Val} = ets:lookup(tracker, H),
+  [{H,Val}] = ets:lookup(tracker, H),
   _Ok = ets:insert(tracker, {H,Val+1}),
   update_tracker(T).
 
-delete_unresponsive_nodes(Rd, Nrs)->
-  ok.
+
+
+delete_unresponsive_nodes([], Nrs) -> Nrs;
+delete_unresponsive_nodes([H|T], Nrs)->
+  [{H,Val}] = ets:lookup(tracker, H),
+  if Val < ?MAX_DREQ_TRIES ->
+    delete_unresponsive_nodes(T,Nrs);
+    true ->
+      log:debug(" WARNING ~p in unresponsive, removing from current round~n",[H]),
+      Nrs1=lists:delete(H,Nrs),
+      delete_unresponsive_nodes(T,Nrs1)
+      end.
