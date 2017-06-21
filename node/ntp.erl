@@ -53,7 +53,7 @@ unpack_ntp_packet( <<
         {clientReceiveTimestamp, NowTimestamp},
         {offset, TransmitTimestamp - NowTimestamp}
      },
-     receiveTimestamp;
+     RtsI - ?EPOCH + binfrac(RtsF);
 
 unpack_ntp_packet(_) ->
     {NowMS,NowS,NowUS} = now(),

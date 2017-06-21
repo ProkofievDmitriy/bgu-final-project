@@ -32,7 +32,7 @@
 -define(MANAGMENT_SERVER, loadNGgui).
 
 %% API
--export([report/3, report/2, report/1, printStats/0]).
+-export([report/2, report/1, printStats/0]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -69,15 +69,8 @@ internal_report(Type, Data)->
             Reply =(catch gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })),
                 Reply
     end.
-report(Type, Data) ->
-    report(Type, Data, undefined).
 
-report(Type, Data, GrafanaServerIP)->
-    case GrafanaServerIP of
-        undefined -> ok;
-        _ -> spawn(fun()-> grafana_report(Type,GrafanaServerIP) end)
-    end,
-
+report(Type, Data)->
     case internal_report(Type, Data) of
         ok -> {ok , all_good};
         {ok, _} -> {ok , all_good};
@@ -85,27 +78,6 @@ report(Type, Data, GrafanaServerIP)->
             ?LOGGER:critical("[~p]: Error catched: ~w ~n", [?MODULE, Error]),
             {error, Error}
     end.
-
-grafana_report(Type, GrafanaServerIP)->
-    ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
-    case Type of
-        {management_message,send_message} ->
-            utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
-
-        {management_message,received_message} ->
-            utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
-
-        {data_message,send_message} ->
-            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
-        {data_message,relay_message} ->
-            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
-
-        {data_message,received_message} ->
-            utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
-
-        _ -> ok
-    end.
-
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------

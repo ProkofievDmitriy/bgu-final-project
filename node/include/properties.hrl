@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, utils, load_ng, report, stats_server_interface]).
+-define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng, report, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
@@ -9,7 +9,7 @@
 -define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
--define(LOGGER_MODE, fileasdd).
+-define(LOGGER_MODE, dual).
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).
 -define(DATA_LINK, data_link).
@@ -49,8 +49,8 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 500000).
--define(NODE_STATUS_TIMER_INTERVAL, 2000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 3600000).
+-define(NODE_STATUS_TIMER_INTERVAL, 3000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS + 500).
 
 %TODO Address length and message type currently should give 2 bytes for correct working (crc32 in modem port calculation) - integer number of bytes (not bitstring), should be fixed

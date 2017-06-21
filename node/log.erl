@@ -29,28 +29,21 @@ handle_info(Request, Context)  ->
 	{noreply, Context}.
 
 
-
-handle_cast({log, Level, LevelMessage, Message, Params, file}, Context) ->
+handle_cast({log, Level, LevelMessage, Message, Params}, Context) ->
         IsValidModule = isValidModule(Params),
         if
             IsValidModule ->
                 if (Level >= ?CURRENT_LOG_LEVEL) ->
                     {Hours, Minutes, Seconds} = erlang:time(),
-                    io:format(Context#context.log_file, "~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
-                    true -> ok
-                end;
-            true -> ok
-        end,
-        {noreply, Context};
-
-
-handle_cast({log, Level, LevelMessage, Message, Params, _}, Context) ->
-        IsValidModule = isValidModule(Params),
-        if
-            IsValidModule ->
-                if (Level >= ?CURRENT_LOG_LEVEL) ->
-                    {Hours, Minutes, Seconds} = erlang:time(),
-                    io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                    case ?LOGGER_MODE of
+                        file ->
+                            io:format(Context#context.log_file, "~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                        dual ->
+                            io:format(Context#context.log_file, "~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params),
+                            io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                        _ ->
+                            io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params)
+                        end;
                     true -> ok
                 end;
             true -> ok
@@ -75,7 +68,7 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 
 
 print(Level, LevelMessage, Message, Params) ->
-    gen_server:cast(?MODULE, {log, Level, LevelMessage, Message, Params, ?LOGGER_MODE}).
+    gen_server:cast(?MODULE, {log, Level, LevelMessage, Message, Params}).
 
 
 info(Message, Params) ->
@@ -112,6 +105,9 @@ warn(Message, Params) ->
     print(2, "[WARN]   ", Message, Params).
 warn(Message) ->
     warn(Message, []).
+
+
+
 
 
 isValidModule([])-> true;

@@ -198,7 +198,7 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
 %%      _Ok = check_reading_and_log_time(),       %%todo
 %%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
 %%    Seq when Seq==Sn ->
-    utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "1"),
+    utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
      log:info("received drep from: ~p, with Seq: ~p in state discovering ~n state data:
       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
       [V,Seq,Nrs,Rd,Ter,Sn]),
@@ -332,7 +332,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
     log:err("dc received drep with destination address of: ~p, ignoring~n",[To]),
     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
     true ->
-        utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "1"),
+        utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
 
   {V,_} = lists:last(Data),                          % 2/10
 %%  case Seq of
@@ -681,7 +681,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Reply = protocol_interface:send_data_request(H, Bit_message),
       case Reply of
         {ok, sent} ->
-                utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "0"),
+                utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
                send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->  send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])

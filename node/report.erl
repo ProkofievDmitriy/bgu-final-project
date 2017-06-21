@@ -72,10 +72,11 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
+    spawn(fun()-> utils:grafana_report(Type, Context#context.data_server_ip, DataList) end),
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
     ?LOGGER:debug("[~w]: REPORT, ServerModuleInterface: ~w, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
-    ReportResult = ServerModuleInterface:report(Type, ReportMessageData, Context#context.data_server_ip),
+    ReportResult = ServerModuleInterface:report(Type, ReportMessageData),
     case ReportResult of
         {ok, _} -> {noreply, Context};
         {error, Throw} ->
@@ -87,11 +88,7 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = C
     end;
 
 handle_cast({report, {Type, DataList} }, #context{connected_to_server = false} = Context) ->
-    case  Context#context.data_server_ip of
-        undefined -> ok;
-        _ -> spawn(fun()-> grafana_report(Type, Context#context.data_server_ip) end)
-    end,
-
+    spawn(fun()-> utils:grafana_report(Type, Context#context.data_server_ip, DataList) end),
     ?LOGGER:warn("[~w]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, {Type, DataList}]),
     connect_to_data_server(),
     {noreply, Context};
@@ -110,7 +107,6 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
             NewContext = Context#context{connected_to_server = true},
             {noreply, NewContext};
         Else ->
-%    		?LOGGER:err("[~w]: ERROR: ~w, on connection to server: ~w~n", [?MODULE, Else, ServerNodeName]),
             ?LOGGER:err("[~w]: ERROR: ~w, on connection to server: ~w~n", [?MODULE, Else, ServerNodeName]),
             timer:sleep(10000),
             connect_to_data_server(),
@@ -118,7 +114,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
     end;
 
 handle_cast(connect_to_data_server, #context{connected_to_server = true} = Context) ->
-    ?LOGGER:debug("[~w]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
+    ?LOGGER:preciseDebug("[~w]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
     {noreply, Context};
 
 
@@ -164,24 +160,3 @@ test_connection(Address)->
      pang-> ?LOGGER:debug("[~w]: Can't reach node ~w~n", [?MODULE, Address]);
      Other-> ?LOGGER:debug("[~w]: ERROR :  ~w~n", [?MODULE, Other])
     end.
-
-
-    grafana_report(Type, GrafanaServerIP)->
-        ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
-        case Type of
-            {management_message,send_message} ->
-                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "1");
-
-            {management_message,received_message} ->
-                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "0");
-
-            {data_message,send_message} ->
-                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "1");
-            {data_message,relay_message} ->
-                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "2");
-
-            {data_message,received_message} ->
-                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "0");
-
-            _ -> ok
-        end.

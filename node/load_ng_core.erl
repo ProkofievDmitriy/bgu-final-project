@@ -181,7 +181,7 @@ idle(Request, StateData)->
 
 
 active(remove_not_valid_routes, StateData)->
-    NotValidRoutes = query_not_valid_routes(StateData#state.routing_set),
+    NotValidRoutes = query_expired_routes(StateData#state.routing_set),
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
     case NotValidRoutes of
         [] -> {next_state, active, StateData};
@@ -192,7 +192,7 @@ active(remove_not_valid_routes, StateData)->
     end;
 
 active(update_expired_routes, StateData)->
-    ExpiredRoutes = query_expired_routes(StateData#state.routing_set),
+    ExpiredRoutes = query_not_valid_routes(StateData#state.routing_set),
     gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
     case ExpiredRoutes of
         [] -> {next_state, active, StateData};
@@ -209,6 +209,7 @@ active(remove_expired_rreq, StateData)->
         [] -> {next_state, active, StateData};
         _ ->
             ?LOGGER:debug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~w.~n", [?MODULE, length(ExpiredRREQ)]),
+            ?LOGGER:debug("[~p]: ACTIVE - remove_expired_rreq Routes : ~w.~n", [?MODULE, ExpiredRREQ]),
             lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
             {next_state, active, StateData}
     end;
@@ -461,9 +462,8 @@ handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, State
 
 handle_sync_event(get_status, _From, StateName, State) ->
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
-    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= true -> Entry end),
-    RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
-    ?LOGGER:debug("[~p]: RoutingSetList(get_status) = ~w~n", [?MODULE, RoutingSet]),
+    RoutingSet = query_valid_routes(State#state.routing_set),
+    ?LOGGER:debug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
 
     RoutingSetList = [
         {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
@@ -577,26 +577,6 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
               BinaryUUID/bitstring,
               BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
               BinaryData/bitstring>>.
-
-
-  % if (BinaryDataLengthInBytes =< ?MAX_DATA_LENGTH) ->
-  % if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
-  %         Payload = <<BinaryMessageType/bitstring,
-  %                     BinarySource/bitstring,
-  %                     BinaryOriginator/bitstring,
-  %                     BinaryDestination/bitstring,
-  %                     BinaryUUID/bitstring,
-  %                     BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
-  %                     BinaryData/bitstring>>,
-  %         ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , MAX_DATA_LENGTH = ~w ,~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, ?MAX_DATA_LENGTH]),
-  %         ?LOGGER:debug("[~p]: serialize_packet Data bits: ~w, Payload(~w bits): ~w.~n", [?MODULE, BitLength, bit_size(Payload), Payload]),
-  %         Payload;
-  %     true ->
-  %         ?LOGGER:err("[~p]: serialize_packet Binary Data Length exceeded: ~p bytes , with maximum allowed: ~p ~n", [?MODULE,
-  %                                                                                                                   BinaryDataLengthInBytes,
-  %                                                                                                                   ?MAX_DATA_LENGTH]),
-  %         {error, "Binary Data Length exceeded"}
-  % end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Packet deserialization utilities %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -716,6 +696,7 @@ get_packet_to_binary( _ , Data) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 amIDestination(Destination, SelfAddress)->
+    ?LOGGER:debug("[~p]: amIDestination Destination ~w,  SelfAddress ~w .~n", [?MODULE, Destination, SelfAddress]),
     case Destination of
         SelfAddress ->
             true;
@@ -832,6 +813,7 @@ get_destination_to_forward(Packet)->
 %----------------------------------------------------------------------------
 install_forward_route(StateData, #load_ng_packet{ data = #rrep_message{} } = Packet) ->
     ?LOGGER:debug("[~p]: Instaling forward route : dest ~p, next ~p.~n", [?MODULE, Packet#load_ng_packet.originator, Packet#load_ng_packet.source]),
+    delete_valid_routes_for_destination(StateData#state.routing_set, Packet#load_ng_packet.data#rrep_message.originator),
     add_new_entry_to_routing_set(StateData#state.routing_set,
                                  Packet#load_ng_packet.data#rrep_message.originator,
                                  Packet#load_ng_packet.source,
@@ -841,13 +823,20 @@ install_forward_route(StateData, #load_ng_packet{ data = #rrep_message{} } = Pac
 
 install_reverse_route(StateData, Packet) ->
     ?LOGGER:debug("[~p]: Instaling reverse route : dest ~p, next ~p.~n", [?MODULE, Packet#load_ng_packet.data#rreq_message.originator, Packet#load_ng_packet.source]),
+    delete_valid_routes_for_destination(StateData#state.routing_set, Packet#load_ng_packet.data#rreq_message.originator),
     add_new_entry_to_routing_set(StateData#state.routing_set,
-                                 Packet#load_ng_packet.data#rreq_message.originator,
-                                 Packet#load_ng_packet.source,
-                                 Packet#load_ng_packet.medium,
-                                 Packet#load_ng_packet.data#rreq_message.hop_count,
-                                 Packet#load_ng_packet.data#rreq_message.r_seq_number).
+            Packet#load_ng_packet.data#rreq_message.originator,
+            Packet#load_ng_packet.source,
+            Packet#load_ng_packet.medium,
+            Packet#load_ng_packet.data#rreq_message.hop_count,
+            Packet#load_ng_packet.data#rreq_message.r_seq_number).
 
+delete_valid_routes_for_destination(RoutingSetId, Destination)->
+    Result = query_valid_routes_for_destination(RoutingSetId, Destination),
+    case Result of
+        [] -> ok;
+        _ -> [ets:delete(RoutingSetId, X) ||  {X, _} <- Result]
+    end.
 
 add_new_entry_to_routing_set(RoutingSetId, Destination, NextHop, Medium, HopCount, SeqNumber)->
     Entry = #routing_set_entry{
@@ -901,10 +890,30 @@ add_new_entry_to_pending_acknowledgments(NextHop, Originator, RREQSequenceNumber
 
 query_not_valid_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
-    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time < CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> {Key, Entry} end),
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time =< CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
+    ?LOGGER:debug("[~p]: query_not_valid_routes result CurrentMillis = ~w ,  ~w.~n", [?MODULE, CurrentMillis, Result]),
     Result.
 
+query_valid_routes_for_destination(RoutingSetId, Destination)->
+    CurrentMillis = get_current_millis(),
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time > CurrentMillis),(Entry#routing_set_entry.dest_addr =:= Destination) -> {Key, Entry} end),
+    Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
+
+    %TODO debug purposes - remove next line
+    query_valid_routes(RoutingSetId),
+
+
+    ?LOGGER:debug("[~p]: query_valid_routes_for_destination : ~w, result : ~w.~n", [?MODULE, Destination, Result]),
+    Result.
+
+
+query_valid_routes(RoutingSetId)->
+    CurrentMillis = get_current_millis(),
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time > CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> Entry end),
+    Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
+    ?LOGGER:debug("[~p]: query_valid_routes result CurrentMillis =  ~w,  ~w.~n", [?MODULE, CurrentMillis, Result]),
+    Result.
 
 query_expired_routes(RoutingSetId)->
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= false -> {Key, Entry} end),

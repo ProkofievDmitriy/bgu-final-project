@@ -5,3 +5,4 @@
 132.73.199.225 node_6 am_sem dual
 132.73.199.200 node_4 am_sem dual
 132.73.192.17 node_14 am_sem dual
+132.73.205.115 local stats_server not_relevant
