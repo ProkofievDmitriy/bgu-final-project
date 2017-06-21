@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [protocol_interface, modem_port, transport, data_link, utils, load_ng, load_ng_core]).
+-define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, utils, load_ng, report, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
 
@@ -9,6 +9,7 @@
 -define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
+-define(LOGGER_MODE, fileasdd).
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).
 -define(DATA_LINK, data_link).
@@ -107,15 +108,15 @@
 
 
 %%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_NAME, simple_application).
-% -define(APPLICATION_NAME, other).
+% -define(APPLICATION_NAME, simple_application).
+-define(APPLICATION_NAME, other).
 -define(MESSAGE_SEND_INTERVAL, 5). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
-                        %  {meters_list, [node_10, node_4]}
+                        %  {meters_list, [node_7]}
                          {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14]}
                         %  {meters_list, [node_22, node_25]}
                         ]).

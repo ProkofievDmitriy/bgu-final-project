@@ -49,6 +49,8 @@ chmod +x ./kill_erlang.sh
 chmod +x ./uart_config.sh
 chmod +x ./fg_start_erlang.sh
 ./kill_erlang.sh
+./kill_erlang.sh
+./kill_erlang.sh
 popd
 EOF
 
