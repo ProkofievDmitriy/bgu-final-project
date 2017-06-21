@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TOKILL=$(ps | less | grep beam.smp | head -n 1 | cut -d " " -f1)
+TOKILL=$(ps | less | grep erl | cut -d " " -f$1 | head -n $2)
 if [ -z "$TOKILL" ];
 	then
   		echo "IFNO : Nothing to kill ..."
@@ -12,7 +12,7 @@ fi
 
 
 
-TOKILL2=$(ps | less | grep beam.smp | head -n 1 | cut -d " " -f2)
+TOKILL2=$(ps | less | grep beam | cut -d " " -f$1 | head -n $2)
 if [ -z "$TOKILL2" ];
 	then
   		echo "IFNO : Nothing to kill ..."
@@ -24,7 +24,7 @@ fi
 
 
 
-TOKILL3=$(ps | less | grep fg_start_erlang | head -n 1 | cut -d " " -f1)
+TOKILL3=$(ps | less | grep erl | cut -d " " -f$1 | head -n $2)
 if [ -z "$TOKILL3" ];
 	then
   		echo "IFNO : Nothing to kill ..."
@@ -37,7 +37,7 @@ fi
 
 
 
-TOKILL3=$(ps | less | grep fg_start_erlang | head -n 1 | cut -d " " -f1)
+TOKILL3=$(ps | less | grep beam.smp | cut -d " " -f$1 | head -n $2)
 if [ -z "$TOKILL4" ];
 	then
   		echo "IFNO : Nothing to kill ..."

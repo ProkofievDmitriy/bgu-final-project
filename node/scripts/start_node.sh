@@ -48,9 +48,18 @@ pushd ./node/scripts
 chmod +x ./kill_erlang.sh
 chmod +x ./uart_config.sh
 chmod +x ./fg_start_erlang.sh
-./kill_erlang.sh
-./kill_erlang.sh
-./kill_erlang.sh
+./kill_erlang.sh 1 1
+./kill_erlang.sh 2 1
+./kill_erlang.sh 3 1
+./kill_erlang.sh 1 2
+./kill_erlang.sh 2 2
+./kill_erlang.sh 3 2
+./kill_erlang.sh 1 1
+./kill_erlang.sh 2 1
+./kill_erlang.sh 3 1
+./kill_erlang.sh 1 2
+./kill_erlang.sh 2 2
+./kill_erlang.sh 3 2
 popd
 EOF
 

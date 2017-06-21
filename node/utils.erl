@@ -5,7 +5,8 @@
 -include("./include/macros.hrl").
 
 
--export([get_node_number/1, get_node_name/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2, cut_list_from_delimiter/2, exec_curl/4]).
+-export([get_node_number/1, get_node_name/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2,
+         cut_list_from_delimiter/2, exec_curl/4, grafana_report/3]).
 
 get_node_name(NodeAddress) when is_list(NodeAddress)->
     list_to_atom("node_" ++ NodeAddress);
@@ -57,10 +58,34 @@ cut_list_from_delimiter([H|Tail], Delimiter)->
         _ -> cut_list_from_delimiter(Tail, Delimiter)
     end.
 
+grafana_report(Type, GrafanaServerIP, Data)->
+    ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
+    case  GrafanaServerIP of
+        undefined -> ok;
+        _ ->
+        case Type of
+            {management_message,send_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "value=1");
+
+            {management_message,received_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "mgmt_msg", "value=0");
+
+            {data_message,send_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "value=1");
+            {data_message,relay_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "value=2");
+
+            {data_message,received_message} ->
+                utils:exec_curl(GrafanaServerIP, "loadng", "data_msgs", "value=0");
+
+            _ -> ok
+
+        end
+end.
 
 
-exec_curl(GrafanaServerIP, DataBase, Table, Value)->
-    CurlCmd = "curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" value=" ++ Value ++ "'",
+exec_curl(GrafanaServerIP, DataBase, Table, Values)->
+    CurlCmd = "curl -i -XPOST 'http://" ++ GrafanaServerIP ++ ":8086/write?db=" ++ DataBase ++ "' --data-binary '" ++ Table ++" " ++ Values ++ "'",
     ?LOGGER:debug("[~p]: exec_curl CurlCmd = : ~p ~n",[?MODULE, CurlCmd]),
     Result = os:cmd(CurlCmd),
-    ?LOGGER:debug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
+    ?LOGGER:preciseDebug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
