@@ -81,7 +81,7 @@ idle({received_message, Data}, StateData) ->
         {complete, Message} ->
             % MessageData = binary_to_term(Message),
             ?LOGGER:info("[~p]: IDLE - Message Complete, Sending to upper level, Data: ~w~n", [?MODULE, Message]),
-            gen_fsm:send_event(StateData#state.upper_level_pid, {received_message, Message});
+            application_interface:rise_message(StateData#state.upper_level_pid, Message);
         {not_complete_message, PiecesReceived} ->
             ?LOGGER:info("[~p]: IDLE - Message NOT Complete: ~w / ~w~n", [?MODULE, PiecesReceived, TrasportHeader#transport_header.max])
     end,
@@ -116,8 +116,7 @@ idle({send, {Type, Destination, Data}}, _From, StateData) ->
 %% Pass all message as is - no session management enabled
 disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-    % StateData#state.upper_level_pid ! Message,
-    gen_fsm:send_event(StateData#state.upper_level_pid,  {received_message, Message}),
+    application_interface:rise_message(StateData#state.upper_level_pid,  Message),
     {next_state, disable, StateData};
 
 disable(disable, StateData) ->

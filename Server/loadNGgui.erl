@@ -6,7 +6,7 @@
 -define(X_SIZE, 1080).
 -define(Y_SIZE, 680).
 -define(REFRESH_TIME, 1000).
--define(TIMEOUT, 10000000000).
+-define(TIMEOUT, 100000000000).
 
 -define( LOG_DIR,"./logger/").
 -define(CIRCE_RADIUS, 15).

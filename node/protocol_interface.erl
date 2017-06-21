@@ -7,7 +7,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/2, hand_shake/2, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0]).
+-export([start/2, stop/0, send/2, hand_shake/2, hand_shake/1, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -34,13 +34,15 @@ stop() ->
 
 
 %%%%%%%%%%%%%%%%%%%%%%%% APLICATION INSTERFACE
+send(Destination, Data) when is_binary(Data)->
+    gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}});
+
 send(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}}).
+    send(Destination, term_to_binary(Data)).
 
 
 send_data_request(Destination, Data)->
     gen_server:call(?PROTOCOL_NAME, {data_request_message, {utils:get_node_number(Destination), Data}}).
-
 
 send_data_reply(Destination, Data)->
     gen_server:call(?PROTOCOL_NAME, {data_reply_message, {utils:get_node_number(Destination), Data}}).
@@ -50,7 +52,8 @@ send_data_reply(Destination, Data)->
 hand_shake(ApplicationPid, Timeout) ->  % App_type might be dc or sem
    gen_server:call(?PROTOCOL_NAME, {hand_shake, ApplicationPid} , Timeout).
 
-
+hand_shake(ApplicationPid)->
+    gen_server:call(?PROTOCOL_NAME, {hand_shake, ApplicationPid}).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 

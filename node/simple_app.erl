@@ -1,5 +1,5 @@
 -module(simple_app).
--export([start/1, stop/0]).
+-export([start_link/1, stop/0]).
 
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
@@ -9,37 +9,12 @@ stop()->
     ?APPLICATION_NAME ! stop.
 
 
-start(Properties)->
-	?LOGGER:info("[~p]: Starting Simple Application with props: ~w~n", [?MODULE, Properties]),
-    Role = proplists:get_value(role, Properties),
-	case Role of
-		smart_meter ->
-	        SendInterval = proplists:get_value(send_message_interval, Properties),
-            PID = spawn(fun()->smart_meter_loop(SendInterval, 1000, "Some Random Message") end),
-            ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
-            register(?APPLICATION_NAME, PID),
-            PID;
-		data_concentration_server ->
-            ?LOGGER:info("[~p]: ~p  mode started~n", [?MODULE, Role]),
-			PID = spawn(fun()-> data_concentration_loop() end),
-			register(?APPLICATION_NAME, PID),
-			PID;
-		_else ->
-		    ?LOGGER:error("[~p]: not supported role : ~p~n", [?MODULE, Role]),
-		    not_supported_role_error
-	end.
-
-data_concentration_loop()->
-	receive
-		stop ->
-		    ?LOGGER:info("[~p]: Received stop message. Exiting data concentration server App~n", [?MODULE]),
-		    normal;
-		Message ->
-            ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(Message), Message]),
-            data_concentration_loop()
-	end.
-
-
+start_link(Properties)->
+	?LOGGER:info("[~p]: Starting Simple Smart Meter Application with props: ~w~n", [?MODULE, Properties]),
+    PID = spawn(fun()->smart_meter_loop(?MESSAGE_SEND_INTERVAL, 1000, term_to_binary("Some Random Message")) end),
+    register(?APPLICATION_NAME, PID),
+    ?PROTOCOL:hand_shake(PID),
+    PID.
 
 smart_meter_loop(SendInterval, FalseLoops, Data) ->
     receive
@@ -47,13 +22,14 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
 		    ?LOGGER:info("[~p]: Received stop message. Exiting ... ~n", [?MODULE]),
             normal;
          Message ->
-            ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(Message), Message]),
+             NewMessage = binary_to_term(Message),
+             ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(NewMessage), NewMessage]),
             ok
         after ?MESSAGE_SEND_INTERVAL ->
             case FalseLoops rem 1000 of
                 0 ->
                 Destination = 1,
-                ?LOGGER:info("[~p]: Sending Message length = ~p, Message: ~p ~n" ,[?MODULE, length(Data), {Destination, Data}]),
+                ?LOGGER:info("[~p]: Sending Message bit_size = ~p, Message: ~p ~n" ,[?MODULE, bit_size(Data), {Destination, Data}]),
                 Result = ?PROTOCOL:send(Destination, Data),
                 case Result of
                         {error, Message} ->

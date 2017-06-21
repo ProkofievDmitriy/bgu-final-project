@@ -52,10 +52,13 @@ unpack_ntp_packet( <<
 	{transmitTimestamp,  TransmitTimestamp},
         {clientReceiveTimestamp, NowTimestamp},
         {offset, TransmitTimestamp - NowTimestamp}
-     };
+     },
+     receiveTimestamp;
 
 unpack_ntp_packet(_) ->
-    erlang:error(bad_reply_fmt).
+    {NowMS,NowS,NowUS} = now(),
+    NowTimestamp = NowMS * 1.0e6 + NowS + NowUS/1000,
+    NowTimestamp.
 
 make_ntp_packet() ->
     %  LI,  VN,  Mode, rest... 384 bits overall

@@ -5,8 +5,13 @@
 -include("./include/macros.hrl").
 
 
--export([get_node_number/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2, cut_list_from_delimiter/2]).
+-export([get_node_number/1, get_node_name/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2, cut_list_from_delimiter/2]).
 
+get_node_name(NodeAddress) when is_list(NodeAddress)->
+    list_to_atom("node_" ++ NodeAddress);
+
+get_node_name(NodeAddress)->
+    list_to_atom("node_" ++ integer_to_list(NodeAddress)).
 
 get_node_number(NodeName) when is_integer(NodeName)->
     NodeName;
