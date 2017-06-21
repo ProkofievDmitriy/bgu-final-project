@@ -10,7 +10,13 @@
 scripts/run-all-nodes.sh scripts/lab-env.txt Default % To generate command to run all environment configured in scripts/lab-env.txt
 
 %EXAMPLE: 
-gnome-terminal --maximize --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.156 node_1 dc dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.232 node_10 am_sem dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.234 node_7 am_sem dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.238 node_9 am_sem dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.225 node_6 am_sem dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.200 node_4 am_sem dual" --tab-with-profile=Default -e "scripts/start_node.sh 132.73.192.17 node_14 am_sem dual"
+gnome-terminal --maximize --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.156 node_1 dc dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.199.232 node_10 am_sem dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.199.234 node_7 am_sem dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.199.238 node_9 am_sem dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.199.225 node_6 am_sem dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.199.200 node_4 am_sem dual" --tab-with-profile=Default \
+-e "scripts/start_node.sh 132.73.192.17 node_14 am_sem dual"
 
 
 
