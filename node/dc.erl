@@ -226,7 +226,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("received rd_empy event in state discovering,~n State data:
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                    % 1/23
-  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1,discovering),
   case  Nrs_new of
     [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
@@ -263,7 +263,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
   log:debug ("Nrs1 is: ~p~n", [Nrs1]),
-  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
+  Nrs_new = delete_unresponsive_nodes(Rd, Nrs1,discovering),
   log:debug ("Nrs_new is: ~p~n", [Nrs_new]),
   if Nrs_new == [] ->        %% external loop terminated, go ro phase 2
       log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
@@ -373,7 +373,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
    log:debug("received ter8_empy event in state collecting,~n State data:
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
-  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81),
+  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81,collecting),
 
   if
     Ter8_new == []->
@@ -407,8 +407,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
   log:debug("received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
-  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81),
-  Nrs_new = delete_unresponsive_nodes(Nrs, Ter81),
+  Ter8_new = delete_unresponsive_nodes(Ter8, Ter81,collecting),
+  Nrs_new = delete_unresponsive_nodes(Nrs, Ter81,collecting),
   if
     Nrs_new == []->
       log:info("===== FINISHED ROUND ~p of collecting, preparing for next round======~n ",[Sn]),
@@ -842,13 +842,18 @@ update_tracker([H|T])->
 
 
 
-delete_unresponsive_nodes([], Nrs) -> Nrs;
-delete_unresponsive_nodes([H|T], Nrs)->
+delete_unresponsive_nodes([], Nrs,_State) -> Nrs;
+delete_unresponsive_nodes([H|T], Nrs,State)->
   [{H,Val}] = ets:lookup(tracker, H),
-  if Val < ?MAX_DREQ_TRIES ->
-    delete_unresponsive_nodes(T,Nrs);
+  if State == discovering ->
+      Add = ?EXTRA_DISCOVERY_TRIES;
+      true ->
+          Add=0
+      end,
+  if Val < (?MAX_DREQ_TRIES +Add) ->
+    delete_unresponsive_nodes(T,Nrs,State);
     true ->
       log:debug(" WARNING ~p in unresponsive, removing from current round~n",[H]),
       Nrs1=lists:delete(H,Nrs),
-      delete_unresponsive_nodes(T,Nrs1)
+      delete_unresponsive_nodes(T,Nrs1,State)
       end.

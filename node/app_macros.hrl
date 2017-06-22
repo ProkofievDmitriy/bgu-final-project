@@ -26,13 +26,13 @@
 
 -define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
 
--define(TIMER_TIMEOUT,5000).
--define(HAND_SHAKE_MAX_TRIES,3).
+-define(TIMER_TIMEOUT,30000).
+-define(HAND_SHAKE_MAX_TRIES,5).
 -define(HAND_SHAKE_TIMEOUT, 3000).
 -define(TERMINATION_TIMEOUT, 3000).
 
--define(MAX_DREQ_TRIES, 4).
-
+-define(MAX_DREQ_TRIES, 6).
+-define(EXTRA_DISCOVERY_TRIES,6).
 
 
 -define(PROTOCOL_REQUEST_TIMEOUT, 10000).

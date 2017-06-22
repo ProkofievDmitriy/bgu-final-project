@@ -72,7 +72,7 @@ init({Me, My_protocol,My_node,Meters}) ->
       ets:new(stats,[ordered_set,named_table,public]),
       ets:new(tracker, [ordered_set,named_table,public]),
       _Ok3 = insert_nodes_to_tracker(Meters),
-       _Ok = send_dreq(My_protocol,[Rd],0),                    % 1/11
+    %   _Ok = send_dreq(My_protocol,[Rd],0),                    % 1/11
        log:info("first dreq sent, Rd are ~p~n",Rd),
       _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
       log:debug("current requests info: Avg ~p, Sn ~p , Count ~p~n", [0, 0, erlang:length(Rd)]),
@@ -141,6 +141,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerp
 %%          _Ok = check_reading_and_log_time(),       %%todo
 %%          {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Rd,Sn,Timerpid}};
 %%        Seq when Seq==Sn ->
+        utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
           log:info("received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
        ~p,Rd = ~p, Sn: ~p~n", [V,Seq,Nrs,Rd,Sn]),
           Nodes = extract_nodes_from_drep([], Data),
@@ -461,6 +462,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Reply = protocol_interface:send_data_request(H, Bit_message),
       case Reply of
         {ok, sent} ->
+            utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
           send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->  send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
