@@ -244,7 +244,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       _Ok3 = update_tracker((Ter8)),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
-        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1,0}};
     Nrs_new  ->              %% otherwise prepare for next iteration
       log:info("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs_new),                   % 1/9
@@ -281,7 +281,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       _Ok3 = update_tracker((Ter8)),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
-        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1,0}};
     true ->              %% otherwise prepare for next iteration
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs_new),                   % 1/9
@@ -303,7 +303,7 @@ discovering( Event , State_data) ->
 %%===================================================================================
 
 
-collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
   log:info("received bit string: ~p~n", [Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
  % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
@@ -311,26 +311,26 @@ collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Te
   %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
   case Type of
     ?DREQ_BIT -> gen_fsm:send_event(Me, {dreq,To,Seq}),
-     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
     ?DREP_BIT ->
       Data_size = bit_size(Data_b),
       Entry_size = ?NODE_BITS+?READING_BITS,
       if Data_size rem Entry_size =/= 0 ->
         log:err("received invalid data of size ~p, dropping drep~n",[Data_size]),
-        {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+        {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
         true ->
           Data = bit_to_data(Data_b,[]),
           gen_fsm:send_event(Me, {drep, To,Data,Seq}),
-          {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}}
+          {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}}
       end
   end;
 
 
 
-collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
   if To =/= My_node ->
     log:err("dc received drep with destination address of: ~p, ignoring~n",[To]),
-    {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid}} ;
+    {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
     true ->
         utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
 
@@ -354,6 +354,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
       Ter81 = lists:delete(V,Ter8),
       Ter1 = lists:umerge([Ter,[V]]),                    % 2/11
       Nodes = extract_nodes_from_drep([], Data),
+      log:info("extarcting nodes from drep: ~p~n",[Nodes]),
       Nodes1 = lists:delete(V,Nodes),
       Ter2 = lists:subtract(Ter1,Nodes1),                % 2/16
       Nrs1 = lists:subtract(Nrs, Nodes),                 % 2/15
@@ -361,20 +362,19 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
       _Ok = ets:insert(mr_ets,Data),
       if Ter82 == [] ->  gen_fsm:send_event(Me, ter8_empty),
         {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
-         Timerpid}};
+         Timerpid,Times}};
         true -> {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
-         Timerpid}}
+         Timerpid,Times}}
 %%      end
    end
  end;
 
 
-collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
    log:debug("received ter8_empy event in state collecting,~n State data:
-    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
+    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p, Terms_time: ~p~n" , [Nrs,Ter8,Ter,Sn,Times]),
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
   Ter8_new = delete_unresponsive_nodes(Ter8, Ter81,collecting),
-
   if
     Ter8_new == []->
       log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
@@ -392,7 +392,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       _Ok3 = update_tracker(Ter82),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1,0}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       log:info("sending dreq to: ~p with sn ~p~n", [Ter8_new,Sn]),
@@ -400,10 +400,10 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       _Ok1 = insert_requests( Ter8_new, Sn),
       _Ok2 = update_tracker(Ter8_new),
       Timerpid ! restart,
-      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Sn,Timerpid}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Sn,Timerpid,Times}}
   end;
 
-collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
   log:debug("received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -426,17 +426,28 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
       _Ok3 = update_tracker(Ter82),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1,0}};
     true ->
       % TODO matbe try to reach terminals more than once
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter8_new,Sn]),
-      _Ok = send_dreq(My_protocol,Ter8_new,Sn),           % 2/7
-      _Ok1 = insert_requests( Ter8_new, Sn),
-      _Ok2 = update_tracker(Ter8_new),
-      Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
-      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Sn,Timerpid1}}
-  end;
+          case Times of
+              ?MAX_TERMINALS_TIMES ->
+                  log:info("some terminals didn't respond, merging with NRS  ~n"),
+                  log:info("sending dreq to: ~p with sn ~p~n", [Ter8_new,Sn]),
+                  _Ok = send_dreq(My_protocol,Ter8_new,Sn),           % 2/7
+                  _Ok1 = insert_requests( Ter8_new, Sn),
+                  _Ok2 = update_tracker(Ter8_new),
+                  Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
+                  {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Sn,Timerpid1,Times}};
+            Other ->
+                log:info("trying reaching terminals for the ~p time ~n",[Other+1]),
+                log:info("sending dreq to: ~p with sn ~p~n", [Ter8,Sn]),
+                _Ok = send_dreq(My_protocol,Ter8,Sn),
+                _Ok2 = update_tracker(Ter8),
+                Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
+                {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Sn,Timerpid1,Times+1}}
+            end
+ end;
 
 collecting( Event , State_data) ->
   log:err("UNEXPECTED EVENT: ~p in state collecting with state data: ~p~n", [Event,State_data]),
@@ -546,11 +557,17 @@ handle_info(Info, StateName, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, StateName, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+terminate(Reason, dixcovering, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
   log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
-    [Reason,StateName,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
+    [Reason,discovering,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
+  ok;
+terminate(Reason, collecting, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+  Timerpid! stop,
+  log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+    [Reason,collection,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}]),
   ok.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -679,11 +696,13 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug(" sending bit message: ~p~n", [Bit_message]),
       Reply = protocol_interface:send_data_request(H, Bit_message),
+      utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
       case Reply of
         {ok, sent} ->
-                utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
                send_dreq(My_protocol, T, Seq);
-        {error, timeout_exceeded} ->  send_dreq(My_protocol, T, Seq);
+        {error, timeout_exceeded} ->
+
+                send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
 
       end
