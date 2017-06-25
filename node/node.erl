@@ -124,7 +124,7 @@ init(GlobalProperties) ->
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
 
 
-    Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
+    % Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
 
     Context = #context{
         node_properties = NodeProperties,
@@ -137,7 +137,7 @@ init(GlobalProperties) ->
         % application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
-        node_status_timer = Timer,
+        % node_status_timer = Timer,
         logger_ref = LoggerREF
     },
     ?LOGGER:info("[~p]: Node: ~p, is up with context: ~p .~n", [?MODULE, NodeName, Context]),
