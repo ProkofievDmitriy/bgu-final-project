@@ -1,0 +1,4 @@
+132.73.199.156 node_1 simple_dc plc_only
+132.73.199.232 node_10 simple_dc dual
+132.73.199.200 node_4 simple_app rf_only
+132.73.205.115 local stats_server not_relevant

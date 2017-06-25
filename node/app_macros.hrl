@@ -16,11 +16,6 @@
 
 -define(DC_NODE, node_1).
 
--define(SM_WAITING_TIME, 10).
-
-
-
-
 
 %================================ properties ================================
 

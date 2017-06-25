@@ -67,8 +67,8 @@ init({Me, My_protocol,My_node,Meters}) ->
     ready ->
       log:info("~p initialized~n", [Me]),
       Rd= random_elements(Meters)  ,                       % 1/4+9c
-      Nrs = delete_elemens(Meters, Rd),
-      Nrs = delete_elemens(Meters, Rd),
+      Nrs = delete_elements(Meters, Rd),
+      Nrs = delete_elements(Meters, Rd),
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       ets:new(stats,[ordered_set,named_table,public]),
       ets:new(tracker, [ordered_set,named_table,public]),
