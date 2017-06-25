@@ -35,17 +35,17 @@ stop() ->
 
 %%%%%%%%%%%%%%%%%%%%%%%% APLICATION INSTERFACE
 send(Destination, Data) when is_binary(Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}});
+    gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT);
 
 send(Destination, Data)->
     send(Destination, term_to_binary(Data)).
 
 
 send_data_request(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_request_message, {utils:get_node_number(Destination), Data}}).
+    gen_server:call(?PROTOCOL_NAME, {data_request_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
 
 send_data_reply(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {utils:get_node_number(Destination), Data}}).
+    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
 
 
 %essential for protocol to be aware of upper apllication layer

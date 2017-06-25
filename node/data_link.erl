@@ -233,7 +233,9 @@ handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, State
 	{reply, ok, StateName, NewState};
 
 handle_sync_event(get_status, _From, StateName, StateData) ->
+    StartTime = utils:get_current_millis(),
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
+    ?LOGGER:debug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
 	{reply, [{medium_mode, StateName}], StateName, StateData};
 
 handle_sync_event({set_state, NewState}, _From, StateName, StateData) ->

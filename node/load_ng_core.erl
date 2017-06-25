@@ -61,10 +61,28 @@ updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
 send(FsmPid, {Type, Destination, Data})->
-    %default sync event timeout 5000ms
-    Result = gen_fsm:sync_send_event(FsmPid, {send_message, {Type, Destination, Data}}, ?TIMEOUT),
-    ?LOGGER:info("[~p]: Send Call Result: ~p.~n", [?MODULE, Result]),
+    gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, self()}}),
+    StartTime = get_current_millis(),
+    Result = receive
+               {ok , sent} -> {ok , sent};
+               {error, Error} ->
+                   {error, Error}
+               after 2 * ?NET_TRAVERSAL_TIME ->
+               ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
+               ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
+               case ResultSyncSend of
+                   {ok , sent} -> {ok, sent};
+                   _ ->
+                       ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
+                      {error, timeout_exceeded}
+               end
+           end,
+    ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
     Result.
+
+send_sync(FsmPid, {Type, Destination, Data})->
+    ?LOGGER:info("[~p]: Send SYNC ~p to ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
+    gen_fsm:sync_send_event(FsmPid, {send_message, {Type, Destination, Data}}, ?TIMEOUT).
 
 
 enable(FsmPid)->
@@ -136,32 +154,65 @@ active(disable, _From, StateData)->
 
 %DATA, DREP
 active({send_message, {Type, Destination, Data}}, _From, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - Request(send_message: ~p) Destination: ~w, Data: ~w ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
-    {NewState, NextHop} = get_next_hop(Destination, StateData), % routing_set_entry
-    case NextHop of
-        {error, ErrorMessage} ->
-            {reply, {error, ErrorMessage}, active, NewState};
-        #routing_set_entry{} = Hop ->
-            Packet = build_new_packet(Type, Destination, Data, NewState),
-            Payload = serialize_packet(Packet),
-            case Payload of
-                {error, ErrorMessage} ->
-                   {reply, {error, ErrorMessage}, active, NewState};
-                _ ->
-                    Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                    report_data_message_sent(Packet, NewState),
-                    {reply, Result, active, NewState}
-            end;
-        Else ->
-            ?LOGGER:critical("[~p]: ACTIVE -Request(send_message: ~p) - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
-            {reply, Else, active, NewState}
-    end.
+?LOGGER:debug("[~p]: ACTIVE - SYNC send_message: ~p, Destination: ~w, Data: ~w ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
+{NewState, NextHop} = get_next_hop(Destination, StateData), % routing_set_entry
+case NextHop of
+    {error, ErrorMessage} ->
+        {reply, {error, ErrorMessage}, active, NewState};
+    #routing_set_entry{} = Hop ->
+        Packet = build_new_packet(Type, Destination, Data, NewState),
+        Payload = serialize_packet(Packet),
+        case Payload of
+            {error, ErrorMessage} ->
+               {reply, {error, ErrorMessage}, active, NewState};
+            _ ->
+                Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                report_data_message_sent(Packet, NewState),
+                {reply, Result, active, NewState}
+        end;
+    wait ->
+        {reply, {error, timeout_exceeded}, active, NewState};
+    Else ->
+        ?LOGGER:critical("[~p]: ACTIVE -Request(send_message: ~p) - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
+        {reply, Else, active, NewState}
+end.
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
 %% ============================================================================================
 idle(Request, StateData)->
     ?LOGGER:debug("[~p]: IDLE - IGNORING A-SYNC EVENT(~p),  StateData: ~w~n", [?MODULE, Request, StateData]),
     {next_state, idle, StateData}.
+
+
+%DATA, DREP
+active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - ASYNC send_message: ~p, Destination: ~w, Data: ~w ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
+    {NewState, NextHop} = get_next_hop(Destination, StateData), % routing_set_entry
+    case NextHop of
+        {error, ErrorMessage} ->
+            PIDToAnswer ! {error, ErrorMessage},
+            {next_state, active, NewState};
+        #routing_set_entry{} = Hop ->
+            Packet = build_new_packet(Type, Destination, Data, NewState),
+            Payload = serialize_packet(Packet),
+            case Payload of
+                {error, ErrorMessage} ->
+                    PIDToAnswer ! {error, ErrorMessage},
+                   {next_state, active, NewState};
+                _ ->
+                    Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                    report_data_message_sent(Packet, NewState),
+                    PIDToAnswer ! Result,
+                    {next_state, active, NewState}
+            end;
+        wait ->
+            PIDToAnswer ! wait,
+            {next_state, active, NewState};
+        Else ->
+            ?LOGGER:critical("[~p]: ACTIVE - ASYNC send_message: ~p,  - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
+            PIDToAnswer ! Else,
+            {next_state, active, NewState}
+    end;
 
 
 active(remove_not_valid_routes, StateData)->
@@ -325,6 +376,7 @@ handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, State
 
 
 handle_sync_event(get_status, _From, StateName, State) ->
+    StartTime = utils:get_current_millis(),
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
     RoutingSet = query_valid_routes(State#state.routing_set),
     ?LOGGER:preciseDebug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
@@ -333,6 +385,7 @@ handle_sync_event(get_status, _From, StateName, State) ->
         {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
          {next_address, RoutingSetEntry#routing_set_entry.next_addr},
          {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
+    ?LOGGER:debug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, [{routing_set, RoutingSetList}], StateName, State};
 
 handle_sync_event(reset, _From, StateName, State) ->
@@ -507,16 +560,7 @@ get_next_hop(Destination, State)->
         {?EMPTY_QUERY_RESULT, _Message} ->
             ?LOGGER:debug("[~p]: get_next_hop NO HOP FOUND for destination: ~p : ~p.~n", [?MODULE, Destination, NextHop]),
             NewState = generate_rreq(Destination, State),
-            StartTime = get_current_millis(),
-            receive after 2 * State#state.net_traversal_time ->
-                NextHop2 = query_find_next_hop(Destination, State#state.routing_set),
-                case NextHop2 of
-                    {ok, {_Key, Hop}} -> {NewState, Hop};
-                    _ ->
-                        ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
-                        {NewState, {error, timeout_exceeded}}
-                end
-            end;
+            {NewState, wait};
         Error ->
             ?LOGGER:err("[~p]: get_next_hop UNEXPECTED RESULTS: ~p.~n", [?MODULE, Error]),
             {State, Error}

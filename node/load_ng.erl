@@ -123,9 +123,11 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     {reply, ok, NewContext};
 
 handle_call(get_status, _From, Context) ->
+    StartTime = utils:get_current_millis(),
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
     NetworkStatus = ?NETWORK:get_status(Context#context.network_pid),
     DataLinkStatus = ?DATA_LINK:get_status(Context#context.data_link_pid),
+    ?LOGGER:debug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, NetworkStatus ++ DataLinkStatus , Context};
 
 handle_call(reset, _From, Context) ->

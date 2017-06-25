@@ -54,7 +54,7 @@ init({My_name,My_protocol,My_node}) ->
       log:info("~p initialized~n", [?MODULE,My_name]),
       {ok, counting, {My_name,My_protocol,My_node,0,0}};
     {terminate, Reason} ->
-      log:critical(" [~p]  handshake with ~p failed with message: ~p~n", [?MODULE,My_protocol,Reason]),
+      log:critical("[~p]  handshake with ~p failed with message: ~p~n", [?MODULE,My_protocol,Reason]),
       {stop,{handshake_failure,Reason}}
   end.
 
@@ -75,7 +75,7 @@ counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}
       Data_size = bit_size(Data_b),
       Entry_size = ?NODE_BITS+?READING_BITS,
       if Data_size rem Entry_size =/= 0 ->
-        log:err(" [~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
+        log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
         {next_state, counting,{My_name,My_protocol,My_node,Counter,Sn}};
         true ->
           Data = bit_to_data(Data_b,[]),
@@ -108,7 +108,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
     end;
   %% if the dreq was not meant to me pass it back
     true ->
-      log:err(" [~p]  ~p received dreq with destination missmatch, passing on to ~p~n", [?MODULE,My_name,To] ),
+      log:err("[~p]  ~p received dreq with destination missmatch, passing on to ~p~n", [?MODULE,My_name,To] ),
       _Ok = send_dreq(My_protocol, To, Seq),
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
   end;
@@ -120,18 +120,18 @@ counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
       _Ok = send_drep(My_protocol,Data, Seq),
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}};
     Dest ->
-      log:err(" [~p]  ~p received drep with wrong dest address of: ~p, ignoring~n",[?MODULE,My_name, Dest]),
+      log:err("[~p]  ~p received drep with wrong dest address of: ~p, ignoring~n",[?MODULE,My_name, Dest]),
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
   end;
 
 counting(Event,{My_name,My_protocol,My_node,Counter,Sn}) ->
-  log:err(" [~p]  ~p recaived UNEXPECTED EVENT ~p~n", [?MODULE,My_name,Event] ),
+  log:err("[~p]  ~p recaived UNEXPECTED EVENT ~p~n", [?MODULE,My_name,Event] ),
   {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}.
 
 
 
 handle_info(Info, StateName, State) ->
-  log:err(" [~p]   ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",[?MODULE,self(),Info,StateName,State]),
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",[?MODULE,self(),Info,StateName,State]),
   {next_state, StateName, State}.
 
 terminate(Reason, StateName, State) ->
@@ -154,18 +154,18 @@ hand_shake(Me,My_protocol,Times) ->
         ok -> ready;
         Err-> case Times of
                 Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                  log:err(" [~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
+                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
                   hand_shake(Me,My_protocol,Times+1);
                 Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                  log:err(" [~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
+                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
                   {terminate, Err}
               end
       after ?HAND_SHAKE_TIMEOUT -> case Times of
                                      Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                                       log:err(" [~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+                                       log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
                                        hand_shake(Me,My_protocol,Times+1);
                                      Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                                       log:err(" [~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+                                       log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
                                        {terminate, timeout}
                                    end
       end;
@@ -176,19 +176,19 @@ hand_shake(Me,My_protocol,Times) ->
         {'EXIT',{timeout,{gen_server,call,_}}} ->
           case Times of
             Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err(" [~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+              log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
               hand_shake(Me,My_protocol,Times+1);
             Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err(" [~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+              log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
               {terminate, timeout}
           end;
         Err->
           case Times of
             Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err(" [~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
+              log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
               hand_shake(Me,My_protocol,Times+1);
             Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err(" [~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
+              log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
               {terminate, Err}
           end
       end
@@ -207,13 +207,13 @@ send_drep(My_protocol,Data,Seq) ->
       % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
 
       Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
-      log:debug ("sending bit message: ~p~n" , [?MODULE,Bit_message]),
+      log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),
       Reply = (catch protocol_interface:send_data_reply(?DC_NODE,Bit_message)),
 
       %  Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Data,Seq})),
       case Reply of
         {ok, sent} -> ok;
-        Err -> log:critical(" [~p]  error in gen_server:call in send_drep : ~p~n",[?MODULE,Err])
+        Err -> log:critical("[~p]  error in gen_server:call in send_drep : ~p~n",[?MODULE,Err])
       end
   end .
 
@@ -230,11 +230,11 @@ send_dreq(My_protocol, To, Seq) ->
       log:debug("sending dreq to: ~p with sequence ~p~n", [?MODULE,To,Seq]) ,
       %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
       Bit_message = message_to_bit({dreq, To, Seq}),
-      log:debug ("sending bit message: ~p~n" , [?MODULE,Bit_message]),
+      log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),
       Reply = (catch protocol_interface:send_data_request(To,Bit_message)),
       case Reply of
         ok -> ok;
-        Err -> log:critical(" [~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err])
+        Err -> log:critical("[~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err])
       end
   end.
 

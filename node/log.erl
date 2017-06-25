@@ -29,20 +29,19 @@ handle_info(Request, Context)  ->
 	{noreply, Context}.
 
 
-handle_cast({log, Level, LevelMessage, Message, Params}, Context) ->
+handle_cast({log, Level, Message, Params}, Context) ->
         IsValidModule = isValidModule(Params),
         if
             IsValidModule ->
                 if (Level >= ?CURRENT_LOG_LEVEL) ->
-                    {Hours, Minutes, Seconds} = erlang:time(),
                     case ?LOGGER_MODE of
                         file ->
-                            io:format(Context#context.log_file, "~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                            io:format(Context#context.log_file, Message, Params);
                         dual ->
-                            io:format(Context#context.log_file, "~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params),
-                            io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params);
+                            io:format(Context#context.log_file, Message, Params),
+                            io:format(Message, Params);
                         _ ->
-                            io:format("~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds] ++ Params)
+                            io:format(Message, Params)
                         end;
                     true -> ok
                 end;
@@ -68,7 +67,9 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 
 
 print(Level, LevelMessage, Message, Params) ->
-    gen_server:cast(?MODULE, {log, Level, LevelMessage, Message, Params}).
+    {Hours, Minutes, Seconds} = erlang:time(),
+    Millis = utils:get_current_millis() rem 1000,
+    gen_server:cast(?MODULE, {log, Level, "~p:~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds, Millis] ++ Params}).
 
 
 info(Message, Params) ->

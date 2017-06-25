@@ -22,8 +22,8 @@
 
 -define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
 
--define(DISCOVERING_TIMEOUT,30000).
--define(COLLECTING_TIMEOUT,10000).
+-define(DISCOVERING_TIMEOUT,10000).
+-define(COLLECTING_TIMEOUT,30000).
 
 
 
