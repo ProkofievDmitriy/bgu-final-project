@@ -696,12 +696,13 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug(" sending bit message: ~p~n", [Bit_message]),
       Reply = protocol_interface:send_data_request(H, Bit_message),
+
       case Reply of
         {ok, sent} ->
-            utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
+               utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
                send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->
-
+                log:debug("[~p]: TIMOUT FROM PROTOCOL ~n", [?MODULE]),
                 send_dreq(My_protocol, T, Seq);
         Err -> log:critical("error in gen_server:call in send_dreq : ~p~n",[Err])
 
