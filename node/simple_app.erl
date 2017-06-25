@@ -9,9 +9,9 @@ stop()->
     ?APPLICATION_NAME ! stop.
 
 
-start_link(Properties)->
-	?LOGGER:info("[~p]: Starting Simple Smart Meter Application with props: ~w~n", [?MODULE, Properties]),
-    PID = spawn(fun()->smart_meter_loop(?MESSAGE_SEND_INTERVAL, 1000, term_to_binary("Some Random Message")) end),
+start_link({My_node, _My_protocol, _Meters})->
+	?LOGGER:info("[~p]: Starting Simple Smart Meter Application with props: ~w~n", [?MODULE, {My_node, _My_protocol, _Meters}]),
+    PID = spawn(fun()->smart_meter_loop(?MESSAGE_SEND_INTERVAL, 1000, term_to_binary({My_node, "Some Random Message"})) end),
     register(?APPLICATION_NAME, PID),
     ?PROTOCOL:hand_shake(PID),
     PID.
@@ -23,7 +23,7 @@ smart_meter_loop(SendInterval, FalseLoops, Data) ->
             normal;
          Message ->
              NewMessage = binary_to_term(Message),
-             ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(NewMessage), NewMessage]),
+             ?LOGGER:info("[~p]: successfully received message length=~p Message: ~p  ~n", [?MODULE, length(NewMessage), NewMessage]),
             ok
         after ?MESSAGE_SEND_INTERVAL ->
             case FalseLoops rem 1000 of

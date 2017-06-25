@@ -1,6 +1,6 @@
--define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng, report, stats_server_interface, transport,utils]).
+% -define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng, report, stats_server_interface, transport,utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
-% -define(MODULES_TO_FILTER, [stats_server_interface, report, load_ng]).
+-define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
 
 
@@ -111,7 +111,7 @@
 %%% SIMPLE APPLICATION PROPERTIES
 -define(APPLICATION_NAME, simple_application).
 % -define(APPLICATION_NAME, other).
--define(MESSAGE_SEND_INTERVAL, 30). % in second
+-define(MESSAGE_SEND_INTERVAL, 5). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
                          {send_message_interval, ?MESSAGE_SEND_INTERVAL},

@@ -22,7 +22,8 @@ data_concentration_loop()->
 		    ?LOGGER:info("[~p]: Received stop message. Exiting data concentration server App~n", [?MODULE]),
 		    normal;
 		Message ->
-            NewMessage = binary_to_term(Message),
-            ?LOGGER:info("[~p]: Received message length=~p bytes: ~w  ~n", [?MODULE, length(NewMessage), NewMessage]),
+            {From, NewMessage} = binary_to_term(Message),
+            ?LOGGER:info("[~p]: successfully received message length=~p , Message : ~p  ~n", [?MODULE, length(NewMessage), NewMessage]),
+            ?PROTOCOL:send(utils:get_node_number(From), term_to_binary("Message successfully delivered!")),
             data_concentration_loop()
 	end.

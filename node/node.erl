@@ -115,7 +115,7 @@ init(GlobalProperties) ->
 	?LOGGER:debug("[~p]: Protocol: ~p started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, CurrentProtocol, Protocol_Pid, NodeName]),
 
     %initialize application
-    ApplicationProperties = proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties),
+    ApplicationProperties = [{node_name, NodeName} | proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties)],
     ApplicationType = proplists:get_value(role, ApplicationProperties),
     Meters_list = proplists:get_value(meters_list, ApplicationProperties),
 	% Application_Pid = ?APPLICATION:start(ApplicationProperties),

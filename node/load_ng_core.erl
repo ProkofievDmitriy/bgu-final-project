@@ -455,11 +455,11 @@ generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, State
             ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RERR : ~w.~n", [?MODULE, Error])
         end.
 
-generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, SendTO, Medium, StateData) ->
+generate_rerr({Destination, _R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, SendTO, Medium, StateData) ->
     RERRMessage = #rerr_message{originator = StateData#state.self_address,
                                 destination = Destination,
                                 unreachable_address = UnreacheableAddress,
-                                r_seq_number = R_SEQ_NUMBER,
+                                r_seq_number = 0,
                                 error_code = ErrorCode},
     Packet = build_new_packet(?RERR, SendTO, RERRMessage, StateData),
     Payload = serialize_packet(Packet),
