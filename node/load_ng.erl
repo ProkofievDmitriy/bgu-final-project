@@ -97,19 +97,19 @@ init(Properties) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_call({data_message, {Destination, Data}}, From, Context) ->
+handle_call({data_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
-handle_call({data_request_message, {Destination, Data}}, From, Context) ->
+handle_call({data_request_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
-handle_call({data_reply_message, {Destination, Data}}, From, Context) ->
+handle_call({data_reply_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),

@@ -58,7 +58,7 @@ cut_list_from_delimiter([H|Tail], Delimiter)->
         _ -> cut_list_from_delimiter(Tail, Delimiter)
     end.
 
-grafana_report(Type, GrafanaServerIP, Data)->
+grafana_report(Type, GrafanaServerIP, _Data)->
     ?LOGGER:preciseDebug("[~p]: grafana_report Type = : ~w ~n",[?MODULE, Type]),
     case  GrafanaServerIP of
         undefined -> ok;

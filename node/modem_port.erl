@@ -157,7 +157,7 @@ init(Super_PID, DataLinkFsmPid) ->
     loop(Port, OS_PID, Super_PID, 0, DataLinkFsmPid).
 
 %if number of errors between erlang port to c port passed limit, terminate c program and modem_port (with port_errors reason).
-loop(_, OS_PID ,_,Port_Errors, DataLinkFsmPid) when Port_Errors =:= ?PORTS_ERRORS_LIMIT ->
+loop(_, OS_PID ,_,Port_Errors, _DataLinkFsmPid) when Port_Errors =:= ?PORTS_ERRORS_LIMIT ->
 	?LOGGER:debug("[~p]: too many port errors. terminate myself!!!!~n", [?MODULE]),
 	close_c_port_program(OS_PID),
 	self() ! {stop,port_errors};
@@ -173,8 +173,7 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 			MSG = prepare_payload(Msg), % MSG = <<Channel:8, Rest/bitstring>>
 			if is_list(MSG) ->
 			    DataLinkFsmPid ! sendMsg(Port, MSG);
-			    true -> ?LOGGER:err("[~p]: error on message prepare : ~w~n", [?MODULE, MSG]),
-			    {error , dont_send}
+			    true -> ?LOGGER:err("[~p]: error on message prepare : ~w~n", [?MODULE, MSG])
 			end,
 			%Error = wait_for_ack(),		%return 0 if ack received, 1 if nack
 			%loop(Port, OS_PID, Super_PID, Port_Errors + Error);
@@ -310,9 +309,6 @@ close_all_port_processes([H|T] , L2) ->
 		Else -> close_all_port_processes(T, L2 ++ [Else])
 	end.
 
-crc_to_list(N) ->
-	binary:bin_to_list(binary:encode_unsigned(N)).
-
 prepare_payload([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
 prepare_payload([Channel, _ | Rest]) ->
     Size = byte_size(Rest),
@@ -322,7 +318,7 @@ prepare_payload([Channel, _ | Rest]) ->
 	    too_large ->
             ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~w.~n", [?MODULE, Size]),
 	        {error, too_large};
-        List ->
+        _List ->
             L = pad_list(Rest, PAD),
             %TODO - padding by bit size and not byte
             ?LOGGER:debug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),

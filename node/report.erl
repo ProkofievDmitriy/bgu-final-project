@@ -148,9 +148,6 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-prepare_message(Type, DataList , Context)->
-    {Type, prepare_message_data(DataList, Context)}.
-
 prepare_message_data(DataList , Context)->
     [{node_name, list_to_atom(Context#context.node_name)}|DataList].
 

@@ -29,12 +29,12 @@
                 r_seq_number
                 }).
 
--record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, bidirectional, valid_time, valid, r_seq_number}).
+-record(routing_set_entry, {dest_addr, next_addr, medium, hop_count, bidirectional, valid_time, r_seq_number}).
 -record(rreq_handling_set_entry, {r_seq_number, destination, originator, valid_time}).
 -record(pending_acknowledgement_entry, {next_hop, originator, r_seq_number, ack_received, ack_timeout}).
 
 
--record(load_ng_packet, {medium, type, source, destination, originator, data, uuid, up_each_node}).
+-record(load_ng_packet, {medium, type, source, destination, originator, data, uuid}).
 
 -record(rreq_message, {originator, destination, hop_count, r_seq_number}).
 -record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number}).
@@ -85,21 +85,6 @@ get_status(FsmPid) ->
 
 reset(FsmPid) ->
     gen_fsm:sync_send_all_state_event(FsmPid, reset).
-%% ====================================================================
-%% Internal events
-%% ====================================================================
-generate_RREQ(Destination)->
-    gen_fsm:send_event(self(), {generate_rreq, Destination}).
-
-generate_RREP(MetaData)->
-    gen_fsm:send_event(self(), {generate_rrep, MetaData}).
-
-generate_RERR(MetaData)->
-    gen_fsm:send_event(self(), {generate_rerr, MetaData}).
-
-generate_RACK(MetaData)->
-    gen_fsm:send_event(self(), {generate_rack, MetaData}).
-
 
 %% ====================================================================
 %% Init
@@ -119,7 +104,6 @@ init(Properties) ->
 
 
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
-    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
     gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
 
     State = #state{
@@ -153,24 +137,24 @@ active(disable, _From, StateData)->
 %DATA, DREP
 active({send_message, {Type, Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - Request(send_message: ~p) Destination: ~w, Data: ~w ~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Data]),
-    NextHop = get_next_hop(Destination, StateData), % routing_set_entry
+    {NewState, NextHop} = get_next_hop(Destination, StateData), % routing_set_entry
     case NextHop of
         {error, ErrorMessage} ->
-            {reply, {error, ErrorMessage}, active, StateData};
+            {reply, {error, ErrorMessage}, active, NewState};
         #routing_set_entry{} = Hop ->
-            Packet = build_new_packet(Type, Destination, Data, StateData),
+            Packet = build_new_packet(Type, Destination, Data, NewState),
             Payload = serialize_packet(Packet),
             case Payload of
                 {error, ErrorMessage} ->
-                   {reply, {error, ErrorMessage}, active, StateData};
+                   {reply, {error, ErrorMessage}, active, NewState};
                 _ ->
                     Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
-                    report_data_message_sent(Packet, StateData),
-                    {reply, Result, active, StateData}
+                    report_data_message_sent(Packet, NewState),
+                    {reply, Result, active, NewState}
             end;
         Else ->
             ?LOGGER:critical("[~p]: ACTIVE -Request(send_message: ~p) - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
-            {reply, Else, active, StateData}
+            {reply, Else, active, NewState}
     end.
 %% ============================================================================================
 %% =========================================== A-SYNC States Transitions ========================
@@ -181,24 +165,13 @@ idle(Request, StateData)->
 
 
 active(remove_not_valid_routes, StateData)->
-    NotValidRoutes = query_expired_routes(StateData#state.routing_set),
+    NotValidRoutes = query_not_valid_routes(StateData#state.routing_set),
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
     case NotValidRoutes of
         [] -> {next_state, active, StateData};
         _ ->
             ?LOGGER:debug("[~p]: ACTIVE - remove_not_valid_routes Routes number =  ~w.~n", [?MODULE, length(NotValidRoutes)]),
             lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.routing_set, Key) end, NotValidRoutes),
-            {next_state, active, StateData}
-    end;
-
-active(update_expired_routes, StateData)->
-    ExpiredRoutes = query_not_valid_routes(StateData#state.routing_set),
-    gen_fsm:send_event_after(?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, update_expired_routes),
-    case ExpiredRoutes of
-        [] -> {next_state, active, StateData};
-        _ ->
-            ?LOGGER:debug("[~p]: ACTIVE - update_expired_routes Routes number =  ~w.~n", [?MODULE, length(ExpiredRoutes)]),
-            lists:foreach(fun({Key, Value}) -> ets:insert(StateData#state.routing_set, {Key, Value#routing_set_entry{valid = false}}) end, ExpiredRoutes),
             {next_state, active, StateData}
     end;
 
@@ -214,157 +187,11 @@ active(remove_expired_rreq, StateData)->
             {next_state, active, StateData}
     end;
 
-active({generate_rreq, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREQ for Destination ~p.~n", [?MODULE, Destination]),
-
-    RREQMessage = #rreq_message{originator = StateData#state.self_address,
-                                destination = Destination,
-                                hop_count = 0,
-                                r_seq_number = StateData#state.r_seq_number},
-    Packet = build_new_packet(?RREQ, ?BROADCAST_ADDRESS, RREQMessage, StateData),
-    Payload = serialize_packet(Packet),
-    case Payload of
-        {error, ErrorMessage} ->
-            ?LOGGER:err("[~p]: ACTIVE - GENERATING RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]),
-            {next_state, active, StateData};
-        _ ->
-            ?DATA_LINK:send(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
-            add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
-                                              {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
-            report_sent_management_message(Packet, StateData),
-            NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem ?SEQUENCE_NUMBER_MAX_VALUE}, % increase RREQ Sequence number
-            {next_state, active, NewState}
-    end;
-
-active({generate_rrep, {Destination, RREQSequenceNumber, HopCount}}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREP for ~p.~n", [?MODULE, Destination]),
-    RREPMessage = #rrep_message{originator = StateData#state.self_address,
-                                destination = Destination,
-                                ack_required = ?ACK_REQUIRED,
-                                hop_count = HopCount,
-                                r_seq_number = RREQSequenceNumber},
-    Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
-    case Result of
-        {ok, {_Key, NextHop}} ->
-            Packet = build_new_packet(?RREP, NextHop#routing_set_entry.next_addr, RREPMessage, StateData),
-            Payload = serialize_packet(Packet),
-            case Payload of
-                {error, ErrorMessage} ->
-                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RREP failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
-                _ ->
-                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
-                    ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_sent_management_message(Packet, StateData),
-                    if ?ACK_REQUIRED -> %false by default - further implementations
-                        add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
-                                                                 StateData#state.self_address,
-                                                                 RREQSequenceNumber,
-                                                                 StateData#state.pending_acknowledgements_set); %{next_hop, originator, r_seq_number, ack_received, ack_timeout}
-                        true ->
-                            ok
-                end
-            end;
-        Error ->
-            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RREP : ~w.~n", [?MODULE, Error])
-    end,
-    {next_state, active, StateData};
-
-
-active({generate_rerr, {Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}}, StateData) ->
-    RERRMessage = #rerr_message{originator = StateData#state.self_address,
-                                destination = Destination,
-                                unreachable_address = UnreacheableAddress,
-                                r_seq_number = R_SEQ_NUMBER,
-                                error_code = ErrorCode},
-    Result = query_find_next_hop(Destination, StateData#state.routing_set),
-    case Result of
-        {ok, {_Key, NextHop}} ->
-            Packet = build_new_packet(?RERR, NextHop#routing_set_entry.next_addr, RERRMessage, StateData),
-            Payload = serialize_packet(Packet),
-            case Payload of
-                {error, ErrorMessage} ->
-                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
-                _ ->
-                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
-                    ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
-                    report_sent_management_message(Packet, StateData)
-                end;
-        Error ->
-            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RRER : ~w.~n", [?MODULE, Error])
-        end,
-    {next_state, active, StateData};
-
-active({generate_rack, Destination}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RACK for ~p.~n", [?MODULE, Destination]),
-    RACKMessage = #rack_message{originator = StateData#state.self_address,
-                                destination = Destination,
-                                hop_count = 0,
-                                r_seq_number = StateData#state.r_seq_number},
-    Packet = build_new_packet(?RACK, Destination, RACKMessage, StateData),
-    Payload = serialize_packet(Packet),
-    report_sent_management_message(Packet, StateData),
-    {next_state, active, StateData};
-
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                     Receive Messages Handlers
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-active({received_message, #load_ng_packet{type = ?DATA} = Packet}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DATA Packet : ~w .~n", [?MODULE, Packet]),
-    update_routing_set_entry(Packet, StateData), % route maintanace
-    AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
-    if  AmIDestination ->
-            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
-            report_data_message_received(Packet, StateData);
-        true -> ok end,
-    ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
-    if ShouldBeForwarded ->
-            Result = forward_packet(Packet, StateData),
-            case Result of
-                {ok, sent, _Some } ->
-                    ?LOGGER:debug("[~p]: DATA Packet successfully forwarded .~n", [?MODULE]),
-                    report_data_message_forwarded(Packet, StateData);
-                {error, Error, #routing_set_entry{} = FailedHop} ->
-                    ?LOGGER:debug("[~p]: DATA Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
-                    generate_RERR({Packet#load_ng_packet.originator,
-                                   FailedHop#routing_set_entry.r_seq_number,
-                                   ?RERR_HOST_UNREACHABLE,
-                                   Packet#load_ng_packet.destination});
-               Else ->
-                   ?LOGGER:critical("[~p]: ACTIVE - DATA NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
-               end;
-        true -> ok end, % not eligible to forward, skip
-    {next_state, active, StateData};
-
-active({received_message, #load_ng_packet{type = ?DREQ} = Packet}, StateData) ->
-    ?LOGGER:debug("[~p]: ACTIVE - DREQ Packet : ~w .~n", [?MODULE, Packet]),
-    update_routing_set_entry(Packet, StateData), % route maintanace
-    AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
-    if  AmIDestination ->
-            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
-            report_data_message_received(Packet, StateData);
-        true -> ok end,
-    ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
-    if ShouldBeForwarded ->
-            Result = forward_packet(Packet, StateData),
-            case Result of
-                {ok, sent, _Some } ->
-                    ?LOGGER:debug("[~p]: DREQ Packet successfully forwarded .~n", [?MODULE]),
-                    report_data_message_forwarded(Packet, StateData);
-                {error, Error, #routing_set_entry{} = FailedHop} ->
-                    ?LOGGER:debug("[~p]: DREQ Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, Error, Packet#load_ng_packet.originator]),
-                    generate_RERR({Packet#load_ng_packet.originator,
-                                   FailedHop#routing_set_entry.r_seq_number,
-                                   ?RERR_HOST_UNREACHABLE,
-                                   Packet#load_ng_packet.destination});
-               Else ->
-                   ?LOGGER:critical("[~p]: ACTIVE - DREQ NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, Else])
-               end;
-        true -> ok end, % not eligible to forward, skip
-    {next_state, active, StateData};
-
 
 active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - DREP Packet : ~w .~n", [?MODULE, Packet]),
@@ -384,7 +211,7 @@ active({received_message, #load_ng_packet{type = ?RREQ} = Packet}, StateData) ->
                 RREQSequenceNumber = Packet#load_ng_packet.data#rreq_message.r_seq_number,
                 Originator = Packet#load_ng_packet.data#rreq_message.originator,
                 HopCount = Packet#load_ng_packet.data#rreq_message.hop_count,
-                generate_RREP({Originator, RREQSequenceNumber, HopCount});
+                generate_rrep({Originator, RREQSequenceNumber, HopCount}, StateData);
             false -> % this router is not a destination, forwarding message
                 forward_packet(Packet, StateData),
                 report_sent_management_message(Packet, StateData)
@@ -418,11 +245,11 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
 active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RERR : Packet : ~w .~n", [?MODULE, Packet]),
     report_received_management_message(Packet, StateData),
-    Result = remove_and_get_broken_link(Packet, StateData#state.routing_set),
-    if Packet#load_ng_packet.originator =/= StateData#state.self_address ->
+    Result = remove_and_get_broken_link(Packet, StateData),
+    if Packet#load_ng_packet.data#rerr_message.destination =/= StateData#state.self_address ->
         case Result of
-            {ok , RemovedEntry} ->
-                forward_packet(Packet, StateData, RemovedEntry),
+            {ok , _RemovedEntry} ->
+                forward_packet(Packet, StateData),
                 report_sent_management_message(Packet, StateData);
             {error , Message} ->
                 ?LOGGER:err("[~p]: ACTIVE - RERR  - ERROR: ~p .~n", [?MODULE, Message]);
@@ -438,6 +265,43 @@ active({received_message, #load_ng_packet{type = ?RERR} = Packet}, StateData) ->
 active({received_message, #load_ng_packet{type = ?RACK} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - RACK : Packet : ~p .~n", [?MODULE, Packet]),
     report_received_management_message(Packet, StateData),
+    {next_state, active, StateData};
+
+active({received_message, Packet}, StateData) ->
+    TypeName = ?GET_TYPE_NAME(Packet#load_ng_packet.type),
+    ?LOGGER:debug("[~p]: ACTIVE - ~p  Packet : ~w .~n", [?MODULE, TypeName, Packet]),
+    update_routing_set_entry(Packet, StateData), % route maintanace
+    AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
+    if  AmIDestination ->
+            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+            report_data_message_received(Packet, StateData);
+        true -> ok end,
+    ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
+    if ShouldBeForwarded ->
+            Result = forward_packet(Packet, StateData),
+            case Result of
+                {ok, sent, _Some } ->
+                    ?LOGGER:debug("[~p]: ~p Packet successfully forwarded .~n", [?MODULE, TypeName]),
+                    report_data_message_forwarded(Packet, StateData);
+                {error, Error, #routing_set_entry{} = FailedHop} ->
+                    ?LOGGER:debug("[~p]: ~p Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, TypeName, Error, Packet#load_ng_packet.originator]),
+                    generate_rerr({Packet#load_ng_packet.originator,
+                                   FailedHop#routing_set_entry.r_seq_number,
+                                   ?RERR_HOST_UNREACHABLE,
+                                   Packet#load_ng_packet.destination}, StateData);
+                {error, Error, _ErrorMessage}->
+                    ?LOGGER:debug("[~p]: ~p Packet FORWARDING ERROR: ~p , generating RERR towards ~p.~n", [?MODULE, TypeName, Error, Packet#load_ng_packet.originator]),
+                    generate_rerr({Packet#load_ng_packet.originator,
+                                   undefined,
+                                   ?RERR_HOST_UNREACHABLE,
+                                   Packet#load_ng_packet.destination},
+                                   Packet#load_ng_packet.source,
+                                   Packet#load_ng_packet.medium,
+                                   StateData);
+               Else ->
+                   ?LOGGER:critical("[~p]: ACTIVE - ~p NOT FORWARDED and RERR NOT GENERATED - Enexpected error: ~p .~n", [?MODULE, TypeName, Else])
+               end;
+        true -> ok end, % not eligible to forward, skip
     {next_state, active, StateData}.
 
 
@@ -512,26 +376,150 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ============================================================================================
 %% ======================================== Utils =========================================
 %% ============================================================================================
+
+
+generate_rreq(Destination, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREQ for Destination ~p.~n", [?MODULE, Destination]),
+
+    RREQMessage = #rreq_message{originator = StateData#state.self_address,
+                                destination = Destination,
+                                hop_count = 0,
+                                r_seq_number = StateData#state.r_seq_number},
+    Packet = build_new_packet(?RREQ, ?BROADCAST_ADDRESS, RREQMessage, StateData),
+    Payload = serialize_packet(Packet),
+    case Payload of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: ACTIVE - GENERATING RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]);
+        _ ->
+            ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
+            add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
+                                              {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
+            report_sent_management_message(Packet, StateData),
+            NewState = StateData#state{r_seq_number = (StateData#state.r_seq_number + 1) rem ?SEQUENCE_NUMBER_MAX_VALUE}, % increase RREQ Sequence number
+            NewState
+    end.
+
+generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RREP for ~p.~n", [?MODULE, Destination]),
+    RREPMessage = #rrep_message{originator = StateData#state.self_address,
+                                destination = Destination,
+                                ack_required = ?ACK_REQUIRED,
+                                hop_count = HopCount,
+                                r_seq_number = RREQSequenceNumber},
+    Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
+    case Result of
+        {ok, {_Key, NextHop}} ->
+            Packet = build_new_packet(?RREP, Destination, RREPMessage, StateData),
+            Payload = serialize_packet(Packet),
+            case Payload of
+                {error, ErrorMessage} ->
+                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RREP failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+                _ ->
+                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
+                    ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    report_sent_management_message(Packet, StateData),
+                    if ?ACK_REQUIRED -> %false by default - further implementations
+                        add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
+                                                                 StateData#state.self_address,
+                                                                 RREQSequenceNumber,
+                                                                 StateData#state.pending_acknowledgements_set); %{next_hop, originator, r_seq_number, ack_received, ack_timeout}
+                        true ->
+                            ok
+                end
+            end;
+        Error ->
+            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RREP : ~w.~n", [?MODULE, Error])
+    end.
+
+
+generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, StateData) ->
+    RERRMessage = #rerr_message{originator = StateData#state.self_address,
+                                destination = Destination,
+                                unreachable_address = UnreacheableAddress,
+                                r_seq_number = R_SEQ_NUMBER,
+                                error_code = ErrorCode},
+    Result = query_find_next_hop(Destination, StateData#state.routing_set),
+    case Result of
+        {ok, {_Key, NextHop}} ->
+            Packet = build_new_packet(?RERR, Destination, RERRMessage, StateData),
+            Payload = serialize_packet(Packet),
+            case Payload of
+                {error, ErrorMessage} ->
+                    ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+                _ ->
+                    ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
+                    ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    report_sent_management_message(Packet, StateData)
+                end;
+        Error ->
+            ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RERR : ~w.~n", [?MODULE, Error])
+        end.
+
+generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, SendTO, Medium, StateData) ->
+    RERRMessage = #rerr_message{originator = StateData#state.self_address,
+                                destination = Destination,
+                                unreachable_address = UnreacheableAddress,
+                                r_seq_number = R_SEQ_NUMBER,
+                                error_code = ErrorCode},
+    Packet = build_new_packet(?RERR, SendTO, RERRMessage, StateData),
+    Payload = serialize_packet(Packet),
+    case Payload of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+        _ ->
+            ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - to : ~w.~n", [?MODULE, {Medium, SendTO}]),
+            ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{Medium, SendTO}, Payload }),
+            report_sent_management_message(Packet, StateData)
+    end.
+
+
+
+generate_rack(Destination, StateData) ->
+    ?LOGGER:debug("[~p]: ACTIVE - GENERATING RACK for ~p.~n", [?MODULE, Destination]),
+    RACKMessage = #rack_message{originator = StateData#state.self_address,
+                                destination = Destination,
+                                hop_count = 0,
+                                r_seq_number = StateData#state.r_seq_number},
+
+    Result = query_find_next_hop(Destination, StateData#state.routing_set),
+    case Result of
+        {ok, {_Key, NextHop}} ->
+                Packet = build_new_packet(?RACK, Destination, RACKMessage, StateData),
+                Payload = serialize_packet(Packet),
+                case Payload of
+                    {error, ErrorMessage} ->
+                        ?LOGGER:err("[~p]: ACTIVE - GENERATING RACK failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
+                    _ ->
+                        ?LOGGER:info("[~p]: ACTIVE - GENERATING RACK - NextHop: ~w.~n", [?MODULE, NextHop]),
+                        ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                        report_sent_management_message(Packet, StateData)
+                    end;
+            Error ->
+                ?LOGGER:err("[~p]: ACTIVE - FAILED GENERATING RERR : ~w.~n", [?MODULE, Error])
+            end.
+
+
+
 get_next_hop(Destination, State)->
     NextHop = query_find_next_hop(Destination, State#state.routing_set),
     Result = case NextHop of
-        {ok, {_Key, Hop}} -> Hop;
+        {ok, {_Key, Hop}} -> {State, Hop};
         {?EMPTY_QUERY_RESULT, _Message} ->
             ?LOGGER:debug("[~p]: get_next_hop NO HOP FOUND for destination: ~p : ~p.~n", [?MODULE, Destination, NextHop]),
-            generate_RREQ(Destination),
+            NewState = generate_rreq(Destination, State),
             StartTime = get_current_millis(),
             receive after 2 * State#state.net_traversal_time ->
                 NextHop2 = query_find_next_hop(Destination, State#state.routing_set),
                 case NextHop2 of
-                    {ok, {_Key, Hop}} -> Hop;
+                    {ok, {_Key, Hop}} -> {NewState, Hop};
                     _ ->
                         ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
-                        {error, timeout_exceeded}
+                        {NewState, {error, timeout_exceeded}}
                 end
             end;
         Error ->
             ?LOGGER:err("[~p]: get_next_hop UNEXPECTED RESULTS: ~p.~n", [?MODULE, Error]),
-            Error
+            {State, Error}
     end,
     ?LOGGER:debug("[~p]: get_next_hop Result: ~p.~n", [?MODULE, Result]),
     Result.
@@ -543,8 +531,7 @@ build_new_packet(Type, Destination, Data, State)->
     destination = Destination,
     originator = State#state.self_address,
     data = Data,
-    uuid = generate_uuid(),
-    up_each_node = 0
+    uuid = generate_uuid()
     },
     ?LOGGER:debug("[~p]: New packet build: ~w ~n", [?MODULE, NewPacket]),
     NewPacket.
@@ -567,8 +554,6 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
                                                                                                                    BinaryDestination,
                                                                                                                    BinaryDataLengthInBytes,
                                                                                                                    BinaryUUID]),
-  BitLength = bit_size(BinaryData),
-
 
   <<BinaryMessageType/bitstring,
               BinarySource/bitstring,
@@ -774,12 +759,7 @@ forward_packet(Packet, StateData) ->
     case Status of
         ok ->
             {_Key, NextHop} = Result,
-            case NextHop#routing_set_entry.valid of
-                true ->
                     forward_packet(Packet, StateData, NextHop);
-                false ->
-                    {error, hop_expired, NextHop}
-                end;
         ?EMPTY_QUERY_RESULT ->
             {error, hop_not_found, Result};
         _Else ->
@@ -846,8 +826,7 @@ add_new_entry_to_routing_set(RoutingSetId, Destination, NextHop, Medium, HopCoun
         hop_count = HopCount,
         r_seq_number = SeqNumber,
         bidirectional = false,
-        valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS,
-        valid = true
+        valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS
     },
     Result = ets:insert(RoutingSetId, {get_current_millis(), Entry}),
     ?LOGGER:debug("[~p]: Routing Set updated with entry : ~w , Result : ~w .~n", [?MODULE, Entry, Result]),
@@ -903,7 +882,6 @@ query_valid_routes_for_destination(RoutingSetId, Destination)->
     %TODO debug purposes - remove next line
     query_valid_routes(RoutingSetId),
 
-
     ?LOGGER:debug("[~p]: query_valid_routes_for_destination : ~w, result : ~w.~n", [?MODULE, Destination, Result]),
     Result.
 
@@ -913,11 +891,6 @@ query_valid_routes(RoutingSetId)->
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time > CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> Entry end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     ?LOGGER:debug("[~p]: query_valid_routes result CurrentMillis =  ~w,  ~w.~n", [?MODULE, CurrentMillis, Result]),
-    Result.
-
-query_expired_routes(RoutingSetId)->
-    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.valid =:= false -> {Key, Entry} end),
-    Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
     Result.
 
 query_expired_rreq(RREQ_HandlingSet_Id)->
@@ -951,7 +924,9 @@ contains_is_rreq_handling_set(RREQ_HandlingSet_Id, {SeqNumber, Destination, Orig
     end.
 
 update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, hop_count, r_seq_number, bidirectional, valid_time}
-    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.destination),(Entry#routing_set_entry.valid =:= true) -> {Key, Entry} end),
+    CurrentMillis = get_current_millis(),
+    Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.next_addr =:= Packet#load_ng_packet.source),
+                                              (Entry#routing_set_entry.valid_time > CurrentMillis) -> {Key, Entry} end),
     QueryResult = qlc:eval(ets:table(StateData#state.routing_set, [{traverse, {select, Query}}])),
     EntryToUpdate = case QueryResult of
         [H|[]] -> {ok, H};
@@ -961,26 +936,24 @@ update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, h
         _ ->
             {error, failed_updating_routing_set_entry_unexpected_error}
     end,
-    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry RoutingSet: ~n  ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
-    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry Destination: ~n  ~p .~n", [?MODULE, Packet#load_ng_packet.destination]),
+    ?LOGGER:debug("[~p]: update_routing_set_entry RoutingSet: ~n ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
+    ?LOGGER:debug("[~p]: update_routing_set_entry Destination: ~p .~n", [?MODULE, Packet#load_ng_packet.source]),
     case EntryToUpdate of
         {ok, {Key, Entry}} ->
+            ?LOGGER:info("[~p]: update_routing_set_entry left valid  : ~w. , ~n", [?MODULE, Entry#routing_set_entry.valid_time - CurrentMillis]),
             ets:delete(StateData#state.routing_set, Key),
-            ets:insert(StateData#state.routing_set, {Key, Entry#routing_set_entry{valid_time = get_current_millis() + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}}),
-            ?LOGGER:info("[~p]: update_routing_set_entry : ~w.~n", [?MODULE, Entry]);
+            ets:insert(StateData#state.routing_set, {Key, Entry#routing_set_entry{valid_time = CurrentMillis + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}});
         {error, Mesage} ->
             ?LOGGER:err("[~p]: update_routing_set_entry ErrorMessage: ~p.~n", [?MODULE, Mesage]),
             {error, failed_updating_routing_set_entry}
     end.
 
-update_dreq_table(UUID, State)->
-  ets:insert(State#state.dreq_table, {UUID, get_current_millis()}).
-
 
 remove_and_get_broken_link(Packet, StateData)->
+    CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.dest_addr =:= Packet#load_ng_packet.data#rerr_message.unreachable_address),
                                               (Entry#routing_set_entry.next_addr =:= Packet#load_ng_packet.source),
-                                              (Entry#routing_set_entry.r_seq_number =:= Packet#load_ng_packet.data#rerr_message.r_seq_number) ->  {Key, Entry} end),
+                                              (Entry#routing_set_entry.valid_time > CurrentMillis) ->  {Key, Entry} end),
     QueryResult = qlc:eval(ets:table(StateData#state.routing_set, [{traverse, {select, Query}}])),
     EntryToRemove = case QueryResult of
         [H|[]] -> {ok, H};

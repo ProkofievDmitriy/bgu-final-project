@@ -4,7 +4,7 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/2, updateUpperLevelPid/2, handle_incoming_message/2, get_status/1, set_state/2]).
+-export([start/1, stop/1, send/2, send_async/2, updateUpperLevelPid/2, handle_incoming_message/2, get_status/1, set_state/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -27,6 +27,11 @@ set_state(FsmPid, NewState)->
 %Managing events
 send(FsmPid, {Hop, Payload})->
     gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}, ?TIMEOUT).
+
+%Managing events
+send_async(FsmPid, {Hop, Payload})->
+    gen_fsm:send_event(FsmPid, {send, {Hop, Payload}}).
+
 
 updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
@@ -89,9 +94,21 @@ dual({send, {Hop, Data}}, _From, StateData) ->
 dual({received_message, {Medium, Target, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
     handle_message(Medium, Target, StateData, Data),
-    {next_state, dual, StateData}.
+    {next_state, dual, StateData};
 
 
+dual({send, {Hop, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: DUAL - ASYNC  (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
+    {Medium, NextHopAddress} = Hop,
+    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Result = ?MODEM_PORT:send(Medium, Payload),
+    case Result of
+        {error, ErrorMessage} ->
+            ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+            {next_state, dual, StateData};
+	    _ ->
+            {next_state, dual, StateData}
+	end.
 
 %% =========================================== PLC ONLY =========================================
 
@@ -125,7 +142,30 @@ plc_only({received_message, {Medium, Target, Data}}, StateData) ->
         _Else ->
             ?LOGGER:warn("[~p]: PLC_ONLY - (received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
     end,
-    {next_state, plc_only, StateData}.
+    {next_state, plc_only, StateData};
+
+
+
+plc_only({send, {Hop, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: PLC_ONLY - ASYNC (send) to ~p~n", [?MODULE, Hop]),
+    {Medium, NextHopAddress} = Hop,
+    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Result = case Medium of
+        ?PLC ->
+            ?MODEM_PORT:send(?PLC, Payload);
+        ?RF_PLC ->
+            ?MODEM_PORT:send(?PLC, Payload);
+	    _Else ->
+	        {error, not_active_medium}
+	 end,
+
+     case Result of
+         {error, ErrorMessage} ->
+             ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+             {next_state, plc_only, StateData};
+        _ ->
+            {next_state, plc_only, StateData}
+     end.
 
 
 %% =========================================== RF ONLY =========================================
@@ -159,7 +199,29 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
          _Else ->
              ?LOGGER:warn("[~p]: RF_ONLY - (received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
      end,
-     {next_state, rf_only, StateData}.
+     {next_state, rf_only, StateData};
+
+
+ rf_only({send, {Hop, Data}}, StateData) ->
+     ?LOGGER:debug("[~p]: RF_ONLY -  ASYNC (send) to medium ~p~n", [?MODULE, Hop]),
+     {Medium, NextHopAddress} = Hop,
+     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+     Result = case Medium of
+         ?RF ->
+             ?MODEM_PORT:send(?RF, Payload);
+         ?RF_PLC ->
+             ?MODEM_PORT:send(?RF, Payload);
+ 	    _Else ->
+ 	        {error, not_active_medium}
+ 	 end,
+
+      case Result of
+          {error, ErrorMessage} ->
+              ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+              {next_state, rf_only, StateData};
+         _ ->
+             {next_state, rf_only, StateData}
+      end.
 
 %% ============================================================================================
 %% ============================== Sync Event Handling =========================================
@@ -239,6 +301,6 @@ handle_message(Medium, Target, StateData, Data)->
         true ->
             ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to network layer~n", [?MODULE]),
             ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Medium, Data);
-        Else ->
+        _Else ->
             ?LOGGER:debug("[~p]: handle_message : target(~w) is NOT valid - IGNORING incoming message ~n", [?MODULE, Target])
     end.

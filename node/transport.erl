@@ -246,7 +246,7 @@ deserialize_header(BinaryHeader)->
     <<Max:?SESSION_MANAGEMENT_LENGTH, Seq:?SESSION_MANAGEMENT_LENGTH, Id:?SESSION_ID_LENGHT>> = BinaryHeader,
     #transport_header{max= Max, seq = Seq, id = Id}.
 
-get_full_message(DB, #transport_message{ header = #transport_header{ max = 1, seq = 1}} = Message) ->
+get_full_message(_DB, #transport_message{ header = #transport_header{ max = 1, seq = 1}} = Message) ->
     ?LOGGER:debug("[~p]: SINGLE MESSAGE IN SESSION: ~w.~n", [?MODULE, Message]),
     {complete, Message#transport_message.binary_data};
 
