@@ -118,17 +118,17 @@ counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
     ?DC_NODE ->
   log:info("~p received drep with Seq ~p, state data: ~p ~n", [My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
   %% if the drep has equal or newer sequence number- append my reading
-  if Sn=<Seq ->
+%%  if Sn=<Seq ->
     log:debug("~p is appending reading ~n", [My_name] ),
     _Ok = send_drep(My_protocol, [{My_node,Counter}|Data],Seq),
     %% returning to the same state with updated sequence number
     {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
   %% if seq lower  - ignore
-    true ->
-      log:err("~p received drep with Seq ~p, local Sn ~p. passing drep ~n", [My_name,Seq,Sn]),
-      _Ok = send_drep(My_protocol,Data, Seq),
-      {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
-      end;
+%%    true ->
+%%      log:err("~p received drep with Seq ~p, local Sn ~p. passing drep ~n", [My_name,Seq,Sn]),
+%%      _Ok = send_drep(My_protocol,Data, Seq),
+%%      {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
+%%      end;
     Dest ->
       log:err("~p received drep with wrong dest address of: ~p, ignoring~n",[My_name, Dest]),
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}

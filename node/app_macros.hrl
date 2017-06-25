@@ -16,6 +16,7 @@
 
 -define(DC_NODE, node_1).
 
+-define(SM_WAITING_TIME, 10).
 
 
 
@@ -30,6 +31,7 @@
 -define(HAND_SHAKE_MAX_TRIES,5).
 -define(HAND_SHAKE_TIMEOUT, 3000).
 -define(TERMINATION_TIMEOUT, 3000).
+-define(SM_WAITING_TIME, 10).
 
 -define(MAX_DREQ_TRIES, 6).
 -define(EXTRA_DISCOVERY_TRIES,6).

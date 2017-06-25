@@ -66,8 +66,9 @@ init({Me, My_protocol,My_node,Meters}) ->
   case Hand_shake of
     ready ->
       log:info("~p initialized~n", [Me]),
-      [Rd1|Nrs] = Meters,                         % 1/4+9c
-      Rd= [Rd1],
+      Rd= random_elements(Meters)  ,                       % 1/4+9c
+      Nrs = delete_elemens(Meters, Rd),
+      Nrs = delete_elemens(Meters, Rd),
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       ets:new(stats,[ordered_set,named_table,public]),
       ets:new(tracker, [ordered_set,named_table,public]),
@@ -169,8 +170,8 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     _Ok4 = insert_nodes_to_tracker(Meters),
     Timerpid! stop,
       Sn1 = Sn+1,
-      [Rd2|Nrs2]= Meters,     % 2/5
-      Rd1=[Rd2],
+      Rd1=random_elements(Meters),
+      Nrs2 = delete_elements(Meters, Rd1),
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn1]),
       _Ok = send_dreq(My_protocol,Rd1,Sn1),           % 2/7
       _Ok1 = insert_requests( Rd1, Sn1),
@@ -181,8 +182,8 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
         {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd2|Nrs2] = Nrs_new,
-      Rd1 = [Rd2],
+      Rd1 = random_elements(Nrs_new),
+      Nrs2 = delete_elements(Nrs_new, Rd1),
       log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
@@ -205,8 +206,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     _Ok4 = insert_nodes_to_tracker(Meters),
     Timerpid!stop,
     Sn1=Sn+1,
-    [Rd2|Nrs2]= Meters,
-    Rd1= [Rd2],
+    Rd1=random_elements(Meters),
+    Nrs2 = delete_elements(Meters, Rd1),
     _Ok = send_dreq(My_protocol,Rd1,Sn1),                    % 1/11
     log:info("sending dreq, Rd are ~p~n",[Rd]),
     _Ok1 = insert_requests( Rd, Sn1),
@@ -217,8 +218,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
       {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
       log:info("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      [Rd2|Nrs2] =Nrs_new,
-      Rd1= [Rd2],
+      Rd1 = random_elements(Nrs_new),
+      Nrs2 = delete_elements(Nrs_new, Rd1),
       log:info("sending dreq to: ~p with sn ~p~n", [Rd,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
@@ -433,8 +434,8 @@ selected_elements(List,[H|T],New)->
   selected_elements(List,T,[lists:nth(H,List)|New]).
 
 random_elements(List) ->
-  Length = trunc(math:sqrt(lists:flatlength(List))),
-  Indexes = random_indexes(erlang:length(List),Length,[]),
+%%  Length = trunc(math:sqrt(lists:flatlength(List))),
+  Indexes = random_indexes(erlang:length(List),1,[]),
   selected_elements(List,Indexes,[]).
 
 delete_elements(List,[])->List;
