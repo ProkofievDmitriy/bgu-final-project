@@ -186,14 +186,9 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ============================================================================================
 
 generate_uuid()->
-  TimeStamp = get_current_millis(),
+  TimeStamp = utils:get_current_millis(),
   UUID = erlang:phash2(TimeStamp),
   UUID.
-
-get_current_millis() ->
-    {Mega, Sec, Micro} = os:timestamp(),
-    (Mega*1000000 + Sec)*1000 + round(Micro/1000).
-
 
 get_messages_list(Data)->
     ?LOGGER:debug("[~p]: get_messages_list  Data: ~w~n", [?MODULE, Data]),

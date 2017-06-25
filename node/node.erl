@@ -74,7 +74,6 @@ stop() ->
 
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Callback Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -124,11 +123,10 @@ init(GlobalProperties) ->
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
 
-    ?LOGGER:info("[~p]: Node: ~p, is up.~n", [?MODULE, NodeName]),
 
     Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
 
-    {ok, #context{
+    Context = #context{
         node_properties = NodeProperties,
         node_name = NodeName,
         protocol_monitor_ref = Protocol_Monitor_Reference,
@@ -141,7 +139,10 @@ init(GlobalProperties) ->
         report_unit_properties = ReportUnitProperties,
         node_status_timer = Timer,
         logger_ref = LoggerREF
-    }}.
+    },
+    ?LOGGER:info("[~p]: Node: ~p, is up with context: ~p .~n", [?MODULE, NodeName, Context]),
+
+    {ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed

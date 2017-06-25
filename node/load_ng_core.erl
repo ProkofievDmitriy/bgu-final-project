@@ -80,7 +80,7 @@ handle_incoming_message(FsmPid, Medium, Payload)->
     gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}}).
 
 get_status(FsmPid) ->
-    gen_fsm:sync_send_all_state_event(FsmPid, get_status).
+    gen_fsm:sync_send_all_state_event(FsmPid, get_status, 30000).
 
 
 reset(FsmPid) ->
@@ -327,7 +327,7 @@ handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, State
 handle_sync_event(get_status, _From, StateName, State) ->
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
     RoutingSet = query_valid_routes(State#state.routing_set),
-    ?LOGGER:debug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
+    ?LOGGER:preciseDebug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
 
     RoutingSetList = [
         {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
@@ -521,7 +521,7 @@ get_next_hop(Destination, State)->
             ?LOGGER:err("[~p]: get_next_hop UNEXPECTED RESULTS: ~p.~n", [?MODULE, Error]),
             {State, Error}
     end,
-    ?LOGGER:debug("[~p]: get_next_hop Result: ~p.~n", [?MODULE, Result]),
+    ?LOGGER:debug("[~p]: get_next_hop Result: ~w.~n", [?MODULE, Result]),
     Result.
 
 build_new_packet(Type, Destination, Data, State)->
@@ -754,7 +754,7 @@ consider_to_forwarding(Packet, State)->
 %unicast forwarding
 forward_packet(Packet, StateData) ->
     Destination = get_destination_to_forward(Packet),
-    ?LOGGER:info("[~p]: Trying to forward : to ~p, Packet uuid: ~w.~n", [?MODULE, Destination, Packet#load_ng_packet.uuid]),
+    ?LOGGER:debug("[~p]: Trying to forward : to ~p, Packet uuid: ~w.~n", [?MODULE, Destination, Packet#load_ng_packet.uuid]),
     {Status, Result} = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
     case Status of
         ok ->
@@ -871,18 +871,14 @@ query_not_valid_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time =< CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
-    ?LOGGER:debug("[~p]: query_not_valid_routes result CurrentMillis = ~w ,  ~w.~n", [?MODULE, CurrentMillis, Result]),
+    ?LOGGER:preciseDebug("[~p]: query_not_valid_routes result CurrentMillis = ~w ,  ~w.~n", [?MODULE, CurrentMillis, Result]),
     Result.
 
 query_valid_routes_for_destination(RoutingSetId, Destination)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time > CurrentMillis),(Entry#routing_set_entry.dest_addr =:= Destination) -> {Key, Entry} end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
-
-    %TODO debug purposes - remove next line
-    query_valid_routes(RoutingSetId),
-
-    ?LOGGER:debug("[~p]: query_valid_routes_for_destination : ~w, result : ~w.~n", [?MODULE, Destination, Result]),
+    ?LOGGER:preciseDebug("[~p]: query_valid_routes_for_destination : ~w, result : ~w.~n", [?MODULE, Destination, Result]),
     Result.
 
 
@@ -890,7 +886,7 @@ query_valid_routes(RoutingSetId)->
     CurrentMillis = get_current_millis(),
     Query = ets:fun2ms(fun({Key, Entry}) when (Entry#routing_set_entry.valid_time > CurrentMillis),(Entry#routing_set_entry.dest_addr =/= 0) -> Entry end),
     Result = qlc:eval(ets:table(RoutingSetId, [{traverse, {select, Query}}])),
-    ?LOGGER:debug("[~p]: query_valid_routes result CurrentMillis =  ~w,  ~w.~n", [?MODULE, CurrentMillis, Result]),
+    ?LOGGER:preciseDebug("[~p]: query_valid_routes result CurrentMillis =  ~w,  ~w.~n", [?MODULE, CurrentMillis, Result]),
     Result.
 
 query_expired_rreq(RREQ_HandlingSet_Id)->
@@ -936,11 +932,11 @@ update_routing_set_entry(Packet, StateData) -> %{dest_addr, next_addr, medium, h
         _ ->
             {error, failed_updating_routing_set_entry_unexpected_error}
     end,
-    ?LOGGER:debug("[~p]: update_routing_set_entry RoutingSet: ~n ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
-    ?LOGGER:debug("[~p]: update_routing_set_entry Destination: ~p .~n", [?MODULE, Packet#load_ng_packet.source]),
+    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry RoutingSet: ~n ~p .~n", [?MODULE, ets:tab2list(StateData#state.routing_set)]),
+    ?LOGGER:preciseDebug("[~p]: update_routing_set_entry Destination: ~p .~n", [?MODULE, Packet#load_ng_packet.source]),
     case EntryToUpdate of
         {ok, {Key, Entry}} ->
-            ?LOGGER:info("[~p]: update_routing_set_entry left valid  : ~w. , ~n", [?MODULE, Entry#routing_set_entry.valid_time - CurrentMillis]),
+            ?LOGGER:debug("[~p]: update_routing_set_entry ~w,  left valid  : ~w. , ~n", [?MODULE, Entry, Entry#routing_set_entry.valid_time - CurrentMillis]),
             ets:delete(StateData#state.routing_set, Key),
             ets:insert(StateData#state.routing_set, {Key, Entry#routing_set_entry{valid_time = CurrentMillis + ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS}});
         {error, Mesage} ->

@@ -242,7 +242,7 @@ handle_cast({{data_message, send_message}, Data}, State = #state{dm_ets = DM_ets
   dets:insert(DB, {{data_message, sent_message,Id},UTIME, Source,Destination}),
   ets:insert(DM_ets,{Id,{UTIME,-1 ,0}}),
 
-	io:format("stats_server got report about: Sent data msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
+	io:format("stats_server got report about: Sent data msg ~p from ~p to ~p at ~p~n",[Id, Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = NumberOfDataMsgSent + 1}}};
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -261,7 +261,7 @@ handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = C
  % [{Id,{StartTime,EndTime ,Relays}}] = ets:lookup(DM_ets,Id),%%%%%%%%%%%%%%%%%%%%%
  % ets:insert(DM_ets,{Id,{StartTime,EndTime ,Relays+1}}),
 
-  io:format("stats_server got report about: Relay msg from ~p to ~p through ~p at ~p~n",[Source,Destination, Node, UTIME]),
+  io:format("stats_server got report about: Relay msg ~p from ~p to ~p through ~p at ~p~n",[Id, Source,Destination, Node, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfRelayMsg = NumberOfRelayMsg + 1}}};
 
 handle_cast({states, From}, State) ->

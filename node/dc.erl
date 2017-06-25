@@ -538,7 +538,7 @@ handle_sync_event(_Event, _From, StateName, State) ->
   {stop, Reason :: normal | term(), NewStateData :: term()}).
 
 handle_info(Info, StateName, State) ->
-  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~ with data ~p",[self(),Info,StateName,State]),
+  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",[self(),Info,StateName,State]),
     {next_state, StateName, State}.
 
 
@@ -696,9 +696,9 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug(" sending bit message: ~p~n", [Bit_message]),
       Reply = protocol_interface:send_data_request(H, Bit_message),
-      utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
       case Reply of
         {ok, sent} ->
+            utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
                send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->
 

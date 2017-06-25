@@ -57,16 +57,15 @@ report(Message) ->
 
 internal_report(Type, Data)->
     % UTIME = isg_time:now_now(),
-    UTIME = ntp:ask(),
-    ?LOGGER:preciseDebug("[~p]: REPORT to stats_server : Type: ~p, Utime: ~p, Data: ~p~n",[?MODULE, Type, UTIME, Data]),
+    ?LOGGER:preciseDebug("[~p]: REPORT to stats_server : Type: ~p, Data: ~p~n",[?MODULE, Type, Data]),
     case Type of
         node_state ->
             Server = global:whereis_name(loadNGgui),
             ?LOGGER:preciseDebug("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
-            Reply =(catch wx_object:cast(Server, {Type, [{utime, UTIME} | Data]})),
+            Reply =(catch wx_object:cast(Server, {Type, Data})),
                 Reply;
         _ ->
-            Reply =(catch gen_server:cast({global, ?STATS_SERVER}, {Type, [{utime, UTIME} | Data] })),
+            Reply =(catch gen_server:cast({global, ?STATS_SERVER}, {Type, Data })),
                 Reply
     end.
 

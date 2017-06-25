@@ -22,7 +22,7 @@
 %   Records
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--record(context, {node_name, data_server_interface, data_server_name, data_server_ip, connected_to_server}).
+-record(context, {node_name, data_server_interface, data_server_name, data_server_ip, connected_to_server, ntp_offset}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API Functions Implementation
@@ -52,12 +52,14 @@ init(Properties) ->
     DataServerName = proplists:get_value(data_server_name, Properties),
     DataServerIp = proplists:get_value(data_server_ip, Properties),
     NodeName = proplists:get_value(node_name, Properties),
+    Offset = ntp:ask(),
     {ok, #context{
         node_name = NodeName,
         data_server_interface = DataServerInterface,
         data_server_name = DataServerName,
         data_server_ip = DataServerIp,
-        connected_to_server = false
+        connected_to_server = false,
+        ntp_offset = Offset
          }}.
 
 
@@ -149,7 +151,9 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %   UTILS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 prepare_message_data(DataList , Context)->
-    [{node_name, list_to_atom(Context#context.node_name)}|DataList].
+    List = [{node_name, list_to_atom(Context#context.node_name)}|DataList],
+    UTIME = round(utils:get_current_millis() + Context#context.ntp_offset),
+    [{utime, UTIME} | List].
 
 test_connection(Address)->
    case net_adm:ping(Address) of

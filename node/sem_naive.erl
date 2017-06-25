@@ -131,7 +131,7 @@ counting(Event,{My_name,My_protocol,My_node,Counter,Sn}) ->
 
 
 handle_info(Info, StateName, State) ->
-  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~ with data ~p",[self(),Info,StateName,State]),
+  log:err(" ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",[self(),Info,StateName,State]),
   {next_state, StateName, State}.
 
 terminate(Reason, StateName, State) ->

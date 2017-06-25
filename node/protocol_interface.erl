@@ -67,4 +67,4 @@ reset()->
 
 % return list of tuples [{destination, Destination}, {next_address, NextAddress}, {medium, Medium}]
 get_status()->
-    gen_server:call(?PROTOCOL_NAME, get_status , 15000).
+    gen_server:call(?PROTOCOL_NAME, get_status , 60000).

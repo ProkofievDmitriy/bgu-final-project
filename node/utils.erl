@@ -6,7 +6,13 @@
 
 
 -export([get_node_number/1, get_node_name/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2,
-         cut_list_from_delimiter/2, exec_curl/4, grafana_report/3]).
+         cut_list_from_delimiter/2, exec_curl/4, grafana_report/3, get_current_millis/0]).
+
+ get_current_millis() ->
+     {Mega, Sec, Micro} = os:timestamp(),
+     (Mega*1000000 + Sec)*1000 + round(Micro/1000).
+
+
 
 get_node_name(NodeAddress) when is_list(NodeAddress)->
     list_to_atom("node_" ++ NodeAddress);

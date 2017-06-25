@@ -38,11 +38,10 @@ unpack_ntp_packet( <<
    _OtsI:32, _OtsF:32,				% originate ts
    _RcvI:32, _RcvF:32,				% rcv t
    XmtI:32, XmtF:32				% xmt ts
-   >>)
-   ->
-    % {NowMS,NowS,NowUS} = now(),
-    % NowTimestamp = NowMS * 1.0e6 + NowS + NowUS/1000,
-    % TransmitTimestamp = XmtI - ?EPOCH + binfrac(XmtF),
+   >>) ->
+   {Mega, Sec, Micro} = os:timestamp(),
+    NowTimestamp = (Mega*1000000 + Sec)*1000 + round(Micro/1000),
+    TransmitTimestamp = XmtI - ?EPOCH + binfrac(XmtF),
     % { {li, LI}, {vn, Version}, {mode, Mode}, {stratum, Stratum},
 	% {poll, Poll}, {precision, Precision}, {rootDelay, RootDel},
 	% {rootDispersion, RootDisp}, {referenceId, R1, R2, R3, R4},
@@ -53,11 +52,10 @@ unpack_ntp_packet( <<
     %     {clientReceiveTimestamp, NowTimestamp},
     %     {offset, TransmitTimestamp - NowTimestamp}
     %  },
-     XmtI - ?EPOCH + binfrac(XmtF);
+     TransmitTimestamp - NowTimestamp;
 
 unpack_ntp_packet(_) ->
-    {Mega, Sec, Micro} = os:timestamp(),
-    (Mega*1000000 + Sec)*1000 + round(Micro/1000).
+    0.
 
 make_ntp_packet() ->
     %  LI,  VN,  Mode, rest... 384 bits overall

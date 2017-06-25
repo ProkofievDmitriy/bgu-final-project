@@ -210,6 +210,10 @@ handle_info(Request, Context)  ->
 
 
 
+terminate({timeout, Reason}, Context) ->
+    ?LOGGER:debug("[~p]: TIMEOUT TERMINATION CATCHED terminating, reason ~p, state ~p~n", [?MODULE, Reason, Context]),
+    {stop, error, Reason};
+
 terminate(Reason, Context) ->
     %TODO Proper termination of module with all consequences
     ?LOGGER:debug("[~p]: STUB terminating, reason ~p, state ~p~n", [?MODULE, Reason, Context]),
