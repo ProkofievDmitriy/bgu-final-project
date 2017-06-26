@@ -11,7 +11,7 @@
 
 %% API
 -export([]).
-
+-compile(export_all).
 -behaviour(gen_fsm).
 -include("app_macros.hrl").
 
@@ -121,9 +121,9 @@ counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
       %% if the drep has equal or newer sequence number- append my reading
 %%      if Sn=<Seq ->
         log:debug("[~p]  ~p is passing reading and generating a new one ~n", [?MODULE,My_name] ),
-        _Ok1 = send_drep(My_protocol, Data,Seq),
+        _Ok1 = send_drep(My_protocol, Data,Seq), % TODO extract only the originator
         timer:sleep(?SM_WAITING_TIME),
-        _Ok = send_drep(My_protocol, [{My_node,Counter}|[]],Seq),
+        _Ok = send_drep(My_protocol, [{My_node,Counter}|Data],Seq),
         %% returning to the same state with updated sequence number
         {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
 %%      %% if seq lower  - ignore
@@ -198,7 +198,7 @@ send_drep(My_protocol,Data,Seq) ->
       My_protocol! {drep,?DC_NODE,Data,Seq},
       ok;
     integrated ->
-      log:debug("[~p]  sending drep to: ~p with sequence ~p~n",[?MODULE,?DC_NODE,Seq]) ,
+      log:debug("[~p]  sending drep to: ~p with sequence ~p with data ~p~n",[?MODULE,?DC_NODE,Seq, Data]) ,
       % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
 
       Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),

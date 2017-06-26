@@ -40,7 +40,7 @@
                          node_control_interface,
                          stub_data_server,
                          isg_time,
-                         dc, am_sem, sem_naive, dc_naive, simple_app, simple_dc,
+                         dc, am_sem,sm_sem, sem_naive, dc_naive, simple_app, simple_dc,
                          stats_server_interface]).
 
 

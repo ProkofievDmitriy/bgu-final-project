@@ -91,6 +91,7 @@ init({Me, My_protocol,My_node,Meters}) ->
       ets:new(stats,[ordered_set,named_table,public]),
       ets:new(tracker, [ordered_set,named_table,public]),
       _Ok3 = insert_nodes_to_tracker(Meters),
+      _Ok5 = ets:insert(stats, {avg_changes,{0,0,0}}),
     %   _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
       log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
       _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
@@ -195,7 +196,7 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
 %%      log:err("[~p]  received drep from ~p in state discovering with lower seq of
 %%      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
 %%       [?MODULE,V,Seq,Nrs,Rd,Ter,Sn]),
-%%      _Ok = check_reading_and_log_time(),       
+%%      _Ok = check_reading_and_log_time(),
 %%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
 %%    Seq when Seq==Sn ->
     utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
@@ -381,7 +382,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn, 
       log:info("[~p]  ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
-      _Ok5 = insert_terminal_changes (Ter, Ter_in),
+      _Ok5 = insert_terminal_changes (Ter, Ter_in,Sn),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -416,7 +417,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,Ter_in ,Tim
       log:info("[~p]  ===== FINISHED ROUND ~p of collecting, preparing for next round======~n ",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
-      _Ok5 = insert_terminal_changes (Ter, Ter_in),
+      _Ok5 = insert_terminal_changes (Ter, Ter_in,Sn),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -561,15 +562,15 @@ handle_info(Info, StateName, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
 | term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(Reason, dixcovering, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
+terminate(Reason, discovering, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
   log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [?MODULE,Reason,discovering,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
   ok;
-terminate(Reason, collecting, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+terminate(Reason, collecting, {Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter,Ter_in ,Sn, Timerpid,Times}) ->
   Timerpid! stop,
   log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
-    [?MODULE,Reason,collection,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}]),
+    [?MODULE,Reason,collection,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter,Ter_in , Sn, Timerpid,Times}]),
   ok.
 
 
@@ -880,8 +881,16 @@ delete_unresponsive_nodes([H|T], Nrs,State)->
       delete_unresponsive_nodes(T,Nrs1,State)
       end.
 
+find_list_differences(L1,L2)->
+    List1 = L1 -- L2,
+    List2 = L2 -- L1,
+    List3 = lists:umerge(List1,List2),
+    Count = erlang:length(List3),
+    Count.
+
 
 
 % TODO implement the log of changes in terminals list
-insert_terminal_changes (_Ter, _Ter_in) ->
+insert_terminal_changes (Ter, Ter_in, Sn) ->
+
   ok.
