@@ -47,7 +47,7 @@
 
 start_link(My_node, My_protocol,Meters) ->
    Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
-   log:info("~p created ~n",[Me]),
+   log:info(" [~p] ~p created ~n",[Me]),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
@@ -82,13 +82,13 @@ init({Me, My_protocol,My_node,Meters}) ->
   Hand_shake =hand_shake(Me,My_protocol,1),
   case Hand_shake of
     ready ->
-      log:info("~p initialized~n", [Me]),
+      log:info(" [~p] ~p initialized~n", [Me]),
       Nrs = Meters,
       Rd = random_elements (Nrs),                         % 1/4+9c
       Nrs1 = delete_elements (Nrs, Rd),                   % 1/3+10
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-      log:info("first dreq sent, Rd are ~p~n",[Rd]),
+      log:info(" [~p] first dreq sent, Rd are ~p~n",[Rd]),
       Timerpid = erlang:spawn(?MODULE,timer,[Me]),        % 1/12
       {ok, discovering, {Me, My_protocol,My_node,Meters,Nrs1,Rd,[],0,Timerpid}};
     {terminate, Reason} -> log:critical("handshake with ~p failed with message:
@@ -171,13 +171,13 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
   log:debug("Nrs1 is ~p~n",[Nrs1]),
   case  Nrs1 of
     [] ->        %% external loop terminated, go ro phase 2
-      log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
+      log:info(" [~p] =========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
       Ter8 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-      log:info("sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
+      log:info(" [~p] sending dreq to terminals: ~p with sn ~p~n", [Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
@@ -186,7 +186,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                  % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
-      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       Timerpid!restart,                              % 1/12
       {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid}}
@@ -198,13 +198,13 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
    Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" , [Nrs,Rd,Ter,Sn]),
   Nrs1 = lists:usort(lists:umerge(Nrs,Rd)),                       % 1/23
   if Nrs1 == [] ->        %% external loop terminated, go ro phase 2
-      log:info("=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
+      log:info(" [~p] =========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n"),
       Timerpid!stop,
       Sn1=Sn+1,                                      % 2/3
       Nrs1 = Meters,                                 % 2/4
       Ter8 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter8,Sn1]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting,
@@ -213,7 +213,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                   % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),             % 1/10
-      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),   % 1/12
       {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Ter,Sn,Timerpid1}}
@@ -279,20 +279,20 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
   if
     Nrs == []->
-      log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
+      log:info(" [~p] ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
       Ter82 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-       log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
+       log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
       _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
       _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
       Timerpid ! restart,
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid}}
@@ -304,20 +304,20 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid})
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
   if
     Nrs == []->
-      log:info("===== FINISHED ROUND ~p of collecting, preparing for next round~====== n",[Sn]),
+      log:info(" [~p] ===== FINISHED ROUND ~p of collecting, preparing for next round~====== n",[Sn]),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
       Ter82 = Ter,                                    % 2/5
       Ter1 = [],                                     % 2/5
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Ter82,Sn1]),
       _Ok = send_dreq(My_protocol,Ter82,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
         {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1}};
     true ->
       log:debug("didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
-      log:info("sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Ter81,Sn]),
       _Ok = send_dreq(My_protocol,Ter81,Sn),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter81,Ter,Sn,Timerpid1}}
@@ -430,7 +430,7 @@ handle_info(Info, StateName, State) ->
 | term(), StateName :: atom(), StateData :: term()) -> term()).
 terminate(Reason, StateName, {Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}) ->
   Timerpid! stop,
-  log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+  log:info(" [~p] terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [Reason,StateName,{Me,My_protocol,Meters,Nrs, Ter8, Ter, Sn, Timerpid}]),
   ok.
 

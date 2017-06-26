@@ -43,7 +43,7 @@
 
 start_link({My_node, My_protocol, Meters}) ->
   Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
-  log:info("~p created ~n",[Me]),
+  log:info(" [~p] ~p created ~n",[Me]),
   timer:sleep(1500),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
@@ -65,15 +65,15 @@ init({Me, My_protocol,My_node,Meters}) ->
   Hand_shake =hand_shake(Me,My_protocol,1),
   case Hand_shake of
     ready ->
-      log:info("~p initialized~n", [Me]),
+      log:info(" [~p] ~p initialized~n", [Me]),
       Nrs = Meters,
       Rd = random_elements (Nrs),                         % 1/4+9c
       Nrs1 = delete_elements (Nrs, Rd),                   % 1/3+10
       ets:new(mr_ets,[ordered_set, named_table, public]), % create M
       _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-      log:info("first dreq sent, Rd are ~p~n",[Rd]),
+      log:info(" [~p] first dreq sent, Rd are ~p~n",[Rd]),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
-    %  log:info("AFTER TIMER SPAWN : ~w~n",[Timerpid]),
+    %  log:info(" [~p] AFTER TIMER SPAWN : ~w~n",[Timerpid]),
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs1,Rd,0,Timerpid}};
 
     {terminate, Reason} -> log:critical("handshake with ~p failed with message:
@@ -132,13 +132,13 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
   if
     Nrs1 == []->
-      log:info("====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
+      log:info(" [~p] ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[Sn]),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs2 = Meters,                                 % 2/4
       Rd3 = random_elements (Nrs2),                         % 1/4+9c
       Nrs3 = delete_elements (Nrs2, Rd3),                                      % 2/5
-      log:info("sending dreq to: ~p with sn ~p~n", [Rd3,Sn1]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Rd3,Sn1]),
       _Ok = send_dreq(My_protocol,Rd3,Sn1),           % 2/7
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me]),  % 2/8
       {next_state,collecting,
@@ -147,7 +147,7 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
       log:debug("received requested replies, preparing for another iteration of Sn ~p~n", [Sn]),
       Rd1 = random_elements (Nrs1),                  % 1/9
       Nrs2 = delete_elements (Nrs1, Rd1),            % 1/10
-      log:info("sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       Timerpid!restart,                              % 1/12
       {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn,Timerpid}}

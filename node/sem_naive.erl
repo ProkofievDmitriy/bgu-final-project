@@ -35,7 +35,7 @@
 
 start_link({My_node, My_protocol,_Meters}) ->
   My_name = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
-  log:info("~p created ~n",[?MODULE,My_name]),
+  log:info(" [~p] ~p created ~n",[?MODULE,My_name]),
   timer:sleep(1500),
   {ok, PID} = gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []),
   PID.
@@ -51,7 +51,7 @@ init({My_name,My_protocol,My_node}) ->
   Hand_shake =hand_shake(My_name,My_protocol,1),
   case Hand_shake of
     ready ->
-      log:info("~p initialized~n", [?MODULE,My_name]),
+      log:info(" [~p] ~p initialized~n", [?MODULE,My_name]),
       {ok, counting, {My_name,My_protocol,My_node,0,0}};
     {terminate, Reason} ->
       log:critical("[~p]  handshake with ~p failed with message: ~p~n", [?MODULE,My_protocol,Reason]),
@@ -59,13 +59,13 @@ init({My_name,My_protocol,My_node}) ->
   end.
 
 counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}) ->
-  log:info("received bit string: ~p~n", [?MODULE,Bit_string]),
+  log:info(" [~p] received bit string: ~p~n", [?MODULE,Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
-  log:debug("Extracted values: Type: ~w, To_n: ~w, Seq: ~w, Data_b ~w ~n", [?MODULE,Type, To_n, Seq, Data_b ]),
+  log:debug("[~p] Extracted values: Type: ~p, To_n: ~p, Seq: ~p, Data_b ~p ~n", [?MODULE,Type, To_n, Seq, Data_b ]),
 
   To = extract_name(To_n),
-  log:debug("Extracted name: ~p~n", [?MODULE,To]),
+  log:debug("[~p] Extracted name: ~p~n", [?MODULE,To]),
 
   %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
   case Type of
@@ -91,19 +91,19 @@ counting(increment, {My_name,My_protocol,My_node,Counter,Sn}) ->
 
 %%TODO - consider replacing with 2 function using pattern matching on To(Me/other)
 counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
-  log:debug("~p received dreq with Sn ~p~n", [?MODULE,My_name,Seq] ),
+  log:debug("[~p] ~p received dreq with Sn ~p~n", [?MODULE,My_name,Seq] ),
   %% if the dreq was meant to me
   if To == My_node ->
     %% if the dreq has a bigger sequence number - send reading and update my sn
     if Sn=<Seq ->
       %% sending reading
-      log:info("~p is sending reading ~n", [?MODULE,My_name] ),
+      log:info(" [~p] ~p is sending reading ~n", [?MODULE,My_name] ),
       _Ok = send_drep (My_protocol,[{My_node,Counter}|[]],Seq),
       %% returning to the same state with updated sequence number
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
     %% if seq lower or equals - ignore
       true ->
-        log:debug("~p received dreq ,with Seq ~p, local Sn ~p, ignoring~n", [?MODULE,My_name,Seq,Sn] ),
+        log:debug("[~p] ~p received dreq ,with Seq ~p, local Sn ~p, ignoring~n", [?MODULE,My_name,Seq,Sn] ),
         {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}
     end;
   %% if the dreq was not meant to me pass it back
@@ -116,7 +116,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
 counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
   case To of
     ?DC_NODE ->
-      log:info("~p received drep with Seq ~p, state data: ~p ~n", [?MODULE,My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
+      log:info(" [~p] ~p received drep with Seq ~p, state data: ~p ~n", [?MODULE,My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
       _Ok = send_drep(My_protocol,Data, Seq),
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}};
     Dest ->
@@ -135,7 +135,7 @@ handle_info(Info, StateName, State) ->
   {next_state, StateName, State}.
 
 terminate(Reason, StateName, State) ->
-  log:info("terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+  log:info(" [~p] terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [?MODULE,Reason,StateName,State]),
   ok.
 
@@ -197,13 +197,13 @@ hand_shake(Me,My_protocol,Times) ->
 send_drep(My_protocol,Data,Seq) ->
   case ?TEST_MODE of
     local ->
-      log:debug("sending drep to ~p with seq ~p",[?MODULE,?DC_NODE, Seq]),
+      log:debug("[~p] sending drep to ~p with seq ~p",[?MODULE,?DC_NODE, Seq]),
 %%      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
 %%      My_protocol ! Bit_message,
       My_protocol! {drep,?DC_NODE,Data,Seq},
       ok;
     integrated ->
-      log:debug("sending drep to: ~p with sequence ~p~n",[?MODULE,?DC_NODE,Seq]) ,
+      log:debug("[~p] sending drep to: ~p with sequence ~p~n",[?MODULE,?DC_NODE,Seq]) ,
       % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
 
       Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
@@ -220,14 +220,14 @@ send_drep(My_protocol,Data,Seq) ->
 send_dreq(My_protocol, To, Seq) ->
   case ?TEST_MODE of
     local ->
-      log:debug ("sending dreq To ~p with Seq: ~p~n" , [?MODULE,To,Seq]),
+      log:debug ("[~p] sending dreq To ~p with Seq: ~p~n" , [?MODULE,To,Seq]),
 %%      Bit_message = message_to_bit({dreq, To,Seq}),
 %%      My_protocol! Bit_message,
       My_protocol ! {dreq, To, Seq},
       ok;
 
     integrated ->
-      log:debug("sending dreq to: ~p with sequence ~p~n", [?MODULE,To,Seq]) ,
+      log:debug("[~p] sending dreq to: ~p with sequence ~p~n", [?MODULE,To,Seq]) ,
       %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
       Bit_message = message_to_bit({dreq, To, Seq}),
       log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),

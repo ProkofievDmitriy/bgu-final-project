@@ -35,7 +35,7 @@
 
 start_link({My_node, My_protocol,_Meters}) ->
   My_name = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
-  log:info("[~p]  ~p created ~n",[?MODULE,My_name]),
+  log:info(" [~p]   ~p created ~n",[?MODULE,My_name]),
   timer:sleep(1500),
   {ok, PID} = gen_fsm:start_link({local, My_name}, ?MODULE,{My_name,My_protocol,My_node}, []),
   PID.
@@ -51,7 +51,7 @@ init({My_name,My_protocol,My_node}) ->
   Hand_shake =hand_shake(My_name,My_protocol,1),
   case Hand_shake of
    ready ->
-    log:info("[~p]  ~p initialized~n", [?MODULE,My_name]),
+    log:info(" [~p]   ~p initialized~n", [?MODULE,My_name]),
      {ok, counting, {My_name,My_protocol,My_node,0,0}};
     {terminate, Reason} ->
       log:critical("[~p]  handshake with ~p failed with message: ~p~n", [?MODULE,My_protocol,Reason]),
@@ -59,7 +59,7 @@ init({My_name,My_protocol,My_node}) ->
   end.
 
 counting({received_message, Bit_string},{My_name,My_protocol,My_node,Counter,Sn}) ->
-  log:info("[~p]  received bit string: ~p~n", [?MODULE,Bit_string]),
+  log:info(" [~p]   received bit string: ~p~n", [?MODULE,Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
   log:debug("[~p]  Extracted values: Type: ~w, To_n: ~w, Seq: ~w, Data_b ~w ~n", [?MODULE,Type, To_n, Seq, Data_b ]),
@@ -97,7 +97,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
     %% if the dreq has a bigger sequence number - send reading and update my sn
     if Sn=<Seq ->
       %% sending reading
-      log:info("[~p]  ~p is sending reading ~n", [?MODULE,My_name] ),
+      log:info(" [~p]   ~p is sending reading ~n", [?MODULE,My_name] ),
       _Ok = send_drep (My_protocol,[{My_node,Counter}|[]],Seq),
       %% returning to the same state with updated sequence number
       {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
@@ -116,7 +116,7 @@ counting({dreq,To,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
 counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
   case To of
     ?DC_NODE ->
-  log:info("[~p]  ~p received drep with Seq ~p, state data: ~p ~n", [?MODULE,My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
+  log:info(" [~p]   ~p received drep with Seq ~p, state data: ~p ~n", [?MODULE,My_name,Seq,{My_name,My_protocol,My_node,Counter,Sn}] ),
   %% if the drep has equal or newer sequence number- append my reading
 %%  if Sn=<Seq ->
     log:debug("[~p]  ~p is appending reading ~n", [?MODULE,My_name] ),
@@ -145,7 +145,7 @@ handle_info(Info, StateName, State) ->
     {next_state, StateName, State}.
 
 terminate(Reason, StateName, State) ->
-  log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+  log:info(" [~p]   terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [?MODULE,Reason,StateName,State]),
   ok.
 

@@ -1,6 +1,6 @@
-% -define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng, report, stats_server_interface, transport,utils]).
+-define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng,load_ng_core, report, stats_server_interface, transport,utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
--define(MODULES_TO_FILTER, [stats_server_interface, report]).
+% -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
 
 
@@ -9,7 +9,7 @@
 -define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
--define(LOGGER_MODE, file).
+-define(LOGGER_MODE, dual).
 
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).

@@ -43,7 +43,7 @@
 
 start_link({My_node, My_protocol, Meters}) ->
   Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
-  log:info("[~p]  ~p created ~n",[Me]),
+  log:info(" [~p]  ~p created ~n",[?MODULE,Me]),
   % timer:sleep(3000),
   {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
@@ -65,7 +65,7 @@ init({Me, My_protocol,My_node,Meters}) ->
   Hand_shake =hand_shake(Me,My_protocol,1),
   case Hand_shake of
     ready ->
-      log:info("[~p]  ~p initialized~n", [?MODULE,Me]),
+      log:info(" [~p]  ~p initialized~n", [?MODULE,Me]),
       Rd= random_elements(Meters)  ,                       % 1/4+9c
       Nrs = delete_elements(Meters, Rd),
       Nrs = delete_elements(Meters, Rd),
@@ -74,12 +74,12 @@ init({Me, My_protocol,My_node,Meters}) ->
       ets:new(tracker, [ordered_set,named_table,public]),
       _Ok3 = insert_nodes_to_tracker(Meters),
     %   _Ok = send_dreq(My_protocol,[Rd],0),                    % 1/11
-       log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
+       log:info(" [~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
       _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
       log:debug("[~p]  current requests info: Avg ~p, Sn ~p , Count ~p~n", [?MODULE,0, 0, erlang:length(Rd)]),
       _OK2 = ets:insert(stats, {avg_round_time,{ 0, 0, get_current_millis()}}),
       log:debug("[~p]  current time info: Avg ~p, Sn ~p , Start ~p~n", [?MODULE,0, 0, get_current_millis()]),
-      _Ok4 = update_tracker(Rd),
+    %   _Ok4 = update_tracker(Rd),
       Timerpid = erlang:spawn(?MODULE, timer, [Me]),        % 1/12
       {ok, collecting, {Me, My_protocol,My_node,Meters,Nrs,Rd,0,Timerpid}};
 
@@ -100,7 +100,7 @@ init({Me, My_protocol,My_node,Meters}) ->
 %%--------------------------------------------------------------------
 
 collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
-  log:info("[~p]  received bit string: ~p~n", [?MODULE,Bit_string]),
+  log:info(" [~p]  received bit string: ~p~n", [?MODULE,Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
   To = extract_name(To_n),
@@ -143,10 +143,10 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerp
 %%          {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Rd,Sn,Timerpid}};
 %%        Seq when Seq==Sn ->
         utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
-          log:info("[~p]  received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
+          log:info(" [~p] received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
        ~p,Rd = ~p, Sn: ~p~n", [?MODULE,V,Seq,Nrs,Rd,Sn]),
           Nodes = extract_nodes_from_drep([], Data),
-      log:info("[~p]  extracted nodes: ~p~n",[?MODULE,Nodes]),
+      log:info(" [~p]   extracted nodes: ~p~n",[?MODULE,Nodes]),
           Nrs1 = lists:subtract(Nrs, Nodes),                 % 2/15
           Rd2 = lists:subtract(Rd,Nodes),
           _Ok = ets:insert(mr_ets,Data),
@@ -165,14 +165,14 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Nrs1 =lists:usort(lists:umerge(Nrs ,Rd)),
   Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
   if Nrs_new == []->
-      log:info("[~p]  ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[?MODULE,Sn]),
+      log:info(" [~p] ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[?MODULE,Sn]),
     _Ok = report_averages(),
     _Ok4 = insert_nodes_to_tracker(Meters),
     Timerpid! stop,
       Sn1 = Sn+1,
       Rd1=random_elements(Meters),
       Nrs2 = delete_elements(Meters, Rd1),
-      log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd1,Sn1]),
+      log:info(" [~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd1,Sn1]),
       _Ok = send_dreq(My_protocol,Rd1,Sn1),           % 2/7
       _Ok1 = insert_requests( Rd1, Sn1),
       _Ok2 = insert_time(Sn1),
@@ -184,7 +184,7 @@ collecting(rd_empty,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
       log:debug("[~p]  received requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
       Rd1 = random_elements(Nrs_new),
       Nrs2 = delete_elements(Nrs_new, Rd1),
-      log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd1,Sn]),
+      log:info(" [~p] sending dreq to: ~p with sn ~p~n", [?MODULE,Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),             % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
       _Ok2 = update_tracker(Rd1),
@@ -201,7 +201,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Nrs_new = delete_unresponsive_nodes(Rd, Nrs1),
   log:debug ("[~p]: Nrs_new is: ~p~n", [?MODULE,Nrs_new]),
   if Nrs_new == [] ->        %% external loop terminated, go ro phase 2
-    log:info("[~p]  =========FINISHED round ~p of collecting,, preparing for next round ========~n",[?MODULE,Sn]),
+    log:info(" [~p]  =========FINISHED round ~p of collecting,, preparing for next round ========~n",[?MODULE,Sn]),
     _Ok = report_averages(),
     _Ok4 = insert_nodes_to_tracker(Meters),
     Timerpid!stop,
@@ -209,7 +209,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     Rd1=random_elements(Meters),
     Nrs2 = delete_elements(Meters, Rd1),
     _Ok = send_dreq(My_protocol,Rd1,Sn1),                    % 1/11
-    log:info("[~p]  sending dreq, Rd are ~p~n",[?MODULE,Rd]),
+    log:info(" [~p]  sending dreq, Rd are ~p~n",[?MODULE,Rd]),
     _Ok1 = insert_requests( Rd, Sn1),
     _Ok2 = insert_time(Sn1),
     _Ok3 = update_tracker(Rd),
@@ -217,10 +217,10 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
     {next_state,collecting,
       {Me,My_protocol,My_node,Meters,Nrs2,Rd1,Sn1,Timerpid1}};
     true ->              %% otherwise prepare for next iteration
-      log:info("[~p]  didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
+      log:info(" [~p] didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
       Rd1 = random_elements(Nrs_new),
       Nrs2 = delete_elements(Nrs_new, Rd1),
-      log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,Sn]),
+      log:info(" [~p]   sending dreq to: ~p with sn ~p~n", [?MODULE,Rd1,Sn]),
       _Ok = send_dreq(My_protocol,Rd1,Sn),              % 1/11
       _Ok1 = insert_requests( Rd1, Sn),
       _Ok2 = update_tracker(Rd1),
@@ -333,7 +333,7 @@ handle_info(_Info, StateName, State) ->
 | term(), StateName :: atom(), StateData :: term()) -> term()).
 terminate(Reason, StateName, {Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}) ->
   Timerpid! stop,
-  log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+  log:info(" [~p]   terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [?MODULE,Reason,StateName,{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerpid}]),
   ok.
 %%--------------------------------------------------------------------
@@ -546,7 +546,7 @@ timer(Me) ->
     restart ->
 %%      log:debug("[~p]  RESTART TIMER : ~w~n", [?MODULE,self()]) ,
       timer(Me)
-  after ?DISCOVERING_TIMEOUT ->
+  after ?COLLECTING_TIMEOUT ->
 %%    log:debug("[~p]  TIMER TIMEOUT : ~w~n", [?MODULE,self()]) ,
     gen_fsm:send_event(Me,timeout)
   end.
@@ -604,7 +604,7 @@ insert_time(Sn) ->
 
 
 report_to_server(List) ->
-  log:info("[~p]  sending stats report: ~p~n",[?MODULE,List]),
+  log:info(" [~p] sending stats report: ~p~n",[?MODULE,List]),
   ok.
 
 insert_nodes_to_tracker([]) -> ok;

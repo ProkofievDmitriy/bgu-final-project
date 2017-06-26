@@ -443,6 +443,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,T
                 log:info("[~p]  trying reaching terminals for the ~p time ~n",[?MODULE,Other+1]),
                 log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8,Sn]),
                 _Ok = send_dreq(My_protocol,Ter8,Sn),
+                _Ok1 = insert_requests( Ter8, Sn),
                 _Ok2 = update_tracker(Ter8),
                 Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
                 {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Sn,Timerpid1,Times+1}}
