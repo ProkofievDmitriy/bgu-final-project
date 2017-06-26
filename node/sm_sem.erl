@@ -122,7 +122,7 @@ counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
 %%      if Sn=<Seq ->
         log:debug("[~p]  ~p is passing reading and generating a new one ~n", [?MODULE,My_name] ),
         _Ok1 = send_drep(My_protocol, Data,Seq),
-        sleep(?SM_WAITING_TIME),
+        timer:sleep(?SM_WAITING_TIME),
         _Ok = send_drep(My_protocol, [{My_node,Counter}|[]],Seq),
         %% returning to the same state with updated sequence number
         {next_state, counting, {My_name,My_protocol,My_node,Counter,Seq}};
@@ -140,3 +140,159 @@ counting({drep,To,Data,Seq},{My_name,My_protocol,My_node,Counter,Sn}) ->
 counting(Event,{My_name,My_protocol,My_node,Counter,Sn}) ->
   log:err("[~p]  ~p recaived UNEXPECTED EVENT ~p~n", [?MODULE,My_name,Event] ),
   {next_state, counting, {My_name,My_protocol,My_node,Counter,Sn}}.
+
+hand_shake(Me,My_protocol,Times) ->
+  case ?TEST_MODE of
+    local ->
+      My_protocol! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
+      receive
+        ok -> ready;
+        Err-> case Times of
+                Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
+                  hand_shake(Me,My_protocol,Times+1);
+                Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
+                  {terminate, Err}
+              end
+      after ?HAND_SHAKE_TIMEOUT -> case Times of
+                                     Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+                                       log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+                                       hand_shake(Me,My_protocol,Times+1);
+                                     Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+                                       log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+                                       {terminate, timeout}
+                                   end
+      end;
+    integrated ->
+      Reply =( catch protocol_interface:hand_shake(self(),?HAND_SHAKE_TIMEOUT)),
+      case Reply of
+        ok -> ready;
+        {'EXIT',{timeout,{gen_server,call,_}}} ->
+          case Times of
+            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+              log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+              hand_shake(Me,My_protocol,Times+1);
+            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+              log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+              {terminate, timeout}
+          end;
+        Err->
+          case Times of
+            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+              log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
+              hand_shake(Me,My_protocol,Times+1);
+            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+              log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
+              {terminate, Err}
+          end
+      end
+  end.
+
+send_drep(My_protocol,Data,Seq) ->
+  case ?TEST_MODE of
+    local ->
+      log:debug("[~p]  sending drep to ~p with seq ~p",[?MODULE,?DC_NODE, Seq]),
+%%      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+%%      My_protocol ! Bit_message,
+      My_protocol! {drep,?DC_NODE,Data,Seq},
+      ok;
+    integrated ->
+      log:debug("[~p]  sending drep to: ~p with sequence ~p~n",[?MODULE,?DC_NODE,Seq]) ,
+      % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+
+      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+      log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),
+      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,Bit_message)),
+
+      %  Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Data,Seq})),
+      case Reply of
+        {ok, sent} -> ok;
+        Err -> log:critical("[~p]  error in gen_server:call in send_drep : ~p~n",[?MODULE,Err])
+      end
+  end .
+
+send_dreq(My_protocol, To, Seq) ->
+  case ?TEST_MODE of
+    local ->
+      log:debug ("sending dreq To ~p with Seq: ~p~n" , [?MODULE,To,Seq]),
+%%      Bit_message = message_to_bit({dreq, To,Seq}),
+%%      My_protocol! Bit_message,
+      My_protocol ! {dreq, To, Seq},
+      ok;
+
+    integrated ->
+      log:debug("[~p]  sending dreq to: ~p with sequence ~p~n", [?MODULE,To,Seq]) ,
+      %Reply = (catch gen_server:call(My_protocol, {dreq, To, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+      Bit_message = message_to_bit({dreq, To, Seq}),
+      log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),
+      Reply = (catch protocol_interface:send_data_request(To,Bit_message)),
+      case Reply of
+        ok -> ok;
+        Err -> log:critical("[~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err])
+      end
+  end.
+
+
+message_to_bit({dreq,To,Seq}) ->
+  Type_b = <<?DREQ_BIT:1>>,
+  Dest = extract_address(To),
+  Dest_b = <<Dest:?NODE_BITS>>,
+  Seq_b = <<Seq:?SEQ_BITS>>,
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>;
+
+message_to_bit({drep,To,Data,Seq})->
+  Data_b = data_to_bits(Data,<<>>),
+  Type_b = <<?DREP_BIT:1>>,
+  Dest = extract_address(To),
+  Dest_b = <<Dest:?NODE_BITS>>,
+  Seq_b = <<Seq:?SEQ_BITS>>,
+  <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring, Data_b/bitstring>>.
+
+
+
+%%bit_to_data(<<>>, List) -> List;
+%%bit_to_data(Data_b, List) ->
+%%  <<Meter_b:?NODE_BITS,Reading_b:?READING_BITS, Tail/bitstring>> = Data_b,
+%%  Meter_n = erlang:binary_to_integer(bitstring_to_binary(Meter_b),2),
+%%  Meter = extract_name(Meter_n),
+%%  Reading = erlang:binary_to_integer(bitstring_to_binary(Reading_b)),
+%%  bit_to_data(Tail,[{Meter,Reading}|List]).
+
+bit_to_data(<<>>, List) -> List;
+bit_to_data(Data_b, List) ->
+  <<Meter_b:?NODE_BITS,Reading:?READING_BITS, Tail/bitstring>> = Data_b,
+  Meter = extract_name(Meter_b),
+  bit_to_data(Tail,[{Meter,Reading}|List]).
+
+
+
+%%% readings order will be reversed at the end of this -> at the receiving side will be reversed back.
+data_to_bits([],String) ->String;
+data_to_bits([{Meter,Reading}|T],String)->
+  Meter_n = extract_address(Meter),
+  Meter_b = <<Meter_n:?NODE_BITS>>,
+  Reading_b = <<Reading:?READING_BITS>>,
+  NewString = <<Meter_b/bitstring, Reading_b/bitstring, String/bitstring>>,
+  data_to_bits(T,NewString).
+
+
+%%bitstring_to_binary(Bitstring) ->
+%%  Size = bit_size(Bitstring),
+%%  Stuff = 8 - (Size rem 8),
+%%  case Stuff of
+%%    0 -> Bitstring;
+%%    Other -> << 0:Other , Bitstring/bitstring>>
+%%  end.
+
+
+
+
+
+
+%% todo implement in a less stupid way
+extract_address(NodeNameAtom)->
+  utils:get_node_number(NodeNameAtom).
+
+extract_name(Number) ->
+  utils:get_node_name(Number).

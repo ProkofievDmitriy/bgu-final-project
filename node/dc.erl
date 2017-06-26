@@ -195,7 +195,7 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
 %%      log:err("[~p]  received drep from ~p in state discovering with lower seq of
 %%      ~p,ignore.~n state data: Nrs:~p, Rd:~p, Ter:~p, Sn:~p~n",
 %%       [?MODULE,V,Seq,Nrs,Rd,Ter,Sn]),
-%%      _Ok = check_reading_and_log_time(),       %%todo
+%%      _Ok = check_reading_and_log_time(),       
 %%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
 %%    Seq when Seq==Sn ->
     utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
@@ -236,6 +236,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       Sn1=Sn+1,                                      % 2/3
       Nrs2 = Meters,                                 % 2/4
       Ter8 = Ter,                                    % 2/5
+      Ter_in = Ter,
       Ter1 = [],                                     % 2/5
       log:info("[~p]  sending dreq to terminals: ~p with sn ~p~n", [?MODULE,Ter8,Sn1]),
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
@@ -244,7 +245,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       _Ok3 = update_tracker((Ter8)),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
       {next_state, collecting,
-        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1,0}};
+        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Ter_in,Sn1,Timerpid1,0}};
     Nrs_new  ->              %% otherwise prepare for next iteration
       log:info("[~p]  received requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
       Rd1 = random_elements (Nrs_new),                   % 1/9
@@ -303,7 +304,7 @@ discovering( Event , State_data) ->
 %%===================================================================================
 
 
-collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn, Timerpid,Times}) ->
   log:info("[~p]  received bit string: ~p~n", [?MODULE,Bit_string]),
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
  % To_n = erlang:binary_to_integer(bitstring_to_binary(To_b)),
@@ -311,26 +312,26 @@ collecting({received_message, Bit_string},{Me,My_protocol,My_node,Meters,Nrs, Te
   %Seq = erlang:binary_to_integer(bitstring_to_binary(Seq_b)),
   case Type of
     ?DREQ_BIT -> gen_fsm:send_event(Me, {dreq,To,Seq}),
-     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
+     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Ter_in,Sn,Timerpid,Times}} ;
     ?DREP_BIT ->
       Data_size = bit_size(Data_b),
       Entry_size = ?NODE_BITS+?READING_BITS,
       if Data_size rem Entry_size =/= 0 ->
         log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
-        {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
+        {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Ter_in,Sn,Timerpid,Times}} ;
         true ->
           Data = bit_to_data(Data_b,[]),
           gen_fsm:send_event(Me, {drep, To,Data,Seq}),
-          {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}}
+          {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Ter_in,Sn,Timerpid,Times}}
       end
   end;
 
 
 
-collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter,Ter_in, Sn, Timerpid,Times}) ->
   if To =/= My_node ->
     log:err("[~p]  dc received drep with destination address of: ~p, ignoring~n",[?MODULE,To]),
-    {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Sn,Timerpid,Times}} ;
+    {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Ter_in,Sn,Timerpid,Times}} ;
     true ->
         utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
 
@@ -340,14 +341,14 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
 %%      log:err("[~p]  received drep from ~p in state collecting with higher seq of
 %%      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
 %%      [?MODULE,V,Seq,Nrs,Ter8,Ter,Sn]),
-%%      next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid};
+%%      next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Ter_in,Sn,Timerpid};
 %%    Seq when Seq<Sn ->
 %%      % the seq num of the drep is lower than expected -> error,check
 %%      log:err("[~p]  received drep from ~p in state collecting with lower seq of
 %%      ~p,ignore.~n state data: Nrs:~p, Ter8:~p, Ter:~p, Sn:~p~n",
 %%       [?MODULE,V,Seq,Nrs,Ter8,Ter,Sn]),
 %%      _Ok = check_reading_and_log_time(),       %%todo
-%%      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Sn,Timerpid}};
+%%      {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Ter8,Ter,Ter_in,Sn,Timerpid}};
 %%    Seq when Seq==Sn ->
       log:info("[~p]  received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
        ~p,Ter* = ~p, Ter: ~p, Sn: ~p~n", [?MODULE,V,Seq,Nrs,Ter8,Ter,Sn]),
@@ -361,16 +362,16 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,
       Ter82 = lists:subtract(Ter81,Nodes1),
       _Ok = ets:insert(mr_ets,Data),
       if Ter82 == [] ->  gen_fsm:send_event(Me, ter8_empty),
-        {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
+        {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Ter_in,Sn,
          Timerpid,Times}};
-        true -> {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Sn,
+        true -> {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter2,Ter_in,Sn,
          Timerpid,Times}}
 %%      end
    end
  end;
 
 
-collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn, Timerpid,Times}) ->
    log:debug("[~p]  received ter8_empy event in state collecting,~n State data:
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p, Terms_time: ~p~n" , [?MODULE,Nrs,Ter8,Ter,Sn,Times]),
   Ter81 =lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -380,6 +381,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       log:info("[~p]  ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
+      _Ok5 = insert_terminal_changes (Ter, Ter_in),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -392,7 +394,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       _Ok3 = update_tracker(Ter82),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1,0}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Ter,Sn1,Timerpid1,0}};
     true ->
       log:debug("[~p]  received requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
       log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8_new,Sn]),
@@ -400,10 +402,10 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpi
       _Ok1 = insert_requests( Ter8_new, Sn),
       _Ok2 = update_tracker(Ter8_new),
       Timerpid ! restart,
-      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Sn,Timerpid,Times}}
+      {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Ter_in,Sn,Timerpid,Times}}
   end;
 
-collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,Times}) ->
+collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,Ter_in ,Timerpid,Times}) ->
   log:debug("[~p]  received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [?MODULE,Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -414,6 +416,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,T
       log:info("[~p]  ===== FINISHED ROUND ~p of collecting, preparing for next round======~n ",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
+      _Ok5 = insert_terminal_changes (Ter, Ter_in),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -426,9 +429,9 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,T
       _Ok3 = update_tracker(Ter82),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
       {next_state,collecting,
-        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Sn1,Timerpid1,0}};
+        {Me,My_protocol,My_node,Meters,Nrs1,Ter82,Ter1,Ter,Sn1,Timerpid1,0}};
     true ->
-      % TODO matbe try to reach terminals more than once
+
       log:debug("[~p]  didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
           case Times of
               ?MAX_TERMINALS_TIMES ->
@@ -438,7 +441,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,T
                   _Ok1 = insert_requests( Ter8_new, Sn),
                   _Ok2 = update_tracker(Ter8_new),
                   Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
-                  {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Sn,Timerpid1,Times}};
+                  {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Ter_in,Sn,Timerpid1,Times}};
             Other ->
                 log:info("[~p]  trying reaching terminals for the ~p time ~n",[?MODULE,Other+1]),
                 log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8,Sn]),
@@ -446,7 +449,7 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn, Timerpid,T
                 _Ok1 = insert_requests( Ter8, Sn),
                 _Ok2 = update_tracker(Ter8),
                 Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
-                {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Sn,Timerpid1,Times+1}}
+                {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Ter_in,Sn,Timerpid1,Times+1}}
             end
  end;
 
@@ -769,8 +772,6 @@ bitstring_to_binary(Bitstring) ->
 
 
 
-%% todo implement in a less stupid way
-%% todo implement in a less stupid way
 extract_address(NodeNameAtom)->
     utils:get_node_number(NodeNameAtom).
 
@@ -878,3 +879,9 @@ delete_unresponsive_nodes([H|T], Nrs,State)->
       Nrs1=lists:delete(H,Nrs),
       delete_unresponsive_nodes(T,Nrs1,State)
       end.
+
+
+
+% TODO implement the log of changes in terminals list
+insert_terminal_changes (_Ter, _Ter_in) ->
+  ok.
