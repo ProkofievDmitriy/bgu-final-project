@@ -113,4 +113,4 @@ warn(Message) ->
 
 isValidModule([])-> true;
 isValidModule(Params)->
-    not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).
+    not lists:member(lists:nth(5, Params), ?MODULES_TO_FILTER).
