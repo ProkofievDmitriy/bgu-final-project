@@ -61,24 +61,28 @@ updateUpperLevelPid(FsmPid, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
 
 send(FsmPid, {Type, Destination, Data})->
-    gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, self()}}),
-    StartTime = get_current_millis(),
-    Result = receive
-               {ok , sent} -> {ok , sent};
-               {error, Error} ->
-                   {error, Error}
-               after 2 * ?NET_TRAVERSAL_TIME ->
-               ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
-               ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
-               case ResultSyncSend of
-                   {ok , sent} -> {ok, sent};
-                   _ ->
-                       ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
-                      {error, timeout_exceeded}
-               end
-           end,
-    ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
-    Result.
+    % gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, self()}}),
+    % StartTime = get_current_millis(),
+    % Result = receive
+    %            {ok , sent} -> {ok , sent};
+    %            {error, Error} ->
+    %                {error, Error}
+    %            after 2 * ?NET_TRAVERSAL_TIME ->
+    %            ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
+    %            ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
+    %            case ResultSyncSend of
+    %                {ok , sent} -> {ok, sent};
+    %                _ ->
+    %                    ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
+    %                   {error, timeout_exceeded}
+    %            end
+    %        end,
+    % ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
+    % Result.
+    ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
+    ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, ResultSyncSend]),
+    ResultSyncSend.
+
 
 send_sync(FsmPid, {Type, Destination, Data})->
     ?LOGGER:info("[~p]: Send SYNC ~p to ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),

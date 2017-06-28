@@ -383,9 +383,9 @@ handle_info({Counters = #counters{}, AvgTime,AvgLength}, State) ->
                 "\nNumber Of ManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
-                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nAverage time: " ++ float_to_list(AvgTime) ++
-				"\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
+                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg)),
+                % "\nAverage time: " ++ float_to_list(AvgTime) ++
+				% "\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
   {noreply, State};
 handle_info(E, State) ->
 	io:format("handle_info _Event ~p~n",[E]),

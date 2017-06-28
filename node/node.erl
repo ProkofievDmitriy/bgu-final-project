@@ -65,8 +65,6 @@ internal_start(Properties) when is_list(Properties)->
     Timeout = proplists:get_value(timeout, NodeProperties),
     io:format("[~p]: TimeOut = ~p~n", [?MODULE, Timeout]),
     {ok, NodePID} = gen_server:start_link({global, list_to_atom(NodeName)}, ?MODULE, Properties, [{timeout, Timeout * 3}]),
-    %% Spawn Monitor
-%    spawn(?MODULE, monitor_func, [NodePID, [NodeName, NodeRole]]),
     NodePID.
 
 stop() ->
@@ -78,7 +76,7 @@ stop() ->
 %   Callback Functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 init(GlobalProperties) ->
-%	process_flag(trap_exit, true),
+	% process_flag(trap_exit, true),
 	group_leader(whereis(user),self()), %this process is a group leader for this node
 
 
@@ -123,8 +121,7 @@ init(GlobalProperties) ->
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
 
-
-    % Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
+    Timer = timer:send_interval(?NODE_STATUS_TIMER_INTERVAL, self(), send_node_status), % ~50 fps
 
     Context = #context{
         node_properties = NodeProperties,
@@ -137,7 +134,7 @@ init(GlobalProperties) ->
         % application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
-        % node_status_timer = Timer,
+        node_status_timer = Timer,
         logger_ref = LoggerREF
     },
     ?LOGGER:info("[~p]: Node: ~p, is up with context: ~p .~n", [?MODULE, NodeName, Context]),
@@ -222,8 +219,14 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{logger_ref 
 
 handle_info(send_node_status, Context)  ->
     ?LOGGER:preciseDebug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
+    StartTime = utils:get_current_millis(),
     Status = ?PROTOCOL:get_status(),
-    ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Status),
+    case Status of
+        {ok, Result}->
+            ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Result);
+        _ -> ok
+    end,
+    ?LOGGER:preciseDebug("[~p]: send_node_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
 	{noreply, Context};
 
 handle_info(Request, Context)  ->

@@ -142,7 +142,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Rd, Sn, Timerp
 %%          _Ok = check_reading_and_log_time(),       %%todo
 %%          {next_state, collecting, {Me,My_protocol,My_node,Meters,Nrs,Rd,Sn,Timerpid}};
 %%        Seq when Seq==Sn ->
-        utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
+        utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=1"),
           log:info(" [~p] received drep from: ~p, with Seq: ~p in state collecting ~n state data: Nrs:
        ~p,Rd = ~p, Sn: ~p~n", [?MODULE,V,Seq,Nrs,Rd,Sn]),
           Nodes = extract_nodes_from_drep([], Data),
@@ -463,7 +463,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Reply = protocol_interface:send_data_request(H, Bit_message),
       case Reply of
         {ok, sent} ->
-            utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
+            utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=0"),
           send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->  send_dreq(My_protocol, T, Seq);
         Err -> log:critical("[~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err])

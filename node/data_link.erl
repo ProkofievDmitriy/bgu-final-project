@@ -43,7 +43,7 @@ handle_incoming_message(FsmPid, Packet)->
     gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
 
 get_status(FsmPid) ->
-    gen_fsm:sync_send_all_state_event(FsmPid, get_status, 30000).
+    gen_fsm:sync_send_all_state_event(FsmPid, get_status, 60000).
 
 
 %% ====================================================================

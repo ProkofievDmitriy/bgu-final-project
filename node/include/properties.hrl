@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [protocol_interface, transport, data_link, modem_port, node, load_ng,load_ng_core, report, stats_server_interface, transport,utils]).
+-define(MODULES_TO_FILTER, [transport, modem_port, report, stats_server_interface, transport, utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -14,9 +14,6 @@
 -define(LOAD_NG, load_ng).
 -define(NETWORK, load_ng_core).
 -define(DATA_LINK, data_link).
-% -define(APPLICATION, simple_app).
-% -define(APPLICATION, dc).
--define(APPLICATION, am_sem).
 -define(REPORT_UNIT, report).
 -define(MODEM_PORT, modem_port).
 -define(PROTOCOL, protocol_interface).
@@ -25,7 +22,7 @@
 %%% NODE PROPERTIES
 %-define(NETWORK_DEVICE, "enp2s0").
 %-define(NETWORK_DEVICE, "wlp3s0").
--define(NETWORK_DEVICE, "lo").
+-define(NETWORK_DEVICE, "wlan0").
 -define(NODE_RESOURCES, [?LOGGER,
                          ?PROTOCOL,
                          ?REPORT_UNIT,
@@ -34,7 +31,6 @@
                          ?TRANSPORT,
                          ?LOAD_NG,
                          ?MODEM_PORT,
-                         ?APPLICATION,
                          utils, ntp,
                          application_interface,
                          node_control_interface,
@@ -50,7 +46,7 @@
 
 %%% hy-LOADng PROPERTIES
 -define(BROADCAST_ADDRESS, 0).
--define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 360000).
+-define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 720000).
 -define(NODE_STATUS_TIMER_INTERVAL, 3000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS + 500).
 
@@ -101,7 +97,7 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {data_server_ip, "132.73.205.115"}
+                                 {data_server_ip, "132.73.198.241"}
                                 %  {data_server_ip, "192.168.14.30"} %Dima home server
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
@@ -118,6 +114,7 @@
 %                         {role, smart_meter}
                          {role, data_concentration_server},
                         %  {meters_list, [node_7]}
-                         {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14]}
+                         {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14, node_15, node_16]}
+                        %  {meters_list, [node_10, node_4, node_7, node_14]}
                         %  {meters_list, [node_22, node_25]}
                         ]).

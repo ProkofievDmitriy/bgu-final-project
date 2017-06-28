@@ -14,7 +14,7 @@
 -record(context, {log_file}).
 
 start()->
-    {ok, PID} = gen_server:start_link({local, ?MODULE }, ?MODULE, [], []),
+    {ok, PID} = gen_server:start({local, ?MODULE }, ?MODULE, [], []),
     PID.
 
 init(_Props) ->
@@ -30,10 +30,7 @@ handle_info(Request, Context)  ->
 
 
 handle_cast({log, Level, Message, Params}, Context) ->
-        IsValidModule = isValidModule(Params),
-        if
-            IsValidModule ->
-                if (Level >= ?CURRENT_LOG_LEVEL) ->
+
                     case ?LOGGER_MODE of
                         file ->
                             io:format(Context#context.log_file, Message, Params);
@@ -42,11 +39,7 @@ handle_cast({log, Level, Message, Params}, Context) ->
                             io:format(Message, Params);
                         _ ->
                             io:format(Message, Params)
-                        end;
-                    true -> ok
-                end;
-            true -> ok
-        end,
+                        end,
         {noreply, Context};
 
 handle_cast(Request, Context) ->
@@ -67,10 +60,17 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 
 
 print(Level, LevelMessage, Message, Params) ->
-    {Hours, Minutes, Seconds} = erlang:time(),
-    Millis = utils:get_current_millis() rem 1000,
-    gen_server:cast(?MODULE, {log, Level, "~p:~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds, Millis] ++ Params}).
-
+    IsValidModule = isValidModule(Params),
+    if
+        IsValidModule ->
+            if (Level >= ?CURRENT_LOG_LEVEL) ->
+                    {Hours, Minutes, Seconds} = erlang:time(),
+                    Millis = utils:get_current_millis() rem 1000,
+                    gen_server:cast(?MODULE, {log, Level, "~p:~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds, Millis] ++ Params});
+                    true -> ok
+                end;
+                true -> ok
+            end.
 
 info(Message, Params) ->
     print(1, "[INFO]   ", Message, Params).
@@ -113,4 +113,4 @@ warn(Message) ->
 
 isValidModule([])-> true;
 isValidModule(Params)->
-    not lists:member(lists:nth(5, Params), ?MODULES_TO_FILTER).
+    not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).

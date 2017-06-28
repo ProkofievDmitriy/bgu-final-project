@@ -49,7 +49,7 @@ start_link({My_node, My_protocol, Meters}) ->
    Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
    log:info("[~p]  ~p created ~n",[?MODULE,Me]),
    % timer:sleep(1500),
-  {ok,Pid}=gen_fsm:start_link({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
+  {ok,Pid}=gen_fsm:start({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
 %%%=================================================================================
@@ -199,7 +199,7 @@ discovering({drep,To,Data,Seq},{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Tim
 %%      _Ok = check_reading_and_log_time(),
 %%      {next_state, discovering, {Me,My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}};
 %%    Seq when Seq==Sn ->
-    utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
+    utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=1"),
      log:info("[~p]  received drep from: ~p, with Seq: ~p in state discovering ~n state data:
       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
       [?MODULE,V,Seq,Nrs,Rd,Ter,Sn]),
@@ -283,7 +283,7 @@ discovering(timeout,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       _Ok3 = update_tracker((Ter8)),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
       {next_state, collecting,
-        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Sn1,Timerpid1,0}};
+        {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Ter1,Sn1,Timerpid1,0}};
     true ->              %% otherwise prepare for next iteration
       log:info("[~p]  didnt receive all requested replies, preparing for another iteration of Sn ~p~n", [?MODULE,Sn]),
       Rd1 = random_elements (Nrs_new),                   % 1/9
@@ -334,7 +334,7 @@ collecting({drep,To,Data,Seq},{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter,Ter_
     log:err("[~p]  dc received drep with destination address of: ~p, ignoring~n",[?MODULE,To]),
     {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8,Ter,Ter_in,Sn,Timerpid,Times}} ;
     true ->
-        utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=1"),
+        utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=1"),
 
   {V,_} = lists:last(Data),                          % 2/10
 %%  case Seq of
@@ -406,7 +406,7 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn, 
       {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs, Ter8_new,Ter,Ter_in,Sn,Timerpid,Times}}
   end;
 
-collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Sn,Ter_in ,Timerpid,Times}) ->
+collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn ,Timerpid,Times}) ->
   log:debug("[~p]  received TIMEOUT event in state collecting, State data:~n
    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" , [?MODULE,Nrs,Ter8,Ter,Sn]),
   Ter81 = lists:usort(lists:umerge(Nrs ,Ter8)),
@@ -701,13 +701,14 @@ send_dreq(My_protocol, [H|T], Seq) ->
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug("[~p]: sending bit message:: ~p~n", [?MODULE,Bit_message]),
       Reply = protocol_interface:send_data_request(H, Bit_message),
+      utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=3"),
 
       case Reply of
         {ok, sent} ->
-               utils:exec_curl("132.73.205.115", "loadng", "data_req_reply", "value=0"),
+               utils:exec_curl("132.73.198.241", "loadng", "data_req_reply", "value=0"),
                send_dreq(My_protocol, T, Seq);
         {error, timeout_exceeded} ->
-                log:debug("[~p]: TIMOUT FROM PROTOCOL ~n", [?MODULE]),
+                log:debug("[~p]: TIMEOUT FROM PROTOCOL ~n", [?MODULE]),
                 send_dreq(My_protocol, T, Seq);
         Err -> log:critical("[~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err])
 
@@ -718,10 +719,12 @@ send_dreq(My_protocol, [H|T], Seq) ->
 
 
 message_to_bit({dreq,To,Seq}) ->
+    log:debug("[~p]: TRYING sending message:: ~p~n", [?MODULE,{dreq,To,Seq}]),
   Type_b = <<?DREQ_BIT:1>>,
   Dest = extract_address(To),
   Dest_b = <<Dest:?NODE_BITS>>,
   Seq_b = <<Seq:?SEQ_BITS>>,
+  log:debug("[~p]: TRYING bitmessage message:: ~p~n", [?MODULE,<<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>]),
   <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>;
 
 message_to_bit({drep,To,Data,Seq})->

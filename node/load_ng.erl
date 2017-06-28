@@ -54,6 +54,7 @@ init(Properties) ->
 
 	%initialize Mode Port module
 	ModemPortProperties = [],
+    ?MODEM_PORT:stop(),
 	ModemPortPid = ?MODEM_PORT:start(DataLinkPid),
 	ModemPortMonitorRef = erlang:monitor(process, ModemPortPid),
 	?LOGGER:debug("[~p]: Modem Port: ~p started  started with pid: ~p and monitored by ~p~n", [?MODULE, ?MODEM_PORT, ModemPortPid, ?MODULE]),
@@ -127,7 +128,7 @@ handle_call(get_status, _From, Context) ->
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
     NetworkStatus = ?NETWORK:get_status(Context#context.network_pid),
     DataLinkStatus = ?DATA_LINK:get_status(Context#context.data_link_pid),
-    ?LOGGER:debug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
+    ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, NetworkStatus ++ DataLinkStatus , Context};
 
 handle_call(reset, _From, Context) ->
@@ -147,6 +148,28 @@ handle_call(Request, From, Context) ->
      ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w~n", [?MODULE, OptionsList]),
      ?DATA_LINK:set_state(Context#context.data_link_pid, OptionsList),
      {noreply, Context};
+
+ handle_cast({data_message, {Destination, Data, PIDToResponse}}, Context) ->
+     ?LOGGER:info("[~p]: ASYNC data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
+     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
+     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
+     PIDToResponse ! Result,
+     {noreply, Context};
+
+ handle_cast({data_request_message, {Destination, Data, PIDToResponse}}, Context) ->
+     ?LOGGER:info("[~p]: ASYNC data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
+     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
+     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
+     PIDToResponse ! Result,
+     {noreply, Context};
+
+ handle_cast({data_reply_message, {Destination, Data, PIDToResponse}}, Context) ->
+     ?LOGGER:info("[~p]: ASYNC data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
+     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
+     ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
+     PIDToResponse ! Result,
+     {noreply, Context};
+
 
 handle_cast(Request, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),

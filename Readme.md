@@ -9,7 +9,7 @@
 ```bash
 scripts/run-all-nodes.sh scripts/lab-env.txt Default % To generate command to run all environment configured in scripts/lab-env.txt
 
-%EXAMPLE: 
+%EXAMPLE:
 gnome-terminal --maximize --tab-with-profile=Default -e "scripts/start_node.sh 132.73.199.156 node_1 dc dual" --tab-with-profile=Default \
 -e "scripts/start_node.sh 132.73.199.232 node_10 am_sem dual" --tab-with-profile=Default \
 -e "scripts/start_node.sh 132.73.199.234 node_7 am_sem dual" --tab-with-profile=Default \
@@ -39,7 +39,7 @@ erl -setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -
 
 ###Report Messages Format (from node)
 ```erlang
-{node_state,[{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]} 
+{node_state,[{routing_set,[{{destination,0},{next_address,0},{medium,3}}]},{medium_mode,dual}]}
 
 {{management_message,send_message},[{source,1},{destination,1},{id,45085103},{type,0}]}
 
@@ -84,8 +84,8 @@ erl -setcookie load_ng_project -name stats_server@127.0.0.1 -run c c loadNGgui -
 |12    |78:4b:87:ad:52:2a   |	132.73.192.176||
 |13    |90:b6:86:0e:35:8f   |	132.73.192.195||
 |14    |90:b6:86:0e:09:9a   |	132.73.192.17|Valid(132.73.192.31)|
-|15    |90:b6:86:08:4d:0c   |	132.73.192.109||
-|16    |90:b6:86:13:39:21   |	132.73.192.175||
+|15    |90:b6:86:08:4d:0c   |	132.73.192.109|132.73.192.42|
+|16    |90:b6:86:13:39:21   |	132.73.192.175|132.73.192.80|
 |17    |90:b6:86:0d:e4:ec   |	132.73.192.38||
 |18    |                    |                  ||
 |19    |                    |                  ||
