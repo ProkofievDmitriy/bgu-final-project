@@ -1,4 +1,4 @@
-192.168.14.113 node_1 dc dual
-192.168.14.153 node_2 am_sem dual
-192.168.14.97 node_3 am_sem dual
+192.168.14.113 node_1 simple_dc dual
+192.168.14.153 node_2 simple_dc dual
+192.168.14.97 node_3 simple_dc dual
 192.168.14.30 local stats_server not_relevant

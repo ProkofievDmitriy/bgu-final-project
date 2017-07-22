@@ -19,7 +19,7 @@ fi
 function concat {
   if [ "stats_server" == $3 ]
     then
-      echo "--tab-with-profile=$5 -e \"erl -setcookie load_ng_project -name stats_server@$1 -run c cd ../Server -run c c node_control_interface -run c c loadNGgui -run loadNGgui start\""
+      echo "--tab-with-profile=$5 -e \"erl -setcookie load_ng_project -name stats_server@$1 -run c cd ../Server -run c c node_control_interface -run c c loadNGgui -run c c stats_server -run loadNGgui start\""
     else
       echo "--tab-with-profile=$5 -e \"scripts/start_node.sh $1 $2 $3 $4\""
   fi

@@ -44,9 +44,9 @@
   code_change/3]).
 
 
--record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
 
--record(state, {counters, nodes_list, db, dm_ets, file_version}).
+-record(state, {counters, nodes_list, db, dm_ets, file_version, time_base}).
 %-record(event, {type, time, from, to, key, data}).
 
 %%%===================================================================
@@ -108,9 +108,14 @@ init([]) ->
   {ok,DB} = A,
   dets:insert(DB, {0, { yalla_maccabi} }),
 
-  Counters = #counters{numberOfRelayMsg = 0, numberOfManagementMsgSent = 0, numberOfManagementMsgReceived = 0, numberOfDataMsgSent = 0, numberOfDataMsgReceived = 0},
+  Counters = #counters{numberOfRelayMsg = 0,
+                       numberOfManagementMsgSent = 0,
+                       numberOfManagementMsgReceived = 0,
+                       numberOfDataMsgSent = 0,
+                       numberOfDataMsgReceived = 0,
+                       data_msg_avg_time = 0},
 
-  {ok, #state{counters = Counters, nodes_list = 0, db = DB, dm_ets = DM_ets}}.
+  {ok, #state{counters = Counters, nodes_list = 0, db = DB, dm_ets = DM_ets, time_base = get_current_millis()}}.
 
 
 
@@ -140,6 +145,12 @@ handle_call(stop, _From, State) ->
     io:format("stats_server:stopping~n"),
     {stop, normal, shutdown_ok, State};
 
+
+handle_call({get_time_offset, NodeTime}, From, State) ->
+    % Offset = NodeTime - State#state.time_base,
+    Offset = NodeTime - get_current_millis(),
+    io:format("stats_server handle_call: ~p , OFFSET = ~p for node ~p~n", [get_time_offset, Offset, From]),
+    {reply, {ok, Offset}, State};
 
 handle_call(Req, From, State) ->
     io:format("stats_server handle_call: ~p from ~p~n", [Req,From]),
@@ -217,16 +228,27 @@ handle_cast({{data_message, received_message}, Data}, State = #state{dm_ets = DM
   Id = proplists:get_value(id, Data),
 
   NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
+  AvgTime = Counters#counters.data_msg_avg_time,
   dets:insert(DB, {{data_message, received_message,Id}, UTIME ,Source,Destination}),
+  io:format("stats_server got report about: Incoming data msg ~p from ~p to ~p at ~p sent~n",[Id, Source,Destination, UTIME]),
+  io:format("Counters#counters.numberOfDataMsgReceived ~p ~n",[Counters#counters.numberOfDataMsgReceived]),
 
   %[{Id,{StatrTIME,-1,Relays}}] = ets:lookup(DM_ets,Id),
-
+  Result = ets:lookup(DM_ets,Id),
   ets:delete(DM_ets,Id),
 
-  %ets:insert(DM_ets,{Id,{StatrTIME,UTIME,Relays}}),
-  io:format("stats_server got report about: Incoming data msg ~p from ~p to ~p at ~p sent~n",[Id, Source,Destination, UTIME]),
+  case Result of
+      [{_, {Time, _, _}}|[]] ->
+          io:format("Message Traverse Time: ~p~n",[UTIME - Time]),
+          NewAvg = AvgTime + ((UTIME - Time) - AvgTime) / (NumberOfDataMsgReceived + 1),
+          UpdatedCounters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1,
+                                              data_msg_avg_time = round(NewAvg)},
+          {noreply, State#state{counters = UpdatedCounters}};
 
-{noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = NumberOfDataMsgReceived + 1}}};
+     _ ->
+         io:format("Unexpected result : ~p~n",[Result]),
+         {noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1}}}
+ end;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  A node has Sent a data message  %%
@@ -265,11 +287,12 @@ handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = C
 {noreply, State#state{counters = Counters#counters{numberOfRelayMsg = NumberOfRelayMsg + 1}}};
 
 handle_cast({states, From}, State) ->
-    {AvgTime,AvgLength} = avrages(State#state.dm_ets),
+    % {AvgTime,AvgLength} = avrages(State#state.dm_ets),
         %io:format("Stats AvgTime: ~p~n",[AvgTime]),
         %io:format("Stats AvgLength: ~p~n",[AvgLength]),
+    io:format("COUNTERS :  ~p~n",[State#state.counters]),
 
-    From!{State#state.counters,AvgTime,AvgLength},
+    From!{update_metrics, State#state.counters},
     {noreply, State};
 
 %%  ------------------------------------------------------------------
@@ -431,17 +454,22 @@ export_db(DB, File_Name) ->
 
 %{AvgTime,AvgLength} = avrages(State#state.dm_ets),
 
-avrages(DB) ->
-    avrages(DB, ets:first(DB),0.0,0,0.0,0).
+% avrages(DB) ->
+%     avrages(DB, ets:first(DB),0.0,0,0.0,0).
+%
+% avrages(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
+% avrages(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
+% avrages(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> {SumTime/NumberTime,SumLength/NumberLength};
+% avrages(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
+%   [{Key,Data}] = ets:lookup(DB,Key),
+%   case Data of
+%     {StartTime,EndTime ,Relays} when is_integer(StartTime) andalso is_integer(EndTime) ->
+%       avrages(DB, ets:next(DB,Key), SumTime + (EndTime - StartTime), NumberTime+1, SumLength + Relays, NumberLength+1);
+%     _ ->
+%       avrages(DB, ets:next(DB,Key), SumTime, NumberTime, SumLength, NumberLength)
+%   end.
 
-avrages(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
-avrages(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
-avrages(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> {SumTime/NumberTime,SumLength/NumberLength};
-avrages(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
-  [{Key,Data}] = ets:lookup(DB,Key),
-  case Data of
-    {StartTime,EndTime ,Relays} when is_integer(StartTime) andalso is_integer(EndTime) ->
-      avrages(DB, ets:next(DB,Key), SumTime + (EndTime - StartTime), NumberTime+1, SumLength + Relays, NumberLength+1);
-    _ ->
-      avrages(DB, ets:next(DB,Key), SumTime, NumberTime, SumLength, NumberLength)
-  end.
+
+ get_current_millis() ->
+     {Mega, Sec, Micro} = os:timestamp(),
+     (Mega*1000000 + Sec)*1000 + round(Micro/1000).

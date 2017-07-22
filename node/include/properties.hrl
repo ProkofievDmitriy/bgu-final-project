@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [transport, modem_port, report, stats_server_interface, transport, utils]).
+-define(MODULES_TO_FILTER, [transport, modem_port, transport, utils]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -21,8 +21,10 @@
 
 %%% NODE PROPERTIES
 %-define(NETWORK_DEVICE, "enp2s0").
-%-define(NETWORK_DEVICE, "wlp3s0").
--define(NETWORK_DEVICE, "wlan0").
+
+-define(NETWORK_DEVICE, "wlp3s0").
+% -define(NETWORK_DEVICE, "wlan0").
+
 -define(NODE_RESOURCES, [?LOGGER,
                          ?PROTOCOL,
                          ?REPORT_UNIT,
@@ -97,8 +99,8 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {data_server_ip, "132.73.198.241"}
-                                %  {data_server_ip, "192.168.14.30"} %Dima home server
+                                %  {data_server_ip, "132.73.198.241"}
+                                 {data_server_ip, "192.168.14.30"} %Dima home server
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
 

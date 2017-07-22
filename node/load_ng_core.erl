@@ -389,7 +389,7 @@ handle_sync_event(get_status, _From, StateName, State) ->
         {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
          {next_address, RoutingSetEntry#routing_set_entry.next_addr},
          {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
-    ?LOGGER:debug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
+    ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, [{routing_set, RoutingSetList}], StateName, State};
 
 handle_sync_event(reset, _From, StateName, State) ->

@@ -32,7 +32,7 @@
 -define(MANAGMENT_SERVER, loadNGgui).
 
 %% API
--export([report/2, report/1, printStats/0]).
+-export([report/2, report/1, getOffset/1]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -79,9 +79,16 @@ report(Type, Data)->
     end.
 
 %%  ------------------------------------------------------------------
-%%	-------------------   server Debug ONLY     ----------------------
+%%	-------------------   Time Sync API     ----------------------
 %%  ------------------------------------------------------------------
 
-printStats () ->
-	io:format("Print Counters~n"),
-	gen_server:cast({global, ?STATS_SERVER}, {printStats}).
+getOffset (CurrentMillis) ->
+	Reply =( catch gen_server:call({global, ?STATS_SERVER}, {get_time_offset, CurrentMillis})),
+    case Reply of
+        {ok, Offset} ->
+            ?LOGGER:debug("[~p]: Time sync: old ~p, offset ~p~n",[unfiltered, CurrentMillis, Offset]),
+            Offset;
+    _ ->
+        ?LOGGER:debug("[~p]: Time sync: ERROR OCCURED WHILE COMMUNICATING DATA SERVER, reply was: ~p, returning offset = 0~n",[unfiltered, Reply]),
+        0
+    end.

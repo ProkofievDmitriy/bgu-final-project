@@ -21,7 +21,7 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
     counters, configButtons, updateLocation,
     buttonExport, buttonFullMap, buttonDeleteTable, buttonDeleteAll,buttonSendConfig, buttonSendMSG, txtMsgSend, cmbTo}).
 
--record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived}).
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
 
 
 %%%%%%%%%%%%
@@ -79,15 +79,15 @@ init(WxServer) ->
     %%Setup Buttons:
     ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Node Routes Table"}]),
     wxButton:connect(ButtonDeleteTable, command_button_clicked),
-    ButtonDeleteAll = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete All Nodes"}]),
+
+	ButtonDeleteAll = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete All Nodes"}]),
     wxButton:connect(ButtonDeleteAll, command_button_clicked),
 
-		%CmbTo = wxChoice:new(Panel, ?wxID_ANY, [{choices, []},{style, ?wxCB_READONLY}]),
-		CmbTo = wxChoice:new(Panel, ?wxID_ANY,[{size,{170,40}}]),
-    TxtMsgSend = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{170,130}},
-                  {style, ?wxDEFAULT bor ?wxTE_MULTILINE}]),
+	%CmbTo = wxChoice:new(Panel, ?wxID_ANY, [{choices, []},{style, ?wxCB_READONLY}]),
+	CmbTo = wxChoice:new(Panel, ?wxID_ANY,[{size,{170,40}}]),
+    TxtMsgSend = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{170,130}},{style, ?wxDEFAULT bor ?wxTE_MULTILINE}]),
 
-    ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label,"Send Message"}]),
+    ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label, "Send Message"}]),
     wxButton:connect(ButtonSendMSG, command_button_clicked),
 
     ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
@@ -178,16 +178,16 @@ init(WxServer) ->
 
     {Frame,#state{frame=Frame,panel=Panel,mapEts = MapEts, nodesEts = NodesEts, log = Log,canvas = Canvas,
                     cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodeChoice = NodeChoice, numberOfNodes = 0,
-                    %buttons = #buttons{
                     counters = Counters,
                     buttonExport = wxButton:getId(ButtonExport),
-                                        configButtons = ConfigButtons,
-										buttonSendConfig = wxButton:getId(ButtonSendConfig),
-                                        buttonFullMap = wxButton:getId(ButtonFullMap),
-                                        updateLocation = UpdateLocation,
-                                        buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
-										buttonDeleteAll = wxButton:getId(ButtonDeleteAll),
-                                        buttonSendMSG = wxButton:getId(ButtonSendMSG) }}.
+                    configButtons = ConfigButtons,
+					buttonSendConfig = wxButton:getId(ButtonSendConfig),
+                    buttonFullMap = wxButton:getId(ButtonFullMap),
+                    updateLocation = UpdateLocation,
+                    buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
+					buttonDeleteAll = wxButton:getId(ButtonDeleteAll),
+                    buttonSendMSG = wxButton:getId(ButtonSendMSG)}}.
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -271,12 +271,13 @@ handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}
 
 handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap,
-                buttonDeleteTable = ButtonDeleteTable, buttonSendConfig = ButtonSendConfig,
+                buttonDeleteTable = ButtonDeleteTable, buttonDeleteAll= ButtonDeleteAll, buttonSendConfig = ButtonSendConfig,
                 buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG}) ->
     case ID of
         ButtonFullMap ->
             	io:format("Showing full map~n"),
 				update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
+
             {noreply,State#state{selectedNode = all}};
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
@@ -376,17 +377,18 @@ handle_info(timer, State) ->
   erlang:send_after(?REFRESH_TIME,self(),timer),
   {noreply, State};
 
-handle_info({Counters = #counters{}, AvgTime,AvgLength}, State) ->
-  io:format("loadNG: Got State Update~p, ~p, ~p~n",[Counters, AvgTime,AvgLength]),
+handle_info({update_metrics, Counters}, State) ->
+  % io:format("loadNG: Got State Update~p, ~p, ~p~n",[Counters, AvgTime,AvgLength]),
   wxStaticText:setLabel(State#state.counters,
                 "Number Of ManagementMsgSent = " ++ integer_to_list(Counters#counters.numberOfManagementMsgSent) ++
                 "\nNumber Of ManagementMsgReceived = "++ integer_to_list(Counters#counters.numberOfManagementMsgReceived) ++
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
-                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg)),
-                % "\nAverage time: " ++ float_to_list(AvgTime) ++
-				% "\nAverage Data Message Route Length: " ++ float_to_list(AvgLength)),
+                "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
+                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(Counters#counters.data_msg_avg_time) ++
+				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
   {noreply, State};
+
 handle_info(E, State) ->
 	io:format("handle_info _Event ~p~n",[E]),
 	{noreply, State}.
@@ -596,8 +598,8 @@ resetAllNodes(NodesEts, Key) ->
 	resetAllNodes(NodesEts, ets:next(NodesEts,Key)).
 
 printRoutingSet(SelectedNode, SelectedNode, NodesEts) ->
-	A = ets:lookup(NodesEts,SelectedNode),
-	io:format("~n~nSelectedNode Info: ~n~p~n~n",[A]);
+	A = ets:lookup(NodesEts,SelectedNode);
+	% io:format("~n~nSelectedNode Info: ~n~p~n~n",[A]);
 printRoutingSet(SelectedNode, NameAtom, NodesEts) -> ok.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Create Form Functions:
