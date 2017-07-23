@@ -1,10 +1,12 @@
 -module(data_link).
 -behaviour(gen_fsm).
+-behaviour(layer_interface).
+
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/2, send_async/2, updateUpperLevelPid/2, handle_incoming_message/2, get_status/1, set_state/2]).
+-export([start/1, stop/1, send/2, send_async/2, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -33,8 +35,13 @@ send_async(FsmPid, {Hop, Payload})->
     gen_fsm:send_event(FsmPid, {send, {Hop, Payload}}).
 
 
-updateUpperLevelPid(FsmPid, UpperLevelPid)->
-    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
+updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
+
+updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevel, BottomLevelModule, BottomLevelPid}).
+
+
 
 handle_incoming_message(FsmPid, Packet)->
     ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
@@ -55,7 +62,7 @@ get_status(FsmPid) ->
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
--record(state, {self_address, upper_level_pid}).
+-record(state, {self_address, upper_level_pid, upper_level_module, bottom_level_pid, bottom_level_module}).
 
 %% ============================================================================================
 %% =========================================== Init ==========================================
@@ -233,9 +240,16 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
 %% ============================== Sync Event Handling =========================================
 %% ============================================================================================
 
-handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p~n", [?MODULE, StateName]),
-    NewState = StateData#state{upper_level_pid = UpperLevelPid},
+handle_sync_event({updateUpperLevel, UpperLevelModule, UpperLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{upper_level_pid = UpperLevelPid, upper_level_module=UpperLevelModule},
+    ?LOGGER:debug("[~p]: updateUpperLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+	{reply, ok, StateName, NewState};
+
+handle_sync_event({updateBottomLevel, BottomLevelModule, BottomLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{bottom_level_pid = BottomLevelPid, bottom_level_module=BottomLevelModule},
+    ?LOGGER:debug("[~p]: updateBottomLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
 handle_sync_event(get_status, _From, StateName, StateData) ->

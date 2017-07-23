@@ -1,5 +1,9 @@
 -module(transport).
+
 -behaviour(gen_fsm).
+-behaviour(layer_interface).
+
+
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
@@ -8,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, send/2, updateUpperLevelPid/2, updateBottomLevelPid/2, disable/1, enable/1, handle_incoming_message/2]).
+-export([start/1, stop/1, send/2, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -37,11 +41,11 @@ disable(FsmPid)->
 send(FsmPid, {Type, Destination, Data})->
     gen_fsm:sync_send_event(FsmPid, {send, {Type, Destination, Data}}, ?TIMEOUT).
 
-updateUpperLevelPid(FsmPid, UpperLevelPid)->
-    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
+updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
 
-updateBottomLevelPid(FsmPid, BottomLevelPid)->
-    gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevelPid, BottomLevelPid}).
+updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevel, BottomLevelModule, BottomLevelPid}).
 
 handle_incoming_message(FsmPid, Message)->
     gen_fsm:send_event(FsmPid, {received_message, Message}).
@@ -51,7 +55,7 @@ handle_incoming_message(FsmPid, Message)->
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
--record(state, {upper_level_pid, bottom_level_pid, sessions_db}).
+-record(state, {upper_level_pid, upper_level_module, bottom_level_pid, bottom_level_module, sessions_db}).
 
 -record(transport_header, {max, seq, id}).
 -record(transport_message, {header, binary_data}).
@@ -116,7 +120,8 @@ idle({send, {Type, Destination, Data}}, _From, StateData) ->
 %% Pass all message as is - no session management enabled
 disable({received_message, Message}, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(received_message) , StateData: ~w~n", [?MODULE, StateData]),
-    application_interface:rise_message(StateData#state.upper_level_pid,  Message),
+    UpperLevelModule = StateData#state.upper_level_module,
+    UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid,  Message),
     {next_state, disable, StateData};
 
 disable(disable, StateData) ->
@@ -138,16 +143,16 @@ disable({send, {Type, Destination, Data}}, _From, StateData) ->
 %% ============================== Sync Event Handling =========================================
 %% ============================================================================================
 
-handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
-    NewState = StateData#state{upper_level_pid = UpperLevelPid},
-    ?LOGGER:debug("[~p]: updateUpperLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+handle_sync_event({updateUpperLevel, UpperLevelModule, UpperLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{upper_level_pid = UpperLevelPid, upper_level_module=UpperLevelModule},
+    ?LOGGER:debug("[~p]: updateUpperLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
-handle_sync_event({updateBottomLevelPid, BottomLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
-    NewState = StateData#state{bottom_level_pid = BottomLevelPid},
-    ?LOGGER:debug("[~p]: updateBottomLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+handle_sync_event({updateBottomLevel, BottomLevelModule, BottomLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{bottom_level_pid = BottomLevelPid, bottom_level_module=BottomLevelModule},
+    ?LOGGER:debug("[~p]: updateBottomLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
 handle_sync_event(Event, _From, StateName, StateData) ->

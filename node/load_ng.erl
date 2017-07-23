@@ -35,7 +35,8 @@
                   transport_pid,
                   transport_monitor_ref,
                   transport_properties,
-                  application_pid
+                  application_pid,
+                  top_level, top_level_pid
                 }).
 
 
@@ -90,7 +91,9 @@ init(Properties) ->
         modem_port_monitor_ref = ModemPortMonitorRef,
         modem_port_pid = ModemPortPid,
         modem_port_restart_timer_interval = 30000,
-        modem_port_properties = ModemPortProperties
+        modem_port_properties = ModemPortProperties,
+        top_level = ?TRANSPORT,
+        top_level_pid = TransportPid
 
     }}.
 
@@ -100,19 +103,22 @@ init(Properties) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call({data_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
-    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
+    TopLevelModule = Context#context.top_level,
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_request_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
-    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
+    TopLevelModule = Context#context.top_level,
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREQ, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_reply_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
-    Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
+    TopLevelModule = Context#context.top_level,
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREP, Destination, Data}),
     ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
@@ -120,7 +126,8 @@ handle_call({hand_shake, ApplicationPid}, From, Context) ->
     ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p~n", [?MODULE, ApplicationPid, From]),
     %TODO implement hand_shake with application
     NewContext = Context#context{application_pid = ApplicationPid},
-    ?TRANSPORT:updateUpperLevelPid(NewContext#context.transport_pid, NewContext#context.application_pid),
+    TopLevelModule = Context#context.top_level,
+    TopLevelModule:updateUpperLevel(NewContext#context.top_level_pid, application_interface, NewContext#context.application_pid),
     {reply, ok, NewContext};
 
 handle_call(get_status, _From, Context) ->
@@ -151,21 +158,24 @@ handle_call(Request, From, Context) ->
 
  handle_cast({data_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
-     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DATA, Destination, Data}),
+     TopLevelModule = Context#context.top_level,
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
      ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
 
  handle_cast({data_request_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
-     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREQ, Destination, Data}),
+     TopLevelModule = Context#context.top_level,
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
      ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
 
  handle_cast({data_reply_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
-     Result = ?TRANSPORT:send(Context#context.transport_pid, {?DREP, Destination, Data}),
+     TopLevelModule = Context#context.top_level,
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
      ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
@@ -251,5 +261,5 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 bind_levels(UpperLevelModule, UpperLevelPid, BottomLevelModule, BottomLevelPid)->
-    UpperLevelModule:updateBottomLevelPid(UpperLevelPid, BottomLevelPid),
-    BottomLevelModule:updateUpperLevelPid(BottomLevelPid, UpperLevelPid).
+    UpperLevelModule:updateBottomLevel(UpperLevelPid, BottomLevelModule, BottomLevelPid),
+    BottomLevelModule:updateUpperLevel(BottomLevelPid, UpperLevelModule, UpperLevelPid).

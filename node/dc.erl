@@ -894,6 +894,6 @@ find_list_differences(L1,L2)->
 
 
 % TODO implement the log of changes in terminals list
-insert_terminal_changes (Ter, Ter_in, Sn) ->
+insert_terminal_changes (_Ter, _Ter_in, _Sn) ->
 
   ok.

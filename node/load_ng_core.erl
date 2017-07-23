@@ -1,5 +1,7 @@
 -module(load_ng_core).
+
 -behaviour(gen_fsm).
+-behaviour(layer_interface).
 
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
@@ -10,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevelPid/2, updateUpperLevelPid/2, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1, reset/1]).
+-export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -22,8 +24,8 @@
                 dreq_table,
                 self_address,
                 address_length,
-                bottom_level_pid,
-                upper_level_pid,
+                bottom_level_pid, bottom_level_module,
+                upper_level_pid, upper_level_module,
                 net_traversal_time,
                 reporting_unit,
                 r_seq_number
@@ -54,11 +56,11 @@ start(Params) ->
 stop(Ref)->
 	gen_fsm:send_all_state_event(Ref, stop).
 
-updateBottomLevelPid(FsmPid, BottomLevelPid)->
-    gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevelPid, BottomLevelPid}).
+updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateBottomLevel, BottomLevelModule, BottomLevelPid}).
 
-updateUpperLevelPid(FsmPid, UpperLevelPid)->
-    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevelPid, UpperLevelPid}).
+updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
 
 send(FsmPid, {Type, Destination, Data})->
     % gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, self()}}),
@@ -170,7 +172,8 @@ case NextHop of
             {error, ErrorMessage} ->
                {reply, {error, ErrorMessage}, active, NewState};
             _ ->
-                Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                BottomLevelModule = StateData#state.bottom_level_module,
+                Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
                 report_data_message_sent(Packet, NewState),
                 {reply, Result, active, NewState}
         end;
@@ -204,7 +207,8 @@ active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
                     PIDToAnswer ! {error, ErrorMessage},
                    {next_state, active, NewState};
                 _ ->
-                    Result = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                    BottomLevelModule = StateData#state.bottom_level_module,
+                    Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
                     report_data_message_sent(Packet, NewState),
                     PIDToAnswer ! Result,
                     {next_state, active, NewState}
@@ -251,7 +255,8 @@ active(remove_expired_rreq, StateData)->
 active({received_message, #load_ng_packet{type = ?DREP} = Packet}, StateData) ->
     ?LOGGER:debug("[~p]: ACTIVE - DREP Packet : ~w .~n", [?MODULE, Packet]),
     update_routing_set_entry(Packet, StateData), % route maintanace
-    ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+    UpperLevelModule = StateData#state.upper_level_module,
+    UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
     report_data_message_received(Packet, StateData),
     {next_state, active, StateData};
 
@@ -328,7 +333,8 @@ active({received_message, Packet}, StateData) ->
     update_routing_set_entry(Packet, StateData), % route maintanace
     AmIDestination = amIDestination(Packet#load_ng_packet.destination, StateData#state.self_address),
     if  AmIDestination ->
-            ?TRANSPORT:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
+            UpperLevelModule = StateData#state.upper_level_module,
+            UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, Packet#load_ng_packet.data),
             report_data_message_received(Packet, StateData);
         true -> ok end,
     ShouldBeForwarded = consider_to_forwarding(Packet, StateData),
@@ -365,17 +371,17 @@ active({received_message, Packet}, StateData) ->
 %% =========================================== Sync Event Handling =========================================
 %% ============================================================================================
 
-handle_sync_event({updateBottomLevelPid, BottomLevelPid}, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
-    NewState = StateData#state{bottom_level_pid = BottomLevelPid},
-    ?LOGGER:debug("[~p]: updateBottomLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+handle_sync_event({updateBottomLevel, BottomLevelModule, BottomLevelPid}, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateBottomLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{bottom_level_pid = BottomLevelPid, bottom_level_module=BottomLevelModule},
+    ?LOGGER:debug("[~p]: updateBottomLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
 
-handle_sync_event({updateUpperLevelPid, UpperLevelPid }, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevelPid), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
-    NewState = StateData#state{upper_level_pid = UpperLevelPid},
-    ?LOGGER:debug("[~p]: updateUpperLevelPid, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
+handle_sync_event({updateUpperLevel, UpperLevelModule, UpperLevelPid }, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle SYNC EVENT Request(updateUpperLevel), StateName: ~p, StateData: ~w~n", [?MODULE, StateName, StateData]),
+    NewState = StateData#state{upper_level_pid = UpperLevelPid, upper_level_module=UpperLevelModule},
+    ?LOGGER:debug("[~p]: updateUpperLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
 
 
@@ -448,7 +454,8 @@ generate_rreq(Destination, StateData) ->
         {error, ErrorMessage} ->
             ?LOGGER:err("[~p]: ACTIVE - GENERATING RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]);
         _ ->
-            ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
+            BottomLevelModule = StateData#state.bottom_level_module,
+            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
             add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
                                               {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
             report_sent_management_message(Packet, StateData),
@@ -473,7 +480,8 @@ generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
                     ?LOGGER:err("[~p]: ACTIVE - GENERATING RREP failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
-                    ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    BottomLevelModule = StateData#state.bottom_level_module,
+                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
                     report_sent_management_message(Packet, StateData),
                     if ?ACK_REQUIRED -> %false by default - further implementations
                         add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
@@ -505,7 +513,8 @@ generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, State
                     ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
-                    ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    BottomLevelModule = StateData#state.bottom_level_module,
+                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
                     report_sent_management_message(Packet, StateData)
                 end;
         Error ->
@@ -525,7 +534,8 @@ generate_rerr({Destination, _R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, Send
             ?LOGGER:err("[~p]: ACTIVE - GENERATING RRER failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
         _ ->
             ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - to : ~w.~n", [?MODULE, {Medium, SendTO}]),
-            ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{Medium, SendTO}, Payload }),
+            BottomLevelModule = StateData#state.bottom_level_module,
+            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{Medium, SendTO}, Payload }),
             report_sent_management_message(Packet, StateData)
     end.
 
@@ -548,7 +558,8 @@ generate_rack(Destination, StateData) ->
                         ?LOGGER:err("[~p]: ACTIVE - GENERATING RACK failed prepare payload: ~w.~n", [?MODULE, ErrorMessage]);
                     _ ->
                         ?LOGGER:info("[~p]: ACTIVE - GENERATING RACK - NextHop: ~w.~n", [?MODULE, NextHop]),
-                        ?DATA_LINK:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                        BottomLevelModule = StateData#state.bottom_level_module,
+                        BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
                         report_sent_management_message(Packet, StateData)
                     end;
             Error ->
@@ -816,7 +827,8 @@ forward_packet(Packet, StateData) ->
 
 forward_packet(Packet, StateData, NextHop) ->
     Payload = serialize_packet(Packet#load_ng_packet{source = StateData#state.self_address}),
-    {SendStatus, Message} = ?DATA_LINK:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
+    BottomLevelModule = StateData#state.bottom_level_module,
+    {SendStatus, Message} = BottomLevelModule:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
     ?LOGGER:info("[~p]: ~p packet forwarded to ~w, Packet uuid: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Packet#load_ng_packet.type), NextHop, Packet#load_ng_packet.uuid]),
     {SendStatus, Message, NextHop}.
 

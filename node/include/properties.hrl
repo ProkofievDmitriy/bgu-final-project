@@ -25,7 +25,8 @@
 -define(NETWORK_DEVICE, "wlp3s0").
 % -define(NETWORK_DEVICE, "wlan0").
 
--define(NODE_RESOURCES, [?LOGGER,
+-define(NODE_RESOURCES, [layer_interface,
+                         ?LOGGER,
                          ?PROTOCOL,
                          ?REPORT_UNIT,
                          ?NETWORK,

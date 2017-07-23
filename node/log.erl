@@ -29,7 +29,7 @@ handle_info(Request, Context)  ->
 	{noreply, Context}.
 
 
-handle_cast({log, Level, Message, Params}, Context) ->
+handle_cast({log, _Level, Message, Params}, Context) ->
 
                     case ?LOGGER_MODE of
                         file ->
