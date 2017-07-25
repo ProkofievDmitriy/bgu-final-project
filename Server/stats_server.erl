@@ -290,7 +290,7 @@ handle_cast({states, From}, State) ->
     % {AvgTime,AvgLength} = avrages(State#state.dm_ets),
         %io:format("Stats AvgTime: ~p~n",[AvgTime]),
         %io:format("Stats AvgLength: ~p~n",[AvgLength]),
-    io:format("COUNTERS :  ~p~n",[State#state.counters]),
+    % io:format("COUNTERS :  ~p~n",[State#state.counters]),
 
     From!{update_metrics, State#state.counters},
     {noreply, State};

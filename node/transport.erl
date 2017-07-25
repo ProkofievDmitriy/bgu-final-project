@@ -12,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, send/2, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2]).
+-export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -38,8 +38,12 @@ disable(FsmPid)->
     gen_fsm:send_event(FsmPid, disable).
 
 %Managing events
-send(FsmPid, {Type, Destination, Data})->
-    gen_fsm:sync_send_event(FsmPid, {send, {Type, Destination, Data}}, ?TIMEOUT).
+send(FsmPid, Destination, Data)->
+    gen_fsm:sync_send_event(FsmPid, {send, {Destination, Data}}, ?TIMEOUT).
+
+%Managing events
+send_async(FsmPid, Destination, Data)->
+    gen_fsm:send_event(FsmPid, {send, {Destination, Data}}).
 
 updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
@@ -75,7 +79,7 @@ init(Properties) ->
 %% ============================================================================================
 
 %% =========================================== IDLE =========================================
-idle({received_message, Data}, StateData) ->
+idle({received_message, {Medium, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(received_message) Data: ~w ~n", [?MODULE, Data]),
     TRANSPORT_HEADER_LENGTH = ?TRANSPORT_HEADER_LENGTH,
     <<BinaryHeader:TRANSPORT_HEADER_LENGTH, BinaryData/bitstring>> = Data,
@@ -83,12 +87,25 @@ idle({received_message, Data}, StateData) ->
     MessageResult = get_full_message(StateData#state.sessions_db, #transport_message{header = TrasportHeader, binary_data = BinaryData}),
     case MessageResult of
         {complete, Message} ->
-            % MessageData = binary_to_term(Message),
             ?LOGGER:info("[~p]: IDLE - Message Complete, Sending to upper level, Data: ~w~n", [?MODULE, Message]),
-            application_interface:rise_message(StateData#state.upper_level_pid, Message);
+            UpperLevelModule = StateData#state.upper_level_module,
+            UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, {Medium, Message});
         {not_complete_message, PiecesReceived} ->
             ?LOGGER:info("[~p]: IDLE - Message NOT Complete: ~w / ~w~n", [?MODULE, PiecesReceived, TrasportHeader#transport_header.max])
     end,
+    {next_state, idle, StateData};
+
+
+%Synchronous event call
+idle({send, {Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: IDLE - ASYNC Event(send) , {Destination, Data} : {~p, ~w}~n", [?MODULE, Destination, Data]),
+    MessagesList = get_messages_list(Data),
+    BottomLevelModule = StateData#state.bottom_level_module,
+    SendFunc = fun(X) -> Res = BottomLevelModule:send_async(StateData#state.bottom_level_pid, Destination, X),
+                         ?LOGGER:info("[~p]: Sending Message: {~w, ~w}, Result: ~w~n", [?MODULE, Destination, X, Res]),
+                         timer:sleep(50),
+                         Res end,
+    [ SendFunc(X) || X <- MessagesList],
     {next_state, idle, StateData};
 
 idle(disable, StateData) ->
@@ -101,11 +118,12 @@ idle(enable, StateData) ->
      {next_state, idle, StateData}.
 
 %Synchronous event call
-idle({send, {Type, Destination, Data}}, _From, StateData) ->
+idle({send, {Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - Event(send) , {Destination, Data} : {~p, ~w}~n", [?MODULE, Destination, Data]),
     MessagesList = get_messages_list(Data),
-    SendFunc = fun(X) -> Res = ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, X}),
-                         ?LOGGER:info("[~p]: Sending Message: {~p, ~w, ~w}, Result: ~w~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, X, Res]),
+    BottomLevelModule = StateData#state.bottom_level_module,
+    SendFunc = fun(X) -> Res = BottomLevelModule:send(StateData#state.bottom_level_pid, Destination, X),
+                         ?LOGGER:info("[~p]: Sending Message: {~w, ~w}, Result: ~w~n", [?MODULE, Destination, X, Res]),
                          timer:sleep(50),
                          Res end,
     ResultsList = [ SendFunc(X) || X <- MessagesList],
@@ -128,14 +146,22 @@ disable(disable, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(disable) , StateData: ~w~n", [?MODULE, StateData]),
     {next_state, disable, StateData};
 
+%Synchronous event call
+disable({send, {Destination, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
+    BottomLevelModule = StateData#state.bottom_level_module,
+    BottomLevelModule:send(StateData#state.bottom_level_pid, Destination, Data),
+    {next_state, disable, StateData};
+
 disable(enable, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(enable) , StateData: ~w~n", [?MODULE, StateData]),
      {next_state, idle, StateData}.
 
 %Synchronous event call
-disable({send, {Type, Destination, Data}}, _From, StateData) ->
+disable({send, {Destination, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DISABLE - Event(send) , {Destination, Data} : {~p, ~w}, StateData: ~w~n", [?MODULE, Destination, Data, StateData]),
-    Result = ?NETWORK:send(StateData#state.bottom_level_pid, {Type, Destination, Data}),
+    BottomLevelModule = StateData#state.bottom_level_module,
+    Result = BottomLevelModule:send(StateData#state.bottom_level_pid, Destination, Data),
      {reply, Result, disable, StateData}.
 
 
@@ -196,7 +222,7 @@ generate_uuid()->
   UUID.
 
 get_messages_list(Data)->
-    ?LOGGER:debug("[~p]: get_messages_list  Data: ~w~n", [?MODULE, Data]),
+    ?LOGGER:preciseDebug("[~p]: get_messages_list  Data: ~w~n", [?MODULE, Data]),
     % BinaryData = term_to_binary(Data),
     MessagesList = trim_data(Data),
     ?LOGGER:debug("[~p]: Number of messages to send : ~w~n", [?MODULE, length(MessagesList)]),
@@ -207,7 +233,7 @@ trim_data(BinaryData)->
 
 trim_data(BinaryData, List, SeqNum, UUID)->
     BitLength = bit_size(BinaryData),
-    ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , Data bits: ~w, MAX_DATA_LENGTH = ~w, List: ~w~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, BitLength, ?MAX_DATA_LENGTH, List]),
+    ?LOGGER:preciseDebug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , Data bits: ~w, MAX_DATA_LENGTH = ~w, List: ~w~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, BitLength, ?MAX_DATA_LENGTH, List]),
     if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
             {_ , NewList} = lists:foldl(fun(X, {Num, Temp}) ->
                 TH = #transport_header{max = SeqNum, seq = Num, id = UUID},
@@ -215,7 +241,7 @@ trim_data(BinaryData, List, SeqNum, UUID)->
                 BPD = <<BTH/bitstring, X/bitstring>>,
                 {Num + 1, [BPD |Temp]}
             end, {1, []}, List),
-            ?LOGGER:debug("[~p]: trim_data  NewList: ~w~n", [?MODULE, NewList]),
+            ?LOGGER:preciseDebug("[~p]: trim_data  NewList: ~w~n", [?MODULE, NewList]),
             TransprotHeader = #transport_header{max = SeqNum, seq = SeqNum, id = UUID},
             BinaryTransportHeader = serialize_header(TransprotHeader),
             BinaryPacketData = <<BinaryTransportHeader/bitstring, BinaryData/bitstring>>,
@@ -223,12 +249,12 @@ trim_data(BinaryData, List, SeqNum, UUID)->
         true ->
             <<Trim:?MAX_DATA_LENGTH_IN_BITS, Rest/bitstring>> = BinaryData,
             BinaryTrim = <<Trim:?MAX_DATA_LENGTH_IN_BITS>>,
-            ?LOGGER:debug("[~p]: trim_data  Data: ~w, BinaryTrim: ~w, Rest: ~w~n", [?MODULE, BinaryData, BinaryTrim, Rest]),
-            trim_data(Rest, [BinaryTrim] ++ List, SeqNum + 1, UUID)
+            ?LOGGER:preciseDebug("[~p]: trim_data  Data: ~w, BinaryTrim: ~w, Rest: ~w~n", [?MODULE, BinaryData, BinaryTrim, Rest]),
+            trim_data(Rest, List ++ [BinaryTrim], SeqNum + 1, UUID)
     end.
 
 serialize_header(#transport_header{} = Header)->
-    ?LOGGER:debug("[~p]: serialize_header  Header: ~w~n", [?MODULE, Header]),
+    ?LOGGER:preciseDebug("[~p]: serialize_header  Header: ~w~n", [?MODULE, Header]),
     Max = Header#transport_header.max,
     Seq = Header#transport_header.seq,
     Id = Header#transport_header.id,
@@ -236,13 +262,13 @@ serialize_header(#transport_header{} = Header)->
     BinarySeq = <<Seq:?SESSION_MANAGEMENT_LENGTH>>,
     BinaryId = <<Id:?SESSION_ID_LENGHT>>,
     Result = <<BinaryMax/bitstring, BinarySeq/bitstring, BinaryId/bitstring>>,
-    ?LOGGER:debug("[~p]: serialize_header  BinaryMax(~w bits): ~w, BinarySeq(~w bits): ~w, BinaryId(~w bits): ~w, Result(~w bits): ~w~n",
+    ?LOGGER:preciseDebug("[~p]: serialize_header  BinaryMax(~w bits): ~w, BinarySeq(~w bits): ~w, BinaryId(~w bits): ~w, Result(~w bits): ~w~n",
                 [?MODULE, bit_size(BinaryMax), BinaryMax, bit_size(BinarySeq), BinarySeq,
                           bit_size(BinaryId), BinaryId, bit_size(Result), Result]),
     Result.
 
 deserialize_header(BinaryHeader)->
-    ?LOGGER:debug("[~p]: deserialize_header  BinaryHeader(~w bits): ~w~n", [?MODULE, bit_size(BinaryHeader), BinaryHeader]),
+    ?LOGGER:preciseDebug("[~p]: deserialize_header  BinaryHeader(~w bits): ~w~n", [?MODULE, bit_size(BinaryHeader), BinaryHeader]),
     <<Max:?SESSION_MANAGEMENT_LENGTH, Seq:?SESSION_MANAGEMENT_LENGTH, Id:?SESSION_ID_LENGHT>> = BinaryHeader,
     #transport_header{max= Max, seq = Seq, id = Id}.
 

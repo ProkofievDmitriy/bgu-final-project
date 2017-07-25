@@ -60,6 +60,7 @@ init(Properties) ->
         data_server_interface = DataServerInterface,
         data_server_name = DataServerName,
         data_server_ip = DataServerIp,
+        time_offset = 0,
         connected_to_server = false
          }}.
 

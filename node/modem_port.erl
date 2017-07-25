@@ -311,54 +311,66 @@ close_all_port_processes([H|T] , L2) ->
 
 prepare_payload([Channel, _Reserved | _Rest]) when (Channel > 3) orelse (Channel<0) -> ?LOGGER:debug("[~p]: bad channel~p~n",[?MODULE, Channel]),ignore_msg;
 prepare_payload([Channel, _ | Rest]) ->
-    Size = byte_size(Rest),
-
-	PAD = getPaddingList(Size),
-	Result = case PAD of
+    BitSize = bit_size(Rest),
+    PaddingBitString = getPaddingBitString(BitSize),
+	Result = case PaddingBitString of
 	    too_large ->
-            ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~w.~n", [?MODULE, Size]),
+            ?LOGGER:err("[~p]: MESSAGE IS TOO LARGE, SIZE: ~w.~n", [?MODULE, BitSize]),
 	        {error, too_large};
-        _List ->
-            L = pad_list(Rest, PAD),
-            %TODO - padding by bit size and not byte
-            ?LOGGER:debug("[~p]: prepare_payload: PAD LIST SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, length(PAD), bit_size(L)/8, bit_size(L)]),
+        [] ->
+            ?LOGGER:debug("[~p]: prepare_payload: PaddingBitString SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, 0, byte_size(Rest), bit_size(Rest)]),
+            CRC = erlang:crc32(Rest),
+            BinaryCRC = <<CRC:32>>,
+            BinaryZero = <<0:8>>,
+            ?LOGGER:preciseDebug("[~p]: CRC is:~w~n,", [?MODULE, CRC]),
+            BinaryChannel = <<Channel:8>>,
+            ListToSend = binary:bin_to_list(<<BinaryChannel/bitstring, BinaryZero/bitstring, Rest/bitstring ,BinaryCRC/bitstring >>),
+            ?LOGGER:preciseDebug("[~p]: prepare_payload: BYTE SIZE = ~w, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	        ListToSend;
+        _ ->
+            L = <<Rest/bitstring, PaddingBitString/bitstring>>,
+            ?LOGGER:debug("[~p]: prepare_payload: PaddingBitString SIZE: ~w, LISTS AFTER PADDING: ~w(~w).~n", [?MODULE, bit_size(PaddingBitString), byte_size(L), bit_size(L)]),
             CRC = erlang:crc32(L),
             BinaryCRC = <<CRC:32>>,
             BinaryZero = <<0:8>>,
             ?LOGGER:preciseDebug("[~p]: CRC is:~w~n,", [?MODULE, CRC]),
             BinaryChannel = <<Channel:8>>,
-            ListToSend = binary:bin_to_list(<<BinaryChannel/binary, BinaryZero/binary, L/binary ,BinaryCRC/binary >>),
-	          ?LOGGER:preciseDebug("[~p]: prepare_payload: BYTE SIZE = ~w, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
-	          ListToSend
+            ListToSend = binary:bin_to_list(<<BinaryChannel/bitstring, BinaryZero/bitstring, L/bitstring ,BinaryCRC/bitstring >>),
+	        ?LOGGER:preciseDebug("[~p]: prepare_payload: BYTE SIZE = ~w, Result: ~w~n", [?MODULE, length(ListToSend), ListToSend]),
+	        ListToSend
     end,
 	Result.
 
-getPaddingList(Size)->
-    ?LOGGER:preciseDebug("[~p]: getPaddingList: Size: ~w~n", [?MODULE, Size]),
-    Result = case Size of
-		S1 when S1 =< 14 ->
-		    X = 20 - Size - 4 - 2,
+
+getPaddingBitString(BitSize)->
+    ?LOGGER:preciseDebug("[~p]: getPaddingBitString: Size: ~w~n", [?MODULE, BitSize]),
+    Result = case BitSize of
+		S1 when S1 =< 112 -> %under 20 bytes
+		    X = 160 - BitSize - 48,
             if X > 0 ->
-                    lists:seq(1,X);
+                    a(X);
                 true ->
                     []
             end;
-		S2 when S2 =< 34 ->
-		    X = 40 - Size - 4 - 2,
+		S2 when S2 =< 272 -> %under 40 bytes
+		    X = 320 - BitSize - 48,
 		    if X > 0 ->
-		        lists:seq(1,X);
+		        a(X);
 		        true -> []
             end;
-		S2 when S2 =< 54 ->
-		    X = 60 - Size - 4 - 2,
+		S2 when S2 =< 432 -> %under 60 bytes
+		    X = 480 - BitSize - 48,
 		    if X > 0 ->
-		        lists:seq(1,X);
+		        a(X);
 		        true -> []
             end;
 		_ -> too_large
 	end,
 	Result.
 
+a(Result, 0) -> Result;
+a(Acc, Number) -> a(<<Acc/bitstring, 0:1>>, Number - 1).
+a(Number) -> a(<<0:1>>, Number - 1).
 
 pad_list(DestinationBinary, List) ->
 	?LOGGER:debug("[~p]: pad_list: DestinationBinary: ~w, List: ~w ~n", [?MODULE, DestinationBinary, List]),

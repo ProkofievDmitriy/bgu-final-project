@@ -12,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/2, enable/1, disable/1, handle_incoming_message/3, get_status/1, reset/1]).
+-export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/3, enable/1, disable/1, handle_incoming_message/2, get_status/1, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -62,25 +62,7 @@ updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
 updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
 
-send(FsmPid, {Type, Destination, Data})->
-    % gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, self()}}),
-    % StartTime = get_current_millis(),
-    % Result = receive
-    %            {ok , sent} -> {ok , sent};
-    %            {error, Error} ->
-    %                {error, Error}
-    %            after 2 * ?NET_TRAVERSAL_TIME ->
-    %            ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
-    %            ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
-    %            case ResultSyncSend of
-    %                {ok , sent} -> {ok, sent};
-    %                _ ->
-    %                    ?LOGGER:err("[~p]: get_next_hop TIMEOUT EXCEEDED : ~p.~n", [?MODULE, get_current_millis() - StartTime]),
-    %                   {error, timeout_exceeded}
-    %            end
-    %        end,
-    % ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
-    % Result.
+send(FsmPid, {Type, Destination}, Data)->
     ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
     ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, ResultSyncSend]),
     ResultSyncSend.
@@ -98,10 +80,29 @@ disable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, disable).
 
 
-handle_incoming_message(FsmPid, Medium, Payload)->
-    ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p~n", [?MODULE, ?GET_MEDIUM_NAME(Medium)]),
-    LoadNGPacket = deserializePayload(Payload),
-    gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}}).
+handle_incoming_message(FsmPid, {Medium, Payload})->
+    LoadNGPacket = (catch deserializePayload(Payload)),
+    case LoadNGPacket of
+        {error, Error} ->
+            ?LOGGER:critical("[~p]: handle_incoming_message : FAILED TO DESERIALIZE MESSAGE - IGNORING~n", [?MODULE]);
+        #load_ng_packet{} ->
+            ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p~n", [?MODULE, ?GET_MEDIUM_NAME(Medium)]),
+            gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket#load_ng_packet{medium = Medium}});
+        Else ->
+            ?LOGGER:critical("[~p]: handle_incoming_message : UNEXPECTED ERROR ~p - IGNORING~n", [?MODULE, Else])
+    end;
+
+handle_incoming_message(FsmPid, Payload)->
+    LoadNGPacket = (catch deserializePayload(Payload)),
+    case LoadNGPacket of
+        {error, Error} ->
+            ?LOGGER:critical("[~p]: handle_incoming_message : FAILED TO DESERIALIZE MESSAGE - IGNORING~n", [?MODULE]);
+        #load_ng_packet{} ->
+            ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p~n", [?MODULE, ?GET_MEDIUM_NAME(LoadNGPacket#load_ng_packet.medium)]),
+            gen_fsm:send_event(FsmPid, {received_message, LoadNGPacket});
+        Else ->
+            ?LOGGER:critical("[~p]: handle_incoming_message : UNEXPECTED ERROR ~p - IGNORING~n", [?MODULE, Else])
+    end.
 
 get_status(FsmPid) ->
     gen_fsm:sync_send_all_state_event(FsmPid, get_status, 30000).
@@ -125,7 +126,6 @@ init(Properties) ->
     RREQHandlingSet_Id = ets:new(rreq_handling_set, [set, public]),
     PendingAcknowledgmentsSetId = ets:new(pending_acknowledgements_set, [set, public]),
     DREQTable = ets:new(dreq_table, [set, public]),
-
 
     gen_fsm:send_event_after(?REMOVE_NOT_VALID_ROUTES_TIMER, remove_not_valid_routes),
     gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
@@ -166,14 +166,14 @@ case NextHop of
     {error, ErrorMessage} ->
         {reply, {error, ErrorMessage}, active, NewState};
     #routing_set_entry{} = Hop ->
-        Packet = build_new_packet(Type, Destination, Data, NewState),
+        Packet = build_new_packet(Type, Destination, Data, NewState, Hop#routing_set_entry.medium),
         Payload = serialize_packet(Packet),
         case Payload of
             {error, ErrorMessage} ->
                {reply, {error, ErrorMessage}, active, NewState};
             _ ->
                 BottomLevelModule = StateData#state.bottom_level_module,
-                Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload),
                 report_data_message_sent(Packet, NewState),
                 {reply, Result, active, NewState}
         end;
@@ -200,7 +200,7 @@ active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
             PIDToAnswer ! {error, ErrorMessage},
             {next_state, active, NewState};
         #routing_set_entry{} = Hop ->
-            Packet = build_new_packet(Type, Destination, Data, NewState),
+            Packet = build_new_packet(Type, Destination, Data, NewState, Hop#routing_set_entry.medium),
             Payload = serialize_packet(Packet),
             case Payload of
                 {error, ErrorMessage} ->
@@ -208,7 +208,7 @@ active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
                    {next_state, active, NewState};
                 _ ->
                     BottomLevelModule = StateData#state.bottom_level_module,
-                    Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {{Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload}),
+                    Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload),
                     report_data_message_sent(Packet, NewState),
                     PIDToAnswer ! Result,
                     {next_state, active, NewState}
@@ -448,14 +448,14 @@ generate_rreq(Destination, StateData) ->
                                 destination = Destination,
                                 hop_count = 0,
                                 r_seq_number = StateData#state.r_seq_number},
-    Packet = build_new_packet(?RREQ, ?BROADCAST_ADDRESS, RREQMessage, StateData),
+    Packet = build_new_packet(?RREQ, ?BROADCAST_ADDRESS, RREQMessage, StateData, ?RF_PLC),
     Payload = serialize_packet(Packet),
     case Payload of
         {error, ErrorMessage} ->
             ?LOGGER:err("[~p]: ACTIVE - GENERATING RREQ failed prepare payload: ~p.~n", [?MODULE, ErrorMessage]);
         _ ->
             BottomLevelModule = StateData#state.bottom_level_module,
-            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{?RF_PLC, ?BROADCAST_ADDRESS}, Payload }),
+            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {?RF_PLC, ?BROADCAST_ADDRESS}, Payload),
             add_new_entry_to_rreq_handling_set(StateData#state.rreq_handling_set,
                                               {StateData#state.r_seq_number, Destination, StateData#state.self_address}),
             report_sent_management_message(Packet, StateData),
@@ -473,7 +473,7 @@ generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
     Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
     case Result of
         {ok, {_Key, NextHop}} ->
-            Packet = build_new_packet(?RREP, Destination, RREPMessage, StateData),
+            Packet = build_new_packet(?RREP, Destination, RREPMessage, StateData, NextHop#routing_set_entry.medium),
             Payload = serialize_packet(Packet),
             case Payload of
                 {error, ErrorMessage} ->
@@ -481,7 +481,7 @@ generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RREP - NextHop: ~w.~n", [?MODULE, NextHop]),
                     BottomLevelModule = StateData#state.bottom_level_module,
-                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload),
                     report_sent_management_message(Packet, StateData),
                     if ?ACK_REQUIRED -> %false by default - further implementations
                         add_new_entry_to_pending_acknowledgments(NextHop#routing_set_entry.next_addr,
@@ -506,7 +506,7 @@ generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, State
     Result = query_find_next_hop(Destination, StateData#state.routing_set),
     case Result of
         {ok, {_Key, NextHop}} ->
-            Packet = build_new_packet(?RERR, Destination, RERRMessage, StateData),
+            Packet = build_new_packet(?RERR, Destination, RERRMessage, StateData, NextHop#routing_set_entry.medium),
             Payload = serialize_packet(Packet),
             case Payload of
                 {error, ErrorMessage} ->
@@ -514,7 +514,7 @@ generate_rerr({Destination, R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, State
                 _ ->
                     ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - NextHop: ~w.~n", [?MODULE, NextHop]),
                     BottomLevelModule = StateData#state.bottom_level_module,
-                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload }),
+                    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload),
                     report_sent_management_message(Packet, StateData)
                 end;
         Error ->
@@ -527,7 +527,7 @@ generate_rerr({Destination, _R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, Send
                                 unreachable_address = UnreacheableAddress,
                                 r_seq_number = 0,
                                 error_code = ErrorCode},
-    Packet = build_new_packet(?RERR, SendTO, RERRMessage, StateData),
+    Packet = build_new_packet(?RERR, SendTO, RERRMessage, StateData, Medium),
     Payload = serialize_packet(Packet),
     case Payload of
         {error, ErrorMessage} ->
@@ -535,7 +535,7 @@ generate_rerr({Destination, _R_SEQ_NUMBER, ErrorCode, UnreacheableAddress}, Send
         _ ->
             ?LOGGER:info("[~p]: ACTIVE - GENERATING RRER - to : ~w.~n", [?MODULE, {Medium, SendTO}]),
             BottomLevelModule = StateData#state.bottom_level_module,
-            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {{Medium, SendTO}, Payload }),
+            BottomLevelModule:send_async(StateData#state.bottom_level_pid, {Medium, SendTO}, Payload),
             report_sent_management_message(Packet, StateData)
     end.
 
@@ -551,7 +551,7 @@ generate_rack(Destination, StateData) ->
     Result = query_find_next_hop(Destination, StateData#state.routing_set),
     case Result of
         {ok, {_Key, NextHop}} ->
-                Packet = build_new_packet(?RACK, Destination, RACKMessage, StateData),
+                Packet = build_new_packet(?RACK, Destination, RACKMessage, StateData, NextHop#routing_set_entry.medium),
                 Payload = serialize_packet(Packet),
                 case Payload of
                     {error, ErrorMessage} ->
@@ -583,20 +583,22 @@ get_next_hop(Destination, State)->
     ?LOGGER:debug("[~p]: get_next_hop Result: ~w.~n", [?MODULE, Result]),
     Result.
 
-build_new_packet(Type, Destination, Data, State)->
+build_new_packet(Type, Destination, Data, State, Medium)->
   NewPacket = #load_ng_packet{
     type = Type,
     source = State#state.self_address,
     destination = Destination,
     originator = State#state.self_address,
     data = Data,
+    medium = Medium,
     uuid = generate_uuid()
     },
     ?LOGGER:debug("[~p]: New packet build: ~w ~n", [?MODULE, NewPacket]),
     NewPacket.
 
 
-serialize_packet(#load_ng_packet{destination = Destination, source = Source, originator = Originator, type = Type, uuid= UUID} = Packet)->
+serialize_packet(#load_ng_packet{destination = Destination, source = Source, originator = Originator, type = Type, uuid= UUID, medium = Medium} = Packet)->
+    BinaryMedium = <<Medium:?MEDIUM_LENGTH>>,
     BinaryDestination = <<Destination:?ADDRESS_LENGTH>>,
     BinarySource = <<Source:?ADDRESS_LENGTH>>,
     BinaryOriginator = <<Originator:?ADDRESS_LENGTH>>,
@@ -604,43 +606,46 @@ serialize_packet(#load_ng_packet{destination = Destination, source = Source, ori
     BinaryUUID = <<UUID:?MESSAGE_UUID_LENGHT>>,
     %TODO - packet Data should be binary
     % BinaryData = list_to_binary(get_packet_data_as_list(Packet#load_ng_packet.type, Packet#load_ng_packet.data)),
-    BinaryData = get_packet_to_binary(Packet#load_ng_packet.type, Packet#load_ng_packet.data),
-    BinaryDataLengthInBytes = byte_size(BinaryData),
+    BinaryData = packet_data_to_binary(Packet#load_ng_packet.type, Packet#load_ng_packet.data),
+    BinaryDataLength = bit_size(BinaryData),
     ?LOGGER:debug("[~p]: serialize_packet : MessageType: ~w, Originator: ~w, Source: ~w , Destination: ~w, DataLengthInBytes: ~w, UUID: ~w~n", [?MODULE,
                                                                                                                    BinaryMessageType,
                                                                                                                    BinaryOriginator,
                                                                                                                    BinarySource,
                                                                                                                    BinaryDestination,
-                                                                                                                   BinaryDataLengthInBytes,
+                                                                                                                   BinaryDataLength,
                                                                                                                    BinaryUUID]),
 
-  <<BinaryMessageType/bitstring,
-              BinarySource/bitstring,
-              BinaryOriginator/bitstring,
-              BinaryDestination/bitstring,
-              BinaryUUID/bitstring,
-              BinaryDataLengthInBytes:?DATA_LENGTH_SIZE,
-              BinaryData/bitstring>>.
+  <<BinaryMedium/bitstring,
+    BinaryMessageType/bitstring,
+    BinarySource/bitstring,
+    BinaryOriginator/bitstring,
+    BinaryDestination/bitstring,
+    BinaryUUID/bitstring,
+    BinaryDataLength:?DATA_LENGTH_SIZE,
+    BinaryData/bitstring>>.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Packet deserialization utilities %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 deserializePayload(Payload)->
     ?LOGGER:debug("[~p]: deserializePayload : Payload : ~w ~n", [?MODULE, Payload]),
-    <<Type:?MESSAGE_TYPE_LENGTH,
+    <<Medium:?MEDIUM_LENGTH,
+      Type:?MESSAGE_TYPE_LENGTH,
       Source:?ADDRESS_LENGTH,
       Originator:?ADDRESS_LENGTH,
       Destination:?ADDRESS_LENGTH,
       UUID:?MESSAGE_UUID_LENGHT,
-      DataLength:?DATA_LENGTH_SIZE,
+      DataLengthBits:?DATA_LENGTH_SIZE,
       RestData/bitstring>> = Payload,
-    DataLengthBits = DataLength * 8, % number of bit in data
+    % DataLengthBits = DataLength * 8, % number of bit in data
     <<Data:DataLengthBits/bitstring, _Rest/bitstring>> = RestData,
     Packet = deserializeMessage(#load_ng_packet{
         type = Type,
         source = Source,
         originator = Originator,
         destination = Destination,
-        uuid = UUID
+        uuid = UUID,
+        medium = Medium
     },Data),
     ?LOGGER:debug("[~p]: Deserialized packet : Packet : ~w ~n", [?MODULE, Packet]),
     Packet.
@@ -722,20 +727,20 @@ deserializeMessage(#load_ng_packet{} = Packet, Data)->
     Packet#load_ng_packet{data=Data}.
 
 
-get_packet_to_binary(?RREQ, Data) ->
+packet_data_to_binary(?RREQ, Data) ->
   term_to_binary([Data#rreq_message.r_seq_number, Data#rreq_message.originator, Data#rreq_message.destination, Data#rreq_message.hop_count]);
 
-get_packet_to_binary(?RREP, Data) ->
+packet_data_to_binary(?RREP, Data) ->
   term_to_binary([Data#rrep_message.r_seq_number, Data#rrep_message.originator, Data#rrep_message.hop_count,  Data#rrep_message.ack_required, Data#rrep_message.destination]);
 
-get_packet_to_binary(?RERR, Data) ->
+packet_data_to_binary(?RERR, Data) ->
   term_to_binary([Data#rerr_message.r_seq_number, Data#rerr_message.originator, Data#rerr_message.unreachable_address, Data#rerr_message.error_code, Data#rerr_message.destination]);
 
-get_packet_to_binary(?RACK, Data) ->
+packet_data_to_binary(?RACK, Data) ->
   term_to_binary([Data#rack_message.r_seq_number, Data#rack_message.originator, Data#rack_message.hop_count, Data#rack_message.destination]);
 
 
-get_packet_to_binary( _ , Data) ->
+packet_data_to_binary( _ , Data) ->
     Data.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -828,7 +833,7 @@ forward_packet(Packet, StateData) ->
 forward_packet(Packet, StateData, NextHop) ->
     Payload = serialize_packet(Packet#load_ng_packet{source = StateData#state.self_address}),
     BottomLevelModule = StateData#state.bottom_level_module,
-    {SendStatus, Message} = BottomLevelModule:send(StateData#state.bottom_level_pid, {{NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload}),
+    {SendStatus, Message} = BottomLevelModule:send(StateData#state.bottom_level_pid, {NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload),
     ?LOGGER:info("[~p]: ~p packet forwarded to ~w, Packet uuid: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Packet#load_ng_packet.type), NextHop, Packet#load_ng_packet.uuid]),
     {SendStatus, Message, NextHop}.
 

@@ -6,7 +6,7 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/2, send_async/2, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2]).
+-export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -27,11 +27,11 @@ set_state(FsmPid, NewState)->
     gen_fsm:sync_send_all_state_event(FsmPid, {set_state, NewState}).
 
 %Managing events
-send(FsmPid, {Hop, Payload})->
+send(FsmPid, Hop, Payload)->
     gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}, ?TIMEOUT).
 
 %Managing events
-send_async(FsmPid, {Hop, Payload})->
+send_async(FsmPid, Hop, Payload)->
     gen_fsm:send_event(FsmPid, {send, {Hop, Payload}}).
 
 
@@ -321,8 +321,9 @@ isValidTarget(Target, SelfAddress)->
 handle_message(Medium, Target, StateData, Data)->
     case isValidTarget(Target, StateData#state.self_address) of
         true ->
-            ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to network layer~n", [?MODULE]),
-            ?NETWORK:handle_incoming_message(StateData#state.upper_level_pid, Medium, Data);
+            UpperLevelModule = StateData#state.upper_level_module,
+            ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to ~p~n", [?MODULE, UpperLevelModule]),
+            UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, {Medium, Data});
         _Else ->
             ?LOGGER:debug("[~p]: handle_message : target(~w) is NOT valid - IGNORING incoming message ~n", [?MODULE, Target])
     end.

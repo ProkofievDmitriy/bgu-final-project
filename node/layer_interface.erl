@@ -1,7 +1,7 @@
 -module(layer_interface).
  
--callback send(CurrentPid :: pid(), Message :: any()) -> 'ok' | {ok, sent} | {error, any()}.
--callback send_async(CurrentPid :: pid(), Message :: any()) -> 'ok' | {ok, sent} | {error, any()}.
+-callback send(CurrentPid :: pid(), Destination :: any(), Message :: any()) -> 'ok' | {ok, sent} | {error, any()}.
+-callback send_async(CurrentPid :: pid(), Destination :: any(), Message :: any()) -> 'ok' | {ok, sent} | {error, any()}.
 
 -callback handle_incoming_message(CurrentPid :: pid(), Message :: binary()) -> 'ok'.
  

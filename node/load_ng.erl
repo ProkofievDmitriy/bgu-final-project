@@ -73,8 +73,11 @@ init(Properties) ->
 	TransportMonitorRef = erlang:monitor(process, TransportPid),
 	?LOGGER:info("[~p]: TRANSPORT : ~p started  started with pid: ~p and monitored by : ~p.~n", [?MODULE, ?TRANSPORT, TransportPid, ?MODULE]),
 
-    bind_levels(?NETWORK, NetworkPid, ?DATA_LINK, DataLinkPid),
-    bind_levels(?TRANSPORT, TransportPid, ?NETWORK, NetworkPid),
+    % bind_levels(?NETWORK, NetworkPid, ?DATA_LINK, DataLinkPid),
+    % bind_levels(?TRANSPORT, TransportPid, ?NETWORK, NetworkPid),
+
+    bind_levels(?TRANSPORT, TransportPid, ?DATA_LINK, DataLinkPid),
+    bind_levels(?NETWORK, NetworkPid, ?TRANSPORT, TransportPid),
 
     ?LOGGER:info("[~p]: is up as gen server~n", [?MODULE]),
     {ok, #context{
@@ -92,8 +95,10 @@ init(Properties) ->
         modem_port_pid = ModemPortPid,
         modem_port_restart_timer_interval = 30000,
         modem_port_properties = ModemPortProperties,
-        top_level = ?TRANSPORT,
-        top_level_pid = TransportPid
+        % top_level = ?TRANSPORT,
+        % top_level_pid = TransportPid
+        top_level = ?NETWORK,
+        top_level_pid = NetworkPid
 
     }}.
 
@@ -104,21 +109,21 @@ init(Properties) ->
 handle_call({data_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     TopLevelModule = Context#context.top_level,
-    Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
     ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_request_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
     TopLevelModule = Context#context.top_level,
-    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREQ, Destination, Data}),
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREQ, Destination}, Data),
     ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
 handle_call({data_reply_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     TopLevelModule = Context#context.top_level,
-    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREP, Destination, Data}),
+    Result = TopLevelModule:send(Context#context.top_level_pid, {?DREP, Destination}, Data),
     ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
     {reply, Result, Context};
 
@@ -159,7 +164,7 @@ handle_call(Request, From, Context) ->
  handle_cast({data_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
      ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
@@ -167,7 +172,7 @@ handle_call(Request, From, Context) ->
  handle_cast({data_request_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
      ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
@@ -175,7 +180,7 @@ handle_call(Request, From, Context) ->
  handle_cast({data_reply_message, {Destination, Data, PIDToResponse}}, Context) ->
      ?LOGGER:info("[~p]: ASYNC data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination, Data}),
+     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
      ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
      PIDToResponse ! Result,
      {noreply, Context};
@@ -197,7 +202,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_m
     DataLinkPid = ?DATA_LINK:start(Context#context.data_link_properties),
     ?MODEM_PORT:stop(),
     ?MODEM_PORT:start(DataLinkPid),
-    bind_levels(?NETWORK, Context#context.network_pid, ?DATA_LINK, DataLinkPid),
+    bind_levels(?TRANSPORT, Context#context.transport_pid, ?DATA_LINK, DataLinkPid),
     DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
     NewContext = Context#context{data_link_monitor_ref = DataLinkMonitorRef, data_link_pid = DataLinkPid},
     ?LOGGER:info("[~p]: DATA LINK AND MODEM PORT RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
@@ -205,12 +210,11 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_m
 
 %case LOADng Core crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{network_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("[~p]: LOADng CORE crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
+    ?LOGGER:info("[~p]: NETWORK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     NetworkPid = ?NETWORK:start(Context#context.network_properties),
-    bind_levels(?NETWORK, NetworkPid, ?DATA_LINK, Context#context.data_link_pid),
-    bind_levels(?TRANSPORT, Context#context.transport_pid, ?NETWORK, NetworkPid),
+    bind_levels(?NETWORK, NetworkPid, ?TRANSPORT, Context#context.transport_pid),
     NetworkMonitorRef = erlang:monitor(process, NetworkPid),
-    NewContext = Context#context{data_link_monitor_ref = NetworkMonitorRef, network_pid = NetworkPid},
+    NewContext = Context#context{data_link_monitor_ref = NetworkMonitorRef, network_pid = NetworkPid, top_level_pid = NetworkPid},
     ?LOGGER:info("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, NetworkPid]),
     {noreply, NewContext};
 
@@ -218,7 +222,8 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{network_mon
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{transport_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:info("[~p]: TRANSPORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
     TransportPid = ?TRANSPORT:start(Context#context.transport_properties),
-    bind_levels(?TRANSPORT, TransportPid, ?NETWORK, Context#context.network_pid),
+    bind_levels(?TRANSPORT, TransportPid, ?DATA_LINK, Context#context.data_link_properties),
+    bind_levels(?NETWORK, Context#context.network_pid, ?TRANSPORT, TransportPid),
     TransportMonitorRef = erlang:monitor(process, TransportPid),
     NewContext = Context#context{transport_monitor_ref = TransportMonitorRef, transport_pid = TransportPid},
     ?LOGGER:info("[~p]: TRANSPORT restarted with pid: ~p.~n",[?MODULE, TransportPid]),
