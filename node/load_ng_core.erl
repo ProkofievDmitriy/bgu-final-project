@@ -38,8 +38,8 @@
 
 -record(load_ng_packet, {medium, type, source, destination, originator, data, uuid}).
 
--record(rreq_message, {originator, destination, hop_count, r_seq_number}).
--record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number}).
+-record(rreq_message, {originator, destination, hop_count, r_seq_number, path, path_length}).
+-record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number, path, path_length}).
 -record(rack_message, {originator, destination, hop_count, r_seq_number}).
 -record(rerr_message, {originator, destination, unreachable_address, r_seq_number, error_code}).
 
@@ -294,7 +294,8 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
                     %TODO generate RACK
                     ok;
                 false ->
-                    forward_packet(Packet, StateData),
+                    forward_packet(update_path_accumulation(Packet, StateData#state.self_address), StateData),
+                    ?LOGGER:debug("[~p]: ACTIVE - RREP PATH_ACCUMULATION path : ~w .~n", [?MODULE, Packet#load_ng_packet.data]),
                     report_sent_management_message(Packet, StateData)
         end;
         true ->
@@ -469,7 +470,9 @@ generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
                                 destination = Destination,
                                 ack_required = ?ACK_REQUIRED,
                                 hop_count = HopCount,
-                                r_seq_number = RREQSequenceNumber},
+                                r_seq_number = RREQSequenceNumber,
+                                path = [StateData#state.self_address],
+                                path_length = 1},
     Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
     case Result of
         {ok, {_Key, NextHop}} ->
@@ -583,6 +586,16 @@ get_next_hop(Destination, State)->
     ?LOGGER:debug("[~p]: get_next_hop Result: ~w.~n", [?MODULE, Result]),
     Result.
 
+update_path_accumulation(#load_ng_packet{data = Data} = Packet, SelfAddress)->
+    if ?PATH_ACCUMULATION_ENABLED =:= 1 ->
+        NewData = Data#rrep_message{path = Data#rrep_message.path ++ [SelfAddress]},
+        Packet#load_ng_packet{data = NewData};
+    true ->
+        Packet
+    end.
+
+
+
 build_new_packet(Type, Destination, Data, State, Medium)->
   NewPacket = #load_ng_packet{
     type = Type,
@@ -676,6 +689,8 @@ deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
     HopCount = lists:nth(3, RREPMessageData) + 1,
     AckRequired = lists:nth(4, RREPMessageData),
     Destination = lists:nth(5, RREPMessageData),
+    Path = lists:nth(5, RREPMessageData),
+
 
     RREPMessage = #rrep_message{
         originator = Originator,
@@ -731,7 +746,7 @@ packet_data_to_binary(?RREQ, Data) ->
   term_to_binary([Data#rreq_message.r_seq_number, Data#rreq_message.originator, Data#rreq_message.destination, Data#rreq_message.hop_count]);
 
 packet_data_to_binary(?RREP, Data) ->
-  term_to_binary([Data#rrep_message.r_seq_number, Data#rrep_message.originator, Data#rrep_message.hop_count,  Data#rrep_message.ack_required, Data#rrep_message.destination]);
+  term_to_binary([Data#rrep_message.r_seq_number, Data#rrep_message.originator, Data#rrep_message.hop_count,  Data#rrep_message.ack_required, Data#rrep_message.destination, Data#rrep_message.path]);
 
 packet_data_to_binary(?RERR, Data) ->
   term_to_binary([Data#rerr_message.r_seq_number, Data#rerr_message.originator, Data#rerr_message.unreachable_address, Data#rerr_message.error_code, Data#rerr_message.destination]);

@@ -147,8 +147,8 @@ handle_call(stop, _From, State) ->
 
 
 handle_call({get_time_offset, NodeTime}, From, State) ->
-    % Offset = NodeTime - State#state.time_base,
-    Offset = NodeTime - get_current_millis(),
+    Offset = NodeTime - State#state.time_base,
+    % Offset = NodeTime - get_current_millis(),
     io:format("stats_server handle_call: ~p , OFFSET = ~p for node ~p~n", [get_time_offset, Offset, From]),
     {reply, {ok, Offset}, State};
 
@@ -239,8 +239,8 @@ handle_cast({{data_message, received_message}, Data}, State = #state{dm_ets = DM
 
   case Result of
       [{_, {Time, _, _}}|[]] ->
-          io:format("Message Traverse Time: ~p~n",[UTIME - Time]),
-          NewAvg = AvgTime + ((UTIME - Time) - AvgTime) / (NumberOfDataMsgReceived + 1),
+          io:format("Message Traverse Time: ~p~n",[abs(UTIME - Time)]),
+          NewAvg = AvgTime + (abs(UTIME - Time) - AvgTime) / (NumberOfDataMsgReceived + 1),
           UpdatedCounters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1,
                                               data_msg_avg_time = round(NewAvg)},
           {noreply, State#state{counters = UpdatedCounters}};

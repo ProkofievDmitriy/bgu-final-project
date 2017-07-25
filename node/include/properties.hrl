@@ -68,6 +68,7 @@
 -define(NET_TRAVERSAL_TIME, 4000).
 -define(TIMEOUT, ?NET_TRAVERSAL_TIME * 3).
 -define(ACK_REQUIRED, 0). % 0 = false, 1 = true
+-define(PATH_ACCUMULATION_ENABLED, 1). % 0 = false, 1 = true
 -define(SEQUENCE_NUMBER_MAX_VALUE, 256). %maximum value for sequence number
 
 
