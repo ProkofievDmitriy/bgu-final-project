@@ -7,3 +7,5 @@
  
 -callback updateUpperLevel(CurrentPid :: pid(), BottomLevelModule :: module(), BottomLevelPid :: pid()) -> 'ok'.
 -callback updateBottomLevel(CurrentPid :: pid(), UpperLevelModule :: module(), UpperLevelPid :: pid()) -> 'ok'.
+
+% -callback reset() -> 'ok'.

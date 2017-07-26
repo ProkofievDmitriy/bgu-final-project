@@ -111,6 +111,7 @@ init(GlobalProperties) ->
 	Protocol_Monitor_Reference = erlang:monitor(process, Protocol_Pid),
 	?LOGGER:debug("[~p]: Protocol: ~p started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, CurrentProtocol, Protocol_Pid, NodeName]),
 
+    timer:sleep(5000),
     %initialize application
     ApplicationProperties = [{node_name, NodeName} | proplists:get_value(?APPLICATION_PROPERTIES, GlobalProperties)],
     ApplicationType = proplists:get_value(role, ApplicationProperties),

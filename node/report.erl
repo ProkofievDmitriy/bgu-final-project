@@ -119,7 +119,9 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
 
 handle_cast(sync_time_offset, Context) ->
     ServerModuleInterface = Context#context.data_server_interface,
-    Offset = ServerModuleInterface:getOffset(utils:get_current_millis()),
+    % Offset = ServerModuleInterface:getOffset(utils:get_current_millis()),
+    % Offset = ntp:ask(),
+    Offset = sntp:get_offset(),
     ?LOGGER:debug("[~w]: sync_time_offset - received offset = ~p ~n", [?MODULE, Offset]),
     if Offset =:= 0 -> spawn(fun()-> timer:sleep(10000), sync_time_offset() end);
         true -> ok

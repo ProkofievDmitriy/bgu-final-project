@@ -12,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2]).
+-export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -54,7 +54,8 @@ updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
 handle_incoming_message(FsmPid, Message)->
     gen_fsm:send_event(FsmPid, {received_message, Message}).
 
-
+reset(FsmPid) ->
+    gen_fsm:sync_send_all_state_event(FsmPid, reset).
 
 %% ====================================================================
 %% Behavioural functions
@@ -180,6 +181,13 @@ handle_sync_event({updateBottomLevel, BottomLevelModule, BottomLevelPid }, _From
     NewState = StateData#state{bottom_level_pid = BottomLevelPid, bottom_level_module=BottomLevelModule},
     ?LOGGER:debug("[~p]: updateBottomLevel, StateName: ~p, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, StateName, NewState};
+
+
+handle_sync_event(reset, _From, StateName, State) ->
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
+    ets:delete_all_objects(State#state.sessions_db),
+    {reply, ok, StateName, State};
+
 
 handle_sync_event(Event, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),

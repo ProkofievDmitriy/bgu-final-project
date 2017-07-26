@@ -147,8 +147,8 @@ handle_call(stop, _From, State) ->
 
 
 handle_call({get_time_offset, NodeTime}, From, State) ->
-    Offset = NodeTime - State#state.time_base,
-    % Offset = NodeTime - get_current_millis(),
+    % Offset = NodeTime - State#state.time_base,
+    Offset = NodeTime - get_current_millis(),
     io:format("stats_server handle_call: ~p , OFFSET = ~p for node ~p~n", [get_time_offset, Offset, From]),
     {reply, {ok, Offset}, State};
 

@@ -146,6 +146,7 @@ handle_call(get_status, _From, Context) ->
 handle_call(reset, _From, Context) ->
     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
     ResetStatus = ?NETWORK:reset(Context#context.network_pid),
+    ResetStatus = ?TRANSPORT:reset(Context#context.transport_pid),
     {reply, ResetStatus , Context};
 
 

@@ -38,8 +38,8 @@
 
 -record(load_ng_packet, {medium, type, source, destination, originator, data, uuid}).
 
--record(rreq_message, {originator, destination, hop_count, r_seq_number, path, path_length}).
--record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number, path, path_length}).
+-record(rreq_message, {originator, destination, hop_count, r_seq_number, path}).
+-record(rrep_message, {originator, destination, ack_required, hop_count, r_seq_number, path}).
 -record(rack_message, {originator, destination, hop_count, r_seq_number}).
 -record(rerr_message, {originator, destination, unreachable_address, r_seq_number, error_code}).
 
@@ -291,6 +291,8 @@ active({received_message, #load_ng_packet{type = ?RREP} = Packet}, StateData) ->
         install_forward_route(StateData, Packet),
         case amIDestination(Packet#load_ng_packet.data#rrep_message.destination, StateData#state.self_address) of
                 true ->
+                    Data = Packet#load_ng_packet.data,
+                    ?LOGGER:debug("[~p]: ACTIVE - RREP PATH_ACCUMULATION path : ~w .~n", [?MODULE, Data#rrep_message.path]),
                     %TODO generate RACK
                     ok;
                 false ->
@@ -400,10 +402,12 @@ handle_sync_event(get_status, _From, StateName, State) ->
     {reply, [{routing_set, RoutingSetList}], StateName, State};
 
 handle_sync_event(reset, _From, StateName, State) ->
-    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
     Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =/= 0-> Key end),
     RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
     [ets:delete(State#state.routing_set, X) || X <- RoutingSet ],
+    ets:delete_all_objects(State#state.rreq_handling_set),
+    ets:delete_all_objects(State#state.pending_acknowledgements_set),
     {reply, ok, StateName, State};
 
 
@@ -471,8 +475,7 @@ generate_rrep({Destination, RREQSequenceNumber, HopCount}, StateData) ->
                                 ack_required = ?ACK_REQUIRED,
                                 hop_count = HopCount,
                                 r_seq_number = RREQSequenceNumber,
-                                path = [StateData#state.self_address],
-                                path_length = 1},
+                                path = [StateData#state.self_address]},
     Result = query_find_next_hop(Destination, StateData#state.routing_set), % {Medium, NextHopAddress}
     case Result of
         {ok, {_Key, NextHop}} ->
@@ -666,7 +669,7 @@ deserializePayload(Payload)->
 
 deserializeMessage(#load_ng_packet{type = ?RREQ} = Packet, Data)->
     RREQMessageData = binary_to_term(Data),
-    ?LOGGER:debug("[~p]: deserializeMessage RREQMessageData : ~w ~n", [?MODULE, RREQMessageData]),
+    ?LOGGER:preciseDebug("[~p]: deserializeMessage RREQMessageData : ~w ~n", [?MODULE, RREQMessageData]),
     RREQSequenceNumber = lists:nth(1, RREQMessageData),
     Originator = lists:nth(2, RREQMessageData),
     Destination = lists:nth(3, RREQMessageData),
@@ -689,7 +692,7 @@ deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
     HopCount = lists:nth(3, RREPMessageData) + 1,
     AckRequired = lists:nth(4, RREPMessageData),
     Destination = lists:nth(5, RREPMessageData),
-    Path = lists:nth(5, RREPMessageData),
+    Path = lists:nth(6, RREPMessageData),
 
 
     RREPMessage = #rrep_message{
@@ -697,7 +700,8 @@ deserializeMessage(#load_ng_packet{type = ?RREP} = Packet, Data)->
         destination = Destination,
         hop_count = HopCount,
         r_seq_number = RREPSequenceNumber,
-        ack_required = AckRequired
+        ack_required = AckRequired,
+        path = Path
     },
 
     Packet#load_ng_packet{data = RREPMessage};
