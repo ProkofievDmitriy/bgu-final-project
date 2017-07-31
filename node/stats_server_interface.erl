@@ -33,6 +33,7 @@
 
 %% API
 -export([report/2, report/1, getOffset/1]).
+-export([clear_routing_tables/0,remove_station/1,update_medium/1,configuration_updated_from_gui/1,routing_tables_cleared_from_gui/0]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -45,6 +46,38 @@
 
 export() ->
   gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
+
+%% ---------------------------------------------------------------------------------------------------------
+%%                    Application -> Server functionality requests (for Deddy to fill)
+%% ---------------------------------------------------------------------------------------------------------
+
+clear_routing_tables() ->
+    % clear routing tables on all nodes
+    {ok, cleared}.
+
+remove_station(_ListOfNodes)->
+    % remove all the nodes in ListOfNodes from the network
+    {ok,removed}.
+
+update_medium(_ListOfNodesAndMediums)->
+    % update configurations for the given ListOfNodesAndMediums where each element is a tuple {NodeName, MediumType},
+    % MediumType can be plc or rf or dual
+    {ok, updated}.
+
+%% ---------------------------------------------------------------------------------------------------------
+%%                    Server -> Application notifications (for Liya to fill)
+%% ---------------------------------------------------------------------------------------------------------
+
+
+% in case a configuration update was issued from gui interface, the server should notify the app by calling this function
+% ListOfNodesAndMediums - each element is a tuple {NodeName, MediumType}, MediumType can be plc or rf or dual
+configuration_updated_from_gui (_ListOfNodesAndMediums) ->
+    {ok}.
+
+% in case routing tables were cleared from gui interface, the server should notify the app by calling this function
+routing_tables_cleared_from_gui() ->
+    {ok}.
+
 
 
 
@@ -92,3 +125,43 @@ getOffset (CurrentMillis) ->
         ?LOGGER:debug("[~p]: Time sync: ERROR OCCURED WHILE COMMUNICATING DATA SERVER, reply was: ~p, returning offset = 0~n",[unfiltered, Reply]),
         0
     end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

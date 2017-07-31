@@ -1,0 +1,44 @@
+
+
+
+============= REPORT MESSAGES ===================    (using the stats_server_interface)
+
+
+
+		KEY  																	DATA
+
+
+
+{app_data_message , dreq , sent}           |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}  
+                                           |
+{app_data_message , dreq , sent_failed}    |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |
+{app_data_message , dreq , received}       |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |
+{app_data_message , drep , sent}           |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |
+{app_data_message , drep , sent_failed}    |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber} 
+                                           |
+{app_data_message , drep , received}       |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |
+{app_data_message , drep , relayed}        |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |     
+{app_data_message , drep , relayed_failed} |    {utime, UTIME}   {node_name,NodeName}   {source, Source}    {destination, Destination}    {session, SessionNumber}
+                                           |
+                                           |
+                                           | 
+                                           |
+{app_info, routing_tables_cleared}         |    {utime, UTIME}   {node_name,NodeName}    {experiment_num, NumOfExperiment} 
+                                           |
+{app_info, experiment_start}               |    {utime, UTIME}   {node_name,NodeName}    {experiment_num, NumOfExperiment}      {new_meters_list, NewMetersList}   //NewMetersList = [{MeterName, Medium}]
+                                           |
+{app_info, next_session}                   |    {utime, UTIME}   {node_name,NodeName}    {new_session, NewSessionNumber}        {current_terminals, CurrentTerminals}
+                                           |
+{app_info, ignoring_unresponssive}         |    {utime, UTIME}   {node_name,NodeName}    {ignored_station, IgnoredStation}      {session, SessionNumber}
+
+
+
+
+
+
+
