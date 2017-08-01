@@ -5,20 +5,54 @@
 %%%
 %%% @end
 %%% Created : 05. May 2017 10:29
-%%%-------------------------------------------------------------------
+%%%----------------------------------------------------------------------
 -author("liya").
+
+-record(state, {my_pid,                % app name
+  my_node,               % pid of protocol process in the same node
+  my_protocol,           % pid of node process
+  reporting_unit,        % report module
+  reporting_file,        % file descriptor of backup report file
+  meters,                % list of current active nodes
+  mediums,               % list of current active nodes and their mediums
+  exp_counter,           % current experiment iteration
+  nrs,
+  rd,
+  ter,
+  ter8,
+  sn,
+  timer}).
+
+% ========================== experiment properties========================
+
+-define(EXP_ID, "1").
+-define(METERS, [node_4,node7,node10]).
+-define(MEDIUMS,[{node_1, plc},{node_4,dual},{node7_dual},{node_10,dual}]).
+-define(AMR_MODE, am).
+-define(PHASE1_COUNT, 1).
+-define(PHASE2_COUNT, 1).
+-define(EXP_COUNT, 3).
 
 
 % ================================ macros ================================
 % for external protocol use only.
 -define(DC_MODULE, dc).
 -define(SEM_MODULE, am_sem).
-
 -define(DC_NODE, node_1).
 
 
-%================================ properties ================================
+%======================= bit string macros ===============================
+-define(DREQ_BIT, 0).
+-define(DREP_BIT, 1).
+-define(NODE_BITS,7).
+-define(READING_BITS, 17).
+-define(SEQ_BITS,8).
+-define(ENTRY_SIZE, ?NODE_BITS+?READING_BITS).
 
+
+
+
+%================================ properties ================================
 
 -define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
 
@@ -43,8 +77,8 @@
 
 
 
--define(DREQ_BIT, 0).
--define(DREP_BIT, 1).
--define(NODE_BITS,7).
--define(READING_BITS, 17).
--define(SEQ_BITS,8).
+
+
+
+
+

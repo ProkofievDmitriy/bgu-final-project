@@ -48,7 +48,6 @@
 start_link({My_node, My_protocol, Meters}) ->
    Me = erlang:list_to_atom(atom_to_list(My_node)++"_app"),
    log:info("[~p]  ~p created ~n",[?MODULE,Me]),
-   % timer:sleep(1500),
   {ok,Pid}=gen_fsm:start({local, Me}, ?MODULE, {Me, My_protocol,My_node,Meters}, []),
   Pid.
 
@@ -93,7 +92,7 @@ init({Me, My_protocol,My_node,Meters}) ->
       _Ok3 = insert_nodes_to_tracker(Meters),
       _Ok5 = ets:insert(stats, {avg_changes,{0,0,0}}),
     %   _Ok = send_dreq(My_protocol,Rd,0),                    % 1/11
-      log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
+     % log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
       _Ok1 = ets:insert(stats, {avg_reqs,{0,0, erlang:length(Rd)}}),
       log:debug("[~p]  current requests info: Avg ~p, Sn ~p , Count ~p~n", [?MODULE,0, 0, erlang:length(Rd)]),
       _OK2 = ets:insert(stats, {avg_round_time,{ 0, 0, get_current_millis()}}),
