@@ -4,6 +4,7 @@ c(dc).
 
 
 spawn(dc,start_link,[{node_1,self(),Meters}]). 
+spawn(dc_app,start_link,[{node_1,self(),report,Meters}]). 
 
 spawn(am_sem,start_link,[{node_2,self(),Meters}]). 
 

@@ -12,86 +12,109 @@
 
 -include("app_macros.hrl").
 %% API
--export([open_report_file/1,report_start_of_experiment/1])
+-export([open_report_file/1,report_start_of_experiment/1,report_sent_dreq/2,
+  report_sent_dreq_failed/2,report_received_drep/3]).
 -export([hand_shake/3,random_elements/1,delete_elements/2,
-  create_and_initialize_sets/1,timer/2,send_dreq/3]).
+  create_and_initialize_sets/1,timer/2,send_dreq/3,extract_nodes_from_drep/2]).
 
 
 open_report_file(Me)->
+  log:debug("[~p] entered open_report_file ~n", [?MODULE]),
   Name = "exp_"++?EXP_ID++"_"++atom_to_list(Me),
-  {ok,File} = file:open(filename:absname(Name)),
+  {ok,File} = file:open(filename:absname(Name),write),
   File.
 
 report_start_of_experiment(State)->
+  log:debug("[~p] entered report_start_of_experiment , State ~p ~n", [?MODULE,State]),
   Type = {app_info,experiment_start},
   Data = [{experiment_num, State#state.exp_counter},{new_meters_list, State#state.meters}],
-  _Ok = report(State,Type,Data),
+  _Ok = report(Type,Data),
   ok.
 
-report_sent_dreq(Dest, Sn)->
-  Type
+report_sent_dreq(Destination, SessionNumber)->
+  Type = {app_data_message , dreq , sent},
+  Data = [{source, ?DC_NODE}, {destination, Destination}, {session, SessionNumber}],
+  _Ok = report(Type, Data),
+   ok.
 
+report_sent_dreq_failed(Destination, SessionNumber) ->
+  Type = {app_data_message , dreq , sent_failed},
+  Data = [{source, ?DC_NODE}, {destination, Destination}, {session, SessionNumber}],
+  _Ok = report(Type, Data),
+  ok.
 
-report(State,Type,Data) ->
-  ReportingUnit= State#state.reporting_unit,
-  ReportingUnit:report(Type,Data),
-  io:format(State#state.reporting_file,"~p , ~p~n",[Type,Data]),
+report_received_drep(Source, Destination,SessionNumber)->
+  Type = {app_data_message, drep, received},
+  Data = [{source,Source},{destination,Destination},{session,SessionNumber}],
+  _Ok = report(Type,Data),
+  ok.
+
+report(Type,Data) ->
+  if ?TEST_MODE == integrated ->
+    ReportingUnit = get(reporting_unit),
+    ReportingUnit:report(Type,Data);
+    true -> []
+  end,
+  Fd = get(reporting_file),
+  io:format(Fd,"~p , ~p~n",[Type,Data]),
   log:info("[~p] sending report ~p ~p~n", [?MODULE,Type,Data]),
   ok.
 
+hand_shake(Me,My_protocol,Times) when ?TEST_MODE == local->
+  log:debug("[~p] entered local handshake , Me ~p, My_protocol ~p ,Times ~p ~n",
+    [?MODULE,Me,My_protocol,Times]),
+  My_protocol! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
+  receive
+    ok -> ready;
+    Err->
+      case Times of
+        Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",
+            [?MODULE,Err,Times]),
+          hand_shake(Me,My_protocol,Times+1);
+        Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",
+            [?MODULE,Err,Times]),
+          {terminate, Err}
+       end
+  after ?HAND_SHAKE_TIMEOUT ->
+    case Times of
+      Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+        log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+        hand_shake(Me,My_protocol,Times+1);
+      Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+        log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+        {terminate, timeout}
+    end
+  end;
 
-
-
-
-
-
-hand_shake(Me,My_protocol,Times) ->
-  case ?TEST_MODE of
-    local ->
-      My_protocol! {app_handshake, {Me,dc}},  %% format: {pid/name , type(dc/sem)}
-      receive
-        ok -> ready;
-        Err-> case Times of
-                Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
-                  hand_shake(Me,My_protocol,Times+1);
-                Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                  log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
-                  {terminate, Err}
-              end
-      after ?HAND_SHAKE_TIMEOUT -> case Times of
-                                     Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-                                       log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
-                                       hand_shake(Me,My_protocol,Times+1);
-                                     Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-                                       log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
-                                       {terminate, timeout}
-                                   end
+hand_shake(Me,My_protocol,Times) when ?TEST_MODE == integrated->
+  log:debug("[~p] entered integrated handshake~n", [?MODULE]),
+  Reply =(catch protocol_interface:hand_shake(self(), ?HAND_SHAKE_TIMEOUT))     ,
+  case Reply of
+    ok -> ready;
+    {'EXIT',{timeout,{gen_server,call,_}}} ->
+      case Times of
+        Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
+          hand_shake(Me,My_protocol,Times+1);
+        Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
+          {terminate, timeout}
       end;
-    integrated ->
-      Reply =(catch protocol_interface:hand_shake(self(), ?HAND_SHAKE_TIMEOUT))     ,
-      case Reply of
-        ok -> ready;
-        {'EXIT',{timeout,{gen_server,call,_}}} ->
-          case Times of
-            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err("[~p]  handshake timeout on try number: ~p , trying again~n",[?MODULE,Times]),
-              hand_shake(Me,My_protocol,Times+1);
-            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err("[~p]  handshake timeout on try number: ~p , TERMINATING~n",[?MODULE,Times]),
-              {terminate, timeout}
-          end;
-        Err->
-          case Times of
-            Times when Times< ?HAND_SHAKE_MAX_TRIES ->
-              log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",[?MODULE,Err,Times]),
-              hand_shake(Me,My_protocol,Times+1);
-            Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
-              log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",[?MODULE,Err,Times]),
-              {terminate, Err}
-          end
+    Err->
+      case Times of
+        Times when Times< ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake failed with err ~p, on try number: ~p , trying again~n",
+            [?MODULE,Err,Times]),
+          hand_shake(Me,My_protocol,Times+1);
+        Times when Times >= ?HAND_SHAKE_MAX_TRIES ->
+          log:err("[~p]  handshake failed with err ~p, on try number: ~p , TERMINATING~n",
+            [?MODULE,Err,Times]),
+          {terminate, Err}
       end
   end.
+
 
 get_current_millis() ->
   {Mega, Sec, Micro} = os:timestamp(),
@@ -165,11 +188,13 @@ send_dreq(My_protocol, [H|T], Seq) ->
 %%      Bit_message = message_to_bit ({dreq,H,Seq}),
 %%      My_protocol ! Bit_message,
       My_protocol ! {dreq,H,Seq},
+      _ = report_sent_dreq(H,Seq),
       send_dreq(My_protocol, T, Seq);
 
     integrated ->
       [{H,Times}] = ets:lookup(tracker, H),
-      log:debug("[~p]  sending dreq to: ~p for the ~p time with sequence ~p~n", [?MODULE,H,Times,Seq]),
+      log:debug("[~p]  sending dreq to: ~p for the ~p time with sequence ~p~n",
+        [?MODULE,H,Times,Seq]),
       %   Reply = (catch gen_server:call(My_protocol, {dreq, H, Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
       Bit_message = message_to_bit ({dreq,H,Seq}),
       log:debug("[~p]: sending bit message:: ~p~n", [?MODULE,Bit_message]),
@@ -192,13 +217,22 @@ send_dreq(My_protocol, [H|T], Seq) ->
       end
   end.
 
+extract_nodes_from_drep(List,[]) -> List;
+extract_nodes_from_drep(List,[{Node,_}|T]) ->
+  extract_nodes_from_drep([Node|List],T).
+
+
+
+
+
 message_to_bit({dreq,To,Seq}) ->
   log:debug("[~p]: TRYING sending message:: ~p~n", [?MODULE,{dreq,To,Seq}]),
   Type_b = <<?DREQ_BIT:1>>,
   Dest = extract_address(To),
   Dest_b = <<Dest:?NODE_BITS>>,
   Seq_b = <<Seq:?SEQ_BITS>>,
-  log:debug("[~p]: TRYING bitmessage message:: ~p~n", [?MODULE,<<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>]),
+  log:debug("[~p]: TRYING bitmessage message:: ~p~n",
+    [?MODULE,<<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>]),
   <<Type_b/bitstring, Dest_b/bitstring, Seq_b/bitstring>>;
 
 message_to_bit({drep,To,Data,Seq})->
@@ -234,3 +268,9 @@ bitstring_to_binary(Bitstring) ->
     0 -> Bitstring;
     Other -> << 0:Other , Bitstring/bitstring>>
   end.
+
+extract_address(NodeNameAtom)->
+  utils:get_node_number(NodeNameAtom).
+
+extract_name(Number) ->
+  utils:get_node_name(Number).

@@ -1,0 +1,2 @@
+{app_info,experiment_start} , [{experiment_num,1},
+                               {new_meters_list,[node_4,node_7,node_10]}]

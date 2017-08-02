@@ -19,6 +19,7 @@
 %% gen_fsm callbacks
 -export([init/1,
   discovering/2,
+handle_sync_event/3,
   handle_event/3,
   handle_info/3,
   terminate/3,
@@ -26,20 +27,20 @@
 
 
 
--record(state, {my_pid,                % app name
-                my_node,               % pid of protocol process in the same node
-                my_protocol,           % pid of node process
-                reporting_unit,        % report module
-                reporting_file,        % file descriptor of backup report file
-                meters,                % list of current active nodes
-                mediums,               % list of current active nodes and their mediums
-                exp_counter,           % current experiment iteration
-                nrs,
-                rd,
-                ter,
-                ter8,
-                sn,
-                timer}).
+%%-record(state, {my_pid,                % app name
+%%                my_node,               % pid of protocol process in the same node
+%%                my_protocol,           % pid of node process
+%%                reporting_unit,        % report module
+%%                reporting_file,        % file descriptor of backup report file
+%%                meters,                % list of current active nodes
+%%                mediums,               % list of current active nodes and their mediums
+%%                exp_counter,           % current experiment iteration
+%%                nrs,
+%%                rd,
+%%                ter,
+%%                ter8,
+%%                sn,
+%%                timer}).
 
 %%%===================================================================
 %%% API
@@ -55,31 +56,34 @@ start_link({MyNode, MyProtocol,ReportingUnit, Meters}) ->
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init({Me, MyNode, MyProtocol,ReportingUnit, Meters}) ->
-  Hand_shake =hand_shake(Me,MyProtocol,1),
+init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
+  Hand_shake = app_utils:hand_shake(Me,MyProtocol,1),
   case Hand_shake of
     ready ->
       log:info("[~p]  ~p initialized~n", [?MODULE,Me]),
       Fd = app_utils:open_report_file(Me),
-      _ = app_utils:create_and_initialize_sets(Meters),
+      put(reporting_unit, ReportingUnit),
+      put(reporting_file, Fd),
+      app_utils:create_and_initialize_sets(Meters),
       Timerpid = erlang:spawn(app_utils, timer, [Me,?DISCOVERING_TIMEOUT]),
       State = #state{
-           my_pid = Me,
-           my_node = MyNode,
-           my_protocol = MyProtocol,
-           reporting_unit = ReportingUnit,
-           reporting_file = Fd,
-           meters = Meters,     %TODO maybe ?METERS
-           mediums = ?MEDIUMS,
-           exp_counter = 0,
-           sn =0,
-           timer = Timerpid
+          my_pid = Me,
+          my_node = MyNode,
+          my_protocol = MyProtocol,
+          reporting_unit = ReportingUnit,
+          reporting_file = Fd,
+          meters = Meters,     %TODO maybe ?METERS
+          mediums = ?MEDIUMS,
+          exp_counter = 1,
+          sn =0,
+          timer = Timerpid
       },
-      _ = app_utils:report_start_of_experiment(State),
+      app_utils:report_start_of_experiment(State),
       {ok, discovering, State};
 
-    {terminate, Reason} -> log:critical("[~p]  handshake with ~p failed with message:
-         ~p~n", [?MODULE,MyProtocol,Reason]),
+    {terminate, Reason} ->
+      log:critical("[~p]  handshake with ~p failed with message:~p~n",
+        [?MODULE,MyProtocol,Reason]),
       {stop,{handshake_failure,Reason}}
 end.
 
@@ -87,13 +91,63 @@ discovering(timeout,State) when State#state.sn==0 ->
   Rd = app_utils:random_elements(State#state.meters),
   Nrs = app_utils:delete_elements(State#state.meters,Rd),
   _ = app_utils:send_dreq(State#state.my_protocol,Rd,1),
-  State#state{rd = Rd,
-              nrs = Nrs,
-              ter = [],
-              ter8 = []},
-  _ = app_utils:report_sending_dreq(State)
   log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
+  NewState = State#state{
+               rd = Rd,
+               nrs = Nrs,
+               ter = [],
+               ter8 = [],
+               sn =1},
+  {next_state,discovering, NewState};
 
+
+discovering({drep,To,Data,Seq},State) when State#state.my_node == To ->
+  {V,_} = lists:last(Data),
+  app_utils:report_received_drep(V,To,Seq),
+  log:info("[~p]  received drep from: ~p, with Seq: ~p in state discovering ~n state data:
+      Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
+    [?MODULE,V,Seq,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
+  Nodes = app_utils:extract_nodes_from_drep([],Data),
+  log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
+  Nrs = lists:subtract(State#state.nrs,Nodes),
+  Rd = lists:subtract(lists:delete(V,State#state.rd),Nodes),
+  Ter = lists:subtract(lists:umerge([State#state.ter,[V]]),lists:delete(V,Nodes)),
+  ets:insert(mr_ets, Data),
+  log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
+  NewState = State#state{
+                rd = Rd,
+                nrs = Nrs,
+                ter = Ter},
+  if Rd == [] ->
+    gen_fsm:send_event(State#state.my_pid, rd_empty);
+    true ->[]
+   end,
+    {next_state, deiscovering, NewState};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+discovering(timeout,State)->
+  %%TODO
+  {next_state,discovering, State}.
 
 
 handle_event({received_message, Bit_string}, StateName, State) ->
@@ -109,11 +163,13 @@ handle_event({received_message, Bit_string}, StateName, State) ->
         log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
         {next_state, StateName, State};
         true ->
+         {next_state, StateName, State}
+        end
+  end.
 
-
-  {next_state, StateName, State}.
-
-
+handle_sync_event(get_state, StateName, StateData) ->
+  log:info("[~p]  entered get_state ~n",[?MODULE]),
+{StateName,StateData}.
 
 
 handle_info(_Info, StateName, State) ->
