@@ -12,10 +12,11 @@
 
 -include("app_macros.hrl").
 %% API
--export([open_report_file/1,report_start_of_experiment/1,report_sent_dreq/2,
-  report_sent_dreq_failed/2,report_received_drep/3]).
--export([hand_shake/3,random_elements/1,delete_elements/2,
-  create_and_initialize_sets/1,timer/2,send_dreq/3,extract_nodes_from_drep/2]).
+-export([open_report_file/1,report_start_of_experiment/1,report_unresponssive_node/2,
+  report_next_session/2,report_sent_dreq/2,report_sent_dreq_failed/2,report_received_drep/3]).
+-export([hand_shake/3,check_phase1_exp/1,random_elements/1,delete_elements/2,report_averages/0,
+  create_and_initialize_sets/1,update_tracker_requests/2,update_tracker_requests_time/2,
+  insert_requests/2,insert_time/1,update_tracker/1,timer/2,send_dreq/3,extract_nodes_from_drep/2]).
 
 
 open_report_file(Me)->
@@ -28,6 +29,18 @@ report_start_of_experiment(State)->
   log:debug("[~p] entered report_start_of_experiment , State ~p ~n", [?MODULE,State]),
   Type = {app_info,experiment_start},
   Data = [{experiment_num, State#state.exp_counter},{new_meters_list, State#state.meters}],
+  _Ok = report(Type,Data),
+  ok.
+
+report_unresponssive_node(IgnoredStation,SessionNumber) ->
+  Type = {app_info, ignoring_unresponssive},
+  Data = [{ignored_station, IgnoredStation}, {session, SessionNumber}],
+  _Ok = report(Type,Data),
+  ok.
+
+report_next_session(SessionNumber, CurrentTerminals) ->
+  Type = {app_info,next_session},
+  Data = [{new_session,SessionNumber}, {current_terminals,CurrentTerminals}],
   _Ok = report(Type,Data),
   ok.
 
@@ -115,6 +128,31 @@ hand_shake(Me,My_protocol,Times) when ?TEST_MODE == integrated->
       end
   end.
 
+check_phase1_exp (CurrentExp) ->
+  if ?PHASE2_COUNT==0->                      % "phase 1 only" type of experiment
+    if CurrentExp == ?EXP_COUNT -> finish;   % done experimenting
+      true -> reinitialize                   % more left
+    end;
+    true -> phase2                           % combined experiment, go to phase 2
+  end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 get_current_millis() ->
   {Mega, Sec, Micro} = os:timestamp(),
@@ -163,6 +201,71 @@ insert_nodes_to_tracker([]) -> ok;
 insert_nodes_to_tracker([H|T])->
   _Ok = ets:insert(tracker, {H,0}),
   insert_nodes_to_tracker(T).
+
+
+update_tracker_requests(Rd,Sn)->
+  insert_requests( Rd, Sn),
+  update_tracker(Rd).
+
+update_tracker_requests_time(Rd,Sn)->
+  insert_requests( Rd, Sn),
+  insert_time(Sn),
+  update_tracker(Rd).
+
+insert_requests(Nodes, Sn) ->
+  [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
+  Current = erlang:length(Nodes),
+  if Round =/= Sn ->
+    log:error("insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[?MODULE,Round,Sn]),
+    ok;
+
+    true ->
+      _Ok = ets:insert(stats, {avg_reqs, {Avg, Round, Count+Current}}),
+      log:debug("[~p]  current requests info: Avg ~p, Sn ~p , Count ~p~n", [?MODULE, Avg, Round, Count+Current]),
+      ok
+  end.
+
+
+insert_time(Sn) ->
+  [{_,{Avg,Round,_Start}}] = ets:lookup(stats,avg_round_time),
+  if Round =/= Sn ->
+    log:err("[~p]  insert_time Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[?MODULE,Round,Sn]),
+    ok;
+    true ->
+      _Ok = ets:insert(stats, {avg_round_time,{Avg,Round,get_current_millis()}}),
+      log:debug("[~p]  current time info: Avg ~p, Sn ~p , Start ~p~n", [?MODULE,Avg, Round, get_current_millis()]),
+      ok
+  end.
+
+update_tracker([]) -> ok;
+update_tracker([H|T])->
+  [{H,Val}] = ets:lookup(tracker, H),
+  _Ok = ets:insert(tracker, {H,Val+1}),
+  update_tracker(T).
+
+report_averages() ->
+  Avg_reqs = extract_avg_reqs(),
+  Avg_time = extract_avg_time(),
+  _Ok = report_to_server([{average_data_requests_per_round, Avg_reqs}, {average_time_per_round,Avg_time}]),
+  ok.
+
+report_to_server(List) ->
+  log:info("[~p]  sending stats report: ~p~n",[?MODULE,List]),
+  ok.
+
+extract_avg_reqs() ->
+  [{_,{Avg,Round,Count}}] = ets:lookup(stats,avg_reqs),
+  New_avg = (Avg* (Round) +Count) / (Round+1),
+  _Ok = ets:insert(stats, {avg_reqs,{New_avg,Round+1,0}}),
+  New_avg.
+
+extract_avg_time() ->
+  [{_,{Avg,Round,Start}}] = ets:lookup(stats,avg_round_time),
+  End = get_current_millis(),
+  Current = End-Start,
+  New_avg = (Avg* (Round) +Current) / (Round+1),
+  _Ok = ets:insert(stats, {avg_round_time,{New_avg, Round+1,0}}),
+  New_avg.
 
 
 timer(Me, Time) ->

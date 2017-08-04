@@ -242,7 +242,7 @@ discovering(rd_empty,{Me, My_protocol,My_node,Meters,Nrs,Rd,Ter,Sn,Timerpid}) ->
       _Ok = send_dreq(My_protocol,Ter8,Sn1),           % 2/7
       _Ok1 = insert_requests( Ter8, Sn1),
       _Ok2 = insert_time(Sn1),
-      _Ok3 = update_tracker((Ter8)),
+      _Ok3 = update_tracker(Ter8),
       Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
       {next_state, collecting,
         {Me,My_protocol,My_node,Meters,Nrs2,Ter8,Ter1,Ter_in,Sn1,Timerpid1,0}};
@@ -381,7 +381,6 @@ collecting(ter8_empty,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn, 
       log:info("[~p]  ====== FINISHED ROUND ~p of collecting, preparing for next round =======~n",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
-      _Ok5 = insert_terminal_changes (Ter, Ter_in,Sn),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4
@@ -416,7 +415,6 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn ,Tim
       log:info("[~p]  ===== FINISHED ROUND ~p of collecting, preparing for next round======~n ",[?MODULE,Sn]),
       _Ok = report_averages(),
       _Ok4 = insert_nodes_to_tracker(Meters),
-      _Ok5 = insert_terminal_changes (Ter, Ter_in,Sn),
       Timerpid! stop,
       Sn1 = Sn+1,
       Nrs1 = Meters,                                 % 2/4

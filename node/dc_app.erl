@@ -76,8 +76,7 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
           mediums = ?MEDIUMS,
           exp_counter = 1,
           sn =0,
-          timer = Timerpid
-      },
+          timer = Timerpid},
       app_utils:report_start_of_experiment(State),
       {ok, discovering, State};
 
@@ -87,10 +86,12 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
       {stop,{handshake_failure,Reason}}
 end.
 
+
 discovering(timeout,State) when State#state.sn==0 ->
   Rd = app_utils:random_elements(State#state.meters),
   Nrs = app_utils:delete_elements(State#state.meters,Rd),
   _ = app_utils:send_dreq(State#state.my_protocol,Rd,1),
+  app:utils:update_tracker_requests(Rd,0),
   log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
   NewState = State#state{
                rd = Rd,
@@ -110,8 +111,10 @@ discovering({drep,To,Data,Seq},State) when State#state.my_node == To ->
   Nodes = app_utils:extract_nodes_from_drep([],Data),
   log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
   Nrs = lists:subtract(State#state.nrs,Nodes),
-  Rd = lists:subtract(lists:delete(V,State#state.rd),Nodes),
-  Ter = lists:subtract(lists:umerge([State#state.ter,[V]]),lists:delete(V,Nodes)),
+%%  Rd = lists:subtract(lists:delete(V,State#state.rd),Nodes),
+  Rd = lists:subtract(State#state.rd,Nodes), %TODO remove above line after functionality check
+%%  Ter = lists:subtract(lists:umerge([State#state.ter,[V]]),lists:delete(V,Nodes)),
+  Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]), %TODO remove above line after funcrionality check
   ets:insert(mr_ets, Data),
   log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
   NewState = State#state{
@@ -122,32 +125,42 @@ discovering({drep,To,Data,Seq},State) when State#state.my_node == To ->
     gen_fsm:send_event(State#state.my_pid, rd_empty);
     true ->[]
    end,
-    {next_state, deiscovering, NewState};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    {next_state, discovering, NewState};
 
 
 
 discovering(timeout,State)->
-  %%TODO
-  {next_state,discovering, State}.
+  log:debug("[~p]  received rd_empy event in state discovering,~n State data:
+   Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" ,
+    [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
+  Nrs_new = new_nrs_and_delete_unresponsive(State#state.rd, State#state.nrs,
+    discovering,State#state.sn),
+  log:debug("[~p] Nrs_new is: ~p~n", [?MODULE,Nrs_new]),
+  if Nrs_new == [] ->
+    Result = app_utils:check_phase1_exp(State#state.exp_counter),
+    case Result of
+      finish ->  ok;
+      reinitialize -> ok;
+      phase2 ->
+        log:info("[~p]=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n",
+          [?MODULE]),
+        NewState = prepare_for_phase_2(State),
+        app_utils:report_next_session(NewState#state.sn, NewState#state.ter),
+        {next_state, collecting, NewState}
+    end;
+    true ->
+      log:info("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
+        [?MODULE,State#state.sn]),
+      NewState = prepare_for_another_iteration_of_phase_1(Nrs_new,State,new_timer),
+      {next_state, discovering, NewState}
+  end.
+
+
+
+
+
+
+
 
 
 handle_event({received_message, Bit_string}, StateName, State) ->
@@ -184,4 +197,97 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+new_nrs_and_delete_unresponsive(Rd,Nrs,State,Sn)->
+  Nrs1  = lists:usort(lists:umerge(Nrs,Rd)),
+  delete_unresponsive_nodes(Rd, Nrs1,State,Sn).
+
+
+delete_unresponsive_nodes([], Nrs,_State,_Sn) -> Nrs;
+delete_unresponsive_nodes([H|T], Nrs,State,Sn)->
+  [{H,Val}] = ets:lookup(tracker, H),
+  if State == discovering ->
+    Add = ?EXTRA_DISCOVERY_TRIES;
+    true ->
+      Add=0
+  end,
+  if Val < (?MAX_DREQ_TRIES +Add) ->
+    delete_unresponsive_nodes(T,Nrs,State,Sn);
+    true ->
+      log:debug("[~p] WARNING ~p in unresponsive, removing from current round~n",
+        [?MODULE,H]),
+      app_utils:report_unresponssive_node(H,Sn),
+      Nrs1=lists:delete(H,Nrs),
+      delete_unresponsive_nodes(T,Nrs1,State,Sn)
+  end.
+
+
+prepare_for_phase_2(State)->
+  app_utils:report_averages(),
+  app_utils:insert_nodes_to_tracker(State#state.meters),
+  State#state.timer ! stop,
+  Sn = State#state.sn +1,
+  Nrs = State#state.meters,
+  Ter8 = State#state.ter,
+  log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8,Sn]),
+  app_utils:send_dreq(State#state.my_protocol, Ter8, Sn),
+  app_utils:update_tracker_requests_time(Ter8,Sn),
+  Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?COLLECTING_TIMEOUT]),
+  NewState = State#state{
+    nrs = Nrs,
+    ter8 = Ter8,
+    sn = Sn,
+    timer = Timerpid},
+  NewState.
+
+
+prepare_for_another_iteration_of_phase_1(Nrs_new,State,TimerFlag)->
+  Rd = app_utils:random_elements(Nrs_new),
+  Nrs = app_utils:delete_elements(Nrs_new,Rd),
+  log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,State#state.sn]),
+  app_utils:send_dreq(State#state.my_protocol,Rd,State#state.sn),
+  app_utils:update_tracker_requests_time(Rd,State#state.sn),
+  case TimerFlag of
+    new_timer ->
+      Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?DISCOVERING_TIMEOUT]);
+    old_timer ->
+      Timerpid = State#state.timer,
+      Timerpid ! restart
+  end,
+  NewState = State#state{
+    nrs = Nrs,
+    rd = Rd,
+    timer = Timerpid},
+  NewState.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
