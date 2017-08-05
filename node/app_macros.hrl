@@ -19,9 +19,9 @@
   nrs,
   rd,
   ter,
-  ter8,
   sn,
-  timer}).
+  timer,
+  term_times}).
 
 % ========================== experiment properties========================
 
@@ -31,7 +31,7 @@
 -define(AMR_MODE, am).
 -define(PHASE1_COUNT, 1).
 -define(PHASE2_COUNT, 1).
--define(EXP_COUNT, 3).
+-define(EXP_COUNT, 1).
 
 
 % ================================ macros ================================
@@ -56,9 +56,11 @@
 
 -define(TEST_MODE, local). % local - no OTP behavior | integrated - with OTP behavior
 
--define(DISCOVERING_TIMEOUT,10000).
--define(COLLECTING_TIMEOUT,30000).
+%%-define(DISCOVERING_TIMEOUT,30000).
+%%-define(COLLECTING_TIMEOUT,30000).
 
+-define(DISCOVERING_TIMEOUT,30000).
+-define(COLLECTING_TIMEOUT,30000).
 
 
 

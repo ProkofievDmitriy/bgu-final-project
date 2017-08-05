@@ -1,2 +1,344 @@
 {app_info,experiment_start} , [{experiment_num,1},
-                               {new_meters_list,[node_4,node_7,node_10]}]
+                               {new_meters_list,[node_4,node7,node10]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,1}]
+{app_data_message,drep,received} , [{source,node_4},
+                                    {destination,node_1},
+                                    {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,1}]
+{app_data_message,drep,received} , [{source,node10},
+                                    {destination,node_1},
+                                    {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,1}]
+{app_data_message,drep,received} , [{source,node7},
+                                    {destination,node_1},
+                                    {session,1}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_info,next_session} , [{new_session,2},{current_terminals,[]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,2}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,2}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,2}]
+{app_info,next_session} , [{new_session,3},{current_terminals,[]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,3}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,3}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,3}]
+{app_info,next_session} , [{new_session,4},{current_terminals,[]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,4}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,4}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,4}]
+{app_info,next_session} , [{new_session,5},{current_terminals,[]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,5}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,5}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,5}]
+{app_info,next_session} , [{new_session,6},{current_terminals,[]}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node10},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node7},
+                                {session,6}]
+{app_data_message,dreq,sent} , [{source,node_1},
+                                {destination,node_4},
+                                {session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node10},{session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node7},{session,6}]
+{app_info,ignoring_unresponsive} , [{ignored_station,node_4},{session,6}]
+{app_info,next_session} , [{new_session,7},{current_terminals,[]}]

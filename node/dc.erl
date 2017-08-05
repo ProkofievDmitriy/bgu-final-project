@@ -439,7 +439,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn ,Tim
                   _Ok1 = insert_requests( Ter8_new, Sn),
                   _Ok2 = update_tracker(Ter8_new),
                   Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
-                  {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Ter_in,Sn,Timerpid1,Times}};
+                  {next_state, collecting,
+                    {Me,My_protocol,My_node,Meters, Nrs_new, Ter8_new,Ter,Ter_in,Sn,Timerpid1,Times}};
             Other ->
                 log:info("[~p]  trying reaching terminals for the ~p time ~n",[?MODULE,Other+1]),
                 log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8,Sn]),
@@ -447,7 +448,8 @@ collecting(timeout,{Me,My_protocol,My_node,Meters,Nrs, Ter8, Ter, Ter_in,Sn ,Tim
                 _Ok1 = insert_requests( Ter8, Sn),
                 _Ok2 = update_tracker(Ter8),
                 Timerpid1 = erlang:spawn(?MODULE,timer,[Me,?COLLECTING_TIMEOUT]),  % 2/8
-                {next_state, collecting, {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Ter_in,Sn,Timerpid1,Times+1}}
+                {next_state, collecting,
+                  {Me,My_protocol,My_node,Meters, Nrs_new, Ter8,Ter,Ter_in,Sn,Timerpid1,Times+1}}
             end
  end;
 
@@ -894,3 +896,24 @@ find_list_differences(L1,L2)->
 insert_terminal_changes (_Ter, _Ter_in, _Sn) ->
 
   ok.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

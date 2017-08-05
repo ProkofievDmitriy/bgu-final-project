@@ -19,6 +19,7 @@
 %% gen_fsm callbacks
 -export([init/1,
   discovering/2,
+  collecting/2,
 handle_sync_event/3,
   handle_event/3,
   handle_info/3,
@@ -38,9 +39,9 @@ handle_sync_event/3,
 %%                nrs,
 %%                rd,
 %%                ter,
-%%                ter8,
 %%                sn,
-%%                timer}).
+%%                timer,
+%%                term_times}).
 
 %%%===================================================================
 %%% API
@@ -87,27 +88,128 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
 end.
 
 
+
+
 discovering(timeout,State) when State#state.sn==0 ->
   Rd = app_utils:random_elements(State#state.meters),
   Nrs = app_utils:delete_elements(State#state.meters,Rd),
   _ = app_utils:send_dreq(State#state.my_protocol,Rd,1),
-  app:utils:update_tracker_requests(Rd,0),
+  app_utils:update_tracker_requests(Rd,1),
+  Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?DISCOVERING_TIMEOUT]),
   log:info("[~p]  first dreq sent, Rd are ~p~n",[?MODULE,Rd]),
   NewState = State#state{
                rd = Rd,
                nrs = Nrs,
                ter = [],
-               ter8 = [],
-               sn =1},
+               sn =1,
+               timer = Timerpid},
   {next_state,discovering, NewState};
 
 
-discovering({drep,To,Data,Seq},State) when State#state.my_node == To ->
+
+discovering(Event,State) when Event==timeout; Event==rd_empty ->
+  log:debug("[~p]  received ~p event in state discovering,~n State data:
+   Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" ,
+    [?MODULE,Event,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
+  Nrs_new = merge_and_delete_unresponsive(State#state.rd,State#state.nrs,discovering,State#state.sn),
+  log:debug("[~p] Nrs_new is: ~p~n", [?MODULE,Nrs_new]),
+  if Nrs_new == [] ->
+    Result = check_phase1_exp(State#state.exp_counter),
+    case Result of
+      finish ->  ok;
+      reinitialize -> ok;
+      phase2 ->
+        log:info("[~p]=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n",
+          [?MODULE]),
+        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        NewState = prepare_for_phase_2(State),
+        {next_state, collecting, NewState}
+    end;
+    true ->
+      case Event of
+        rd_empty ->
+          log:info("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
+            [?MODULE,State#state.sn]);
+        timeout ->
+          og:info("[~p]  didnt receive requested replies, preparing for another iteration of Sn ~p~n",
+            [?MODULE,State#state.sn])
+      end,
+      UpdatedState = State#state{ nrs = Nrs_new },
+      NewState = prepare_for_another_iteration_of_phase_1(UpdatedState,Event),
+      {next_state, discovering, NewState}
+  end.
+
+
+
+collecting(rd_empy,State) ->
+  log:debug("[~p]  received rd_empy event in state collecting,~n State data:
+    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p, Terms_time: ~p~n" ,
+    [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn,State#state.term_times]),
+  Ter8 = merge_and_delete_unresponsive(State#state.rd,State#state.nrs,collecting,State#state.sn),
+  log:debug("[~p] Ter8 is now: ~p~n", [?MODULE,Ter8]),
+  if Ter8 == [] ->
+    Result = check_phase2_exp(State#state.exp_counter, State#state.sn),
+    case Result of
+      finish ->  ok;
+      reinitialize -> ok;
+      phase2 ->
+        log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
+          [?MODULE,State#state.sn]),
+        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        NewState = prepare_for_phase_2(State),
+        {next_state, collecting, NewState}
+    end;
+    true ->
+      log:debug("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
+        [?MODULE,State#state.sn]),
+      UpdatedState = State#state{ rd = Ter8 },
+      NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,rd_empty),
+      {next_state, collecting, NewState}
+  end;
+
+collecting(timeout,State) ->
+  log:debug("[~p]  received TIMEOUT event in state collecting, State data:~n
+    Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" ,
+    [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn ]),
+  Nrs_new = merge_and_delete_unresponsive(State#state.nrs,State#state.rd,collecting,State#state.sn),
+  Ter8_new = merge_and_delete_unresponsive(State#state.rd,State#state.nrs,collecting,State#state.sn),
+  if Nrs_new == [] ->
+    Result = check_phase2_exp(State#state.exp_counter, State#state.sn),
+    case Result of
+      finish ->  ok;
+      reinitialize -> ok;
+      phase2 ->
+        log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
+          [?MODULE,State#state.sn]),
+        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        NewState = prepare_for_phase_2(State),
+        {next_state, collecting, NewState}
+    end;
+    true ->
+      log:debug("[~p]  didnt receive all requested replies, preparing for another iteration of Sn ~p~n",
+        [?MODULE,State#state.sn]),
+      if State#state.term_times == ?MAX_TERMINALS_TIMES ->
+        log:info("[~p]  some terminals didn't respond, merging with NRS  ~n",[?MODULE]),
+        UpdatedState = State#state{ rd = Ter8_new, nrs = Nrs_new},
+        NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,timeout),
+        {next_state, collecting, NewState};
+        true ->
+          TermTimes = State#state.term_times + 1,
+          log:info("[~p]  trying to reach terminals for the ~p time ~n",
+            [?MODULE,TermTimes]),
+          UpdatedState = State#state{nrs = Nrs_new,term_times = TermTimes},
+          NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,timeout),
+          {next_state, collecting, NewState}
+      end
+  end.
+
+
+handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To ->
   {V,_} = lists:last(Data),
   app_utils:report_received_drep(V,To,Seq),
-  log:info("[~p]  received drep from: ~p, with Seq: ~p in state discovering ~n state data:
+  log:info("[~p]  received drep from: ~p, with Seq: ~p in state ~p ~n state data:
       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
-    [?MODULE,V,Seq,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
+    [?MODULE,V,Seq,StateName,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
   Nodes = app_utils:extract_nodes_from_drep([],Data),
   log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
   Nrs = lists:subtract(State#state.nrs,Nodes),
@@ -118,48 +220,14 @@ discovering({drep,To,Data,Seq},State) when State#state.my_node == To ->
   ets:insert(mr_ets, Data),
   log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
   NewState = State#state{
-                rd = Rd,
-                nrs = Nrs,
-                ter = Ter},
+    rd = Rd,
+    nrs = Nrs,
+    ter = Ter},
   if Rd == [] ->
     gen_fsm:send_event(State#state.my_pid, rd_empty);
     true ->[]
-   end,
-    {next_state, discovering, NewState};
-
-
-
-discovering(timeout,State)->
-  log:debug("[~p]  received rd_empy event in state discovering,~n State data:
-   Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p~n" ,
-    [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
-  Nrs_new = new_nrs_and_delete_unresponsive(State#state.rd, State#state.nrs,
-    discovering,State#state.sn),
-  log:debug("[~p] Nrs_new is: ~p~n", [?MODULE,Nrs_new]),
-  if Nrs_new == [] ->
-    Result = app_utils:check_phase1_exp(State#state.exp_counter),
-    case Result of
-      finish ->  ok;
-      reinitialize -> ok;
-      phase2 ->
-        log:info("[~p]=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n",
-          [?MODULE]),
-        NewState = prepare_for_phase_2(State),
-        app_utils:report_next_session(NewState#state.sn, NewState#state.ter),
-        {next_state, collecting, NewState}
-    end;
-    true ->
-      log:info("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
-        [?MODULE,State#state.sn]),
-      NewState = prepare_for_another_iteration_of_phase_1(Nrs_new,State,new_timer),
-      {next_state, discovering, NewState}
-  end.
-
-
-
-
-
-
+  end,
+  {next_state, StateName, NewState};
 
 
 
@@ -180,13 +248,17 @@ handle_event({received_message, Bit_string}, StateName, State) ->
         end
   end.
 
+
 handle_sync_event(get_state, StateName, StateData) ->
   log:info("[~p]  entered get_state ~n",[?MODULE]),
 {StateName,StateData}.
 
 
-handle_info(_Info, StateName, State) ->
+handle_info(Info, StateName, State) ->
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",
+    [?MODULE,self(),Info,StateName,State]),
   {next_state, StateName, State}.
+
 
 terminate(_Reason, _StateName, _State) ->
   ok.
@@ -199,9 +271,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 
-new_nrs_and_delete_unresponsive(Rd,Nrs,State,Sn)->
-  Nrs1  = lists:usort(lists:umerge(Nrs,Rd)),
-  delete_unresponsive_nodes(Rd, Nrs1,State,Sn).
+merge_and_delete_unresponsive(CleaningList,ListToMerge,State,Sn)->
+  ListToClean  = lists:usort(lists:umerge(CleaningList,ListToMerge)),
+  delete_unresponsive_nodes(CleaningList, ListToClean,State,Sn).
 
 
 delete_unresponsive_nodes([], Nrs,_State,_Sn) -> Nrs;
@@ -217,10 +289,27 @@ delete_unresponsive_nodes([H|T], Nrs,State,Sn)->
     true ->
       log:debug("[~p] WARNING ~p in unresponsive, removing from current round~n",
         [?MODULE,H]),
-      app_utils:report_unresponssive_node(H,Sn),
+      app_utils:report_unresponsive_node(H,Sn),
       Nrs1=lists:delete(H,Nrs),
       delete_unresponsive_nodes(T,Nrs1,State,Sn)
   end.
+
+check_phase1_exp (CurrentExp) ->
+  if ?PHASE2_COUNT==0->                      % "phase 1 only" type of experiment
+    if CurrentExp == ?EXP_COUNT -> finish;   % done experimenting
+      true -> reinitialize                   % more left
+    end;
+    true -> phase2                           % combined experiment, go to phase 2
+  end.
+
+check_phase2_exp(CurrentExp, CurrentSession)->
+ if CurrentSession == ?PHASE2_COUNT-1 ->     % finished required times of phase 2 per experiment
+   if CurrentExp == ?EXP_COUNT -> finish;    % done experimenting
+     true ->reinitialize                     % start next experiment
+   end;
+   true -> phase2                            % didn't finish current experiment yet
+ end.
+
 
 
 prepare_for_phase_2(State)->
@@ -229,29 +318,31 @@ prepare_for_phase_2(State)->
   State#state.timer ! stop,
   Sn = State#state.sn +1,
   Nrs = State#state.meters,
-  Ter8 = State#state.ter,
-  log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Ter8,Sn]),
-  app_utils:send_dreq(State#state.my_protocol, Ter8, Sn),
-  app_utils:update_tracker_requests_time(Ter8,Sn),
+  Rd = State#state.ter,
+  log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,Sn]),
+  app_utils:send_dreq(State#state.my_protocol, Rd, Sn),
+  app_utils:update_tracker_requests_time(Rd,Sn),
   Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?COLLECTING_TIMEOUT]),
   NewState = State#state{
     nrs = Nrs,
-    ter8 = Ter8,
+    rd = Rd,
+    ter = [],
     sn = Sn,
-    timer = Timerpid},
+    timer = Timerpid,
+    term_times = 0},
   NewState.
 
 
-prepare_for_another_iteration_of_phase_1(Nrs_new,State,TimerFlag)->
-  Rd = app_utils:random_elements(Nrs_new),
-  Nrs = app_utils:delete_elements(Nrs_new,Rd),
+prepare_for_another_iteration_of_phase_1(State,TimerFlag)->
+  Rd = app_utils:random_elements(State#state.nrs),
+  Nrs = app_utils:delete_elements(State#state.nrs,Rd),
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,State#state.sn]),
   app_utils:send_dreq(State#state.my_protocol,Rd,State#state.sn),
   app_utils:update_tracker_requests_time(Rd,State#state.sn),
   case TimerFlag of
-    new_timer ->
+    timeout ->
       Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?DISCOVERING_TIMEOUT]);
-    old_timer ->
+    rd_empty ->
       Timerpid = State#state.timer,
       Timerpid ! restart
   end,
@@ -260,6 +351,24 @@ prepare_for_another_iteration_of_phase_1(Nrs_new,State,TimerFlag)->
     rd = Rd,
     timer = Timerpid},
   NewState.
+
+prepare_for_another_iteration_of_phase_2(State,TimerFlag)->
+  log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,State#state.rd,State#state.sn]),
+  app_utils:send_dreq(State#state.my_protocol,State#state.rd,State#state.sn),
+  app_utils:update_tracker_requests(State#state.rd,State#state.sn),
+  case TimerFlag of
+    timeout ->
+      Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?COLLECTING_TIMEOUT]);
+    rd_empty ->
+      Timerpid = State#state.timer,
+      Timerpid ! restart
+  end,
+  NewState = State#state{
+    rd = State#state.rd,
+    timer = Timerpid
+  },
+  NewState.
+
 
 
 
