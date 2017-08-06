@@ -258,6 +258,7 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
             		[{_,{Time, _, Mode,RoutingSet}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
 		            io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
 		            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet}}),
+		            %io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 					wxToggleButton:setValue(UpdateLocation,false),
 					{noreply,State}
 			end;
@@ -276,8 +277,8 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
     case ID of
         ButtonFullMap ->
             	io:format("Showing full map~n"),
+							wxChoice:setSelection(State#state.nodeChoice,-1), %%%%%%%%%%%%%%%%%%%%%%%
 				update_map(State#state.canvas, all, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
-
             {noreply,State#state{selectedNode = all}};
         ButtonDeleteTable->
                     io:format("buttonDeleteTable need to delete ~p~n",[SelectedNode]),
@@ -286,21 +287,23 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
                     {noreply,State};
 		ButtonDeleteAll ->
                     io:format("ButtonDeleteAll need to delete everything~n"),
+										stats_server_interface:routing_tables_cleared_from_gui(),
 					resetAllNodes(State#state.nodesEts, ets:first(State#state.nodesEts)),
                     %io:format("buttonDeleteTable delete ~p res ~p~n",[SelectedNode, A]),
                     {noreply,State};
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
 
-                    %rpc:cast(SelectedNode, node_control_interface, initiate_transaction, [SelectedNode, wxChoice:getStringSelection(State#state.cmbTo), wxTextCtrl:getValue(State#state.txtMsgSend)]),
                     node_control_interface:initiate_transaction(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), wxTextCtrl:getValue(State#state.txtMsgSend)),
                     wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonSendConfig ->
                     %node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
-					io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
-					node_control_interface:update_configuration(SelectedNode,checkRadio(State#state.configButtons)),
-					%rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
+										RadioState = checkRadio(State#state.configButtons),
+										stats_server_interface:configuration_updated_from_gui ([SelectedNode, RadioState]),
+                    io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
+                    node_control_interface:update_configuration(SelectedNode,RadioState),
+                    %rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
         ButtonExport ->
@@ -330,7 +333,7 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
 
     NodeNameAtom = proplists:get_value(node_name, Data),
     NodeNameList = atom_to_list(NodeNameAtom),
-	RoutingSet = proplists:get_value(routing_set, Data),
+    RoutingSet = proplists:get_value(routing_set, Data),
 
     case ets:member(State#state.nodesEts, NodeNameAtom) of
         false ->
@@ -338,6 +341,7 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             wxChoice:append(NodeChoice,NodeNameList),
             wxChoice:append(CmbTo, NodeNameList),
             Location = {rand:uniform(500),rand:uniform(500)};
+            %Location = findLocation(NodeNameAtom);
         true ->
             %io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
             [{NodeNameAtom,{_,Location, _,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
@@ -345,8 +349,7 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
 		Time = erlang:monotonic_time(),
     ets:insert(State#state.nodesEts,{NodeNameAtom,{Time, Location, proplists:get_value(medium_mode, Data),RoutingSet}}),
     update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
-	printRoutingSet(State#state.selectedNode, NodeNameAtom, State#state.nodesEts),
-
+    %printRoutingSet(State#state.selectedNode, NodeNameAtom, State#state.nodesEts),
     {noreply, State};
 
 handle_cast({printNodes}, State) ->
@@ -358,6 +361,16 @@ handle_cast({node_is_down,DownNode}, State) ->
     io:format("loadNGgui.erl: Node down: ~p~n",DownNode),
     %% TODO: remove node from list.
     {noreply, State};
+
+	handle_cast({resetAllNodes}, State) ->
+		io:format("loadNGgui.erl: resetAllNodes~n"),
+		resetAllNodes(State#state.nodesEts, ets:first(State#state.nodesEts)),
+		{noreply, State};
+
+	handle_cast({remove_stations, StationList}, State) ->
+		remove_stations(StationList),
+		io:format("loadNGgui.erl: remove_stations ~p~n",[StationList]),
+		{noreply, State};
 
 handle_cast(A, State) ->
 	io:format("~n~nloadNGgui.erl: unhandled cast msg=~p~n~n",[A]),
@@ -443,6 +456,17 @@ printNodesEts(Node, Ets) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Internal Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+remove_stations(StationList) ->
+	io:format("~n~nWhat should remove_stations do? - ~p~n",[StationList]),
+	io:format("If it is to turn off nodes in that list switch to fun remove_stations_is_it_this/2 at line 466~n~n~n").
+
+% Assuming it should turn of nodes in StationList
+remove_stations_is_it_this(_,[]) ->
+	ok;
+remove_stations_is_it_this(NodesEts,[Station|StationList]) ->
+	io:format("Assuming it should turn off Node- ~p",[Station]),
+	node_control_interface:update_configuration(Station, idle),
+	remove_stations_is_it_this(NodesEts,StationList).
 
 update_map_ets(MapEts, Node, NodeRoutingMap) ->
 			ets:match_delete(MapEts,{{Node, '_'},'_'}),
@@ -496,11 +520,13 @@ draw_nodes(_, _, '$end_of_table', _,_,_) -> ok;
 draw_nodes(DC, SelectedNode, NodeKey, NodesEts,NodeChoice, CmbTo) ->
 		[{NodeKey,{OldTime, {X,Y}, _MediumMode,_}}] = ets:lookup(NodesEts,NodeKey),
 		Time = erlang:monotonic_time(),
-		if Time - OldTime < ?TIMEOUT ->
+		if OldTime == -1 -> ok; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+			Time - OldTime < ?TIMEOUT ->
 				wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
 				wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50});
 			Time - OldTime >= ?TIMEOUT ->
 				io:format("TIMEOUT ~p~n",[NodeKey]),
+				ets:insert(NodesEts,{NodeKey,{-1, {0,0}, 0,0}}), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 				wxChoice:delete(NodeChoice,wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
 				wxChoice:delete(CmbTo,wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
 			end,
@@ -592,15 +618,15 @@ checkRadio(Plc,Rf) -> {wxRadioButton:getValue(Plc), wxRadioButton:getValue(Rf)}.
 checkRadio([_,PLC,_,RF]) ->checkRadio(wxRadioButton:getValue(PLC), wxRadioButton:getValue(RF)).
 
 
-resetAllNodes(NodesEts, '$end_of_table') -> ok;
+resetAllNodes(_, '$end_of_table') -> ok;
 resetAllNodes(NodesEts, Key) ->
 	node_control_interface:reset_node(Key),
 	resetAllNodes(NodesEts, ets:next(NodesEts,Key)).
 
 printRoutingSet(SelectedNode, SelectedNode, NodesEts) ->
-	A = ets:lookup(NodesEts,SelectedNode);
-	% io:format("~n~nSelectedNode Info: ~n~p~n~n",[A]);
-printRoutingSet(SelectedNode, NameAtom, NodesEts) -> ok.
+	A = ets:lookup(NodesEts,SelectedNode),
+	io:format("~n~nSelectedNode Info: ~n~p~n~n",[A]);
+printRoutingSet(_SelectedNode, _NameAtom, _NodesEts) -> ok.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Create Form Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
