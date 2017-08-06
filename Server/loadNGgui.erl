@@ -368,9 +368,14 @@ handle_cast({node_is_down,DownNode}, State) ->
 		{noreply, State};
 
 	handle_cast({remove_stations, StationList}, State) ->
-		remove_stations(StationList),
+		remove_stations(NodesEts, StationList),
 		io:format("loadNGgui.erl: remove_stations ~p~n",[StationList]),
 		{noreply, State};
+
+		handle_cast({update_medium, ListOfNodesAndMediums}, State) ->
+			update_medium(NodesEts, ListOfNodesAndMediums),
+			io:format("loadNGgui.erl: update_medium ~p~n",[ListOfNodesAndMediums]),
+			{noreply, State};
 
 handle_cast(A, State) ->
 	io:format("~n~nloadNGgui.erl: unhandled cast msg=~p~n~n",[A]),
@@ -456,17 +461,22 @@ printNodesEts(Node, Ets) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%   Internal Functions:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-remove_stations(StationList) ->
-	io:format("~n~nWhat should remove_stations do? - ~p~n",[StationList]),
-	io:format("If it is to turn off nodes in that list switch to fun remove_stations_is_it_this/2 at line 466~n~n~n").
-
-% Assuming it should turn of nodes in StationList
-remove_stations_is_it_this(_,[]) ->
+remove_stations(_,[]) ->
 	ok;
-remove_stations_is_it_this(NodesEts,[Station|StationList]) ->
-	io:format("Assuming it should turn off Node- ~p",[Station]),
+remove_stations(NodesEts,[Station|StationList]) ->
+	io:format("Assuming it should turn off Node- ~p~n",[Station]),
 	node_control_interface:update_configuration(Station, idle),
-	remove_stations_is_it_this(NodesEts,StationList).
+	remove_stations(NodesEts,StationList).
+
+update_medium(_,[]) ->
+	ok;
+update_medium(NodesEts,[{NodeName, MediumType}|ListOfNodesAndMediums]) ->
+	io:format("Assuming it should change Node- ~p to ~p~n",[NodeName, MediumType]),
+	node_control_interface:update_configuration(Station, MediumType),
+	update_medium(NodesEts,ListOfNodesAndMediums).
+
+
+update_medium(NodesEts, ListOfNodesAndMediums)->
 
 update_map_ets(MapEts, Node, NodeRoutingMap) ->
 			ets:match_delete(MapEts,{{Node, '_'},'_'}),
