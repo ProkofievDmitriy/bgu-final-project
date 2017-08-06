@@ -51,9 +51,9 @@ handle_incoming_message(FsmPid, Packet)->
 
 get_status(FsmPid) ->
     Result = (catch gen_fsm:sync_send_all_state_event(FsmPid, get_status, 60000)),
-    case Result of
-        [{medium_mode, _}|[]] -> Result;
-        _ ->
+    if is_list(Result) ->
+        Result;
+        true ->
             ?LOGGER:critical("[~p]: error occured while get_status, Result = ~p ~n", [?MODULE, Result]),
             []
     end.
@@ -262,7 +262,7 @@ handle_sync_event(get_status, _From, StateName, StateData) ->
     StartTime = utils:get_current_millis(),
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
     ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
-	{reply, [{medium_mode, StateName},{nodes_to_filter, State#state.nodes_to_filter}], StateName, StateData};
+	{reply, [{medium_mode, StateName}, {nodes_to_filter, StateData#state.nodes_to_filter}], StateName, StateData};
 
 handle_sync_event({set_state, NewState}, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: Handle set_state, OldState: ~w, NewState: ~w~n", [?MODULE, StateName, NewState]),

@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, report, data_link, modem_port, transport, load_ng, node, application_interface, stats_server_interface]).
+-define(MODULES_TO_FILTER, [utils, report, modem_port, transport, load_ng, node, application_interface, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 

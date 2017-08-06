@@ -4,7 +4,7 @@
 
 -define(SERVER, ?MODULE).
 -define(X_SIZE, 1080).
--define(Y_SIZE, 680).
+-define(Y_SIZE, 700).
 -define(REFRESH_TIME, 1000).
 -define(TIMEOUT, 100000000000).
 
@@ -264,14 +264,14 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 					N ->
 						wxChoice:setStringSelection(State#state.nodeChoice,atom_to_list(N)),
 						update_map(State#state.canvas, N, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
-
+						%TODO - Update nodes to filter per node
 					%		{noreply,State#state{selectedNode = N}}
 						{noreply,State#state{selectedNode = N}}
 				end;
 			true ->
-            		[{_,{Time, _, Mode,RoutingSet}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
+            		[{_,{Time, _, Mode,RoutingSet, NodesToFilterList}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
 		            io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
-		            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet}}),
+		            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet, NodesToFilterList}}),
 		            %io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 					wxToggleButton:setValue(UpdateLocation,false),
 					{noreply,State}
@@ -363,10 +363,14 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             %Location = findLocation(NodeNameAtom);
         true ->
             %io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
-            [{NodeNameAtom,{_,Location, _,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
+            [{NodeNameAtom,{_,Location, _,_,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
     end,
 		Time = erlang:monotonic_time(),
-    ets:insert(State#state.nodesEts,{NodeNameAtom,{Time, Location, proplists:get_value(medium_mode, Data),RoutingSet}}),
+		NodeInfo = {NodeNameAtom, {Time, Location, proplists:get_value(medium_mode, Data),RoutingSet, proplists:get_value(nodes_to_filter, Data)}},
+		io:format("Data:  ~p~n",[Data]),
+		io:format("NodeInfo:  ~p~n",[NodeInfo]),
+
+    ets:insert(State#state.nodesEts, NodeInfo),
     update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
     %printRoutingSet(State#state.selectedNode, NodeNameAtom, State#state.nodesEts),
     {noreply, State};
@@ -511,7 +515,7 @@ update_map_ets_2(MapEts, Node, [_|NodeRoutingMap])->
 
 find_node(_,'$end_of_table',_) -> ok;
 find_node(NodesEts,Key, MouseLocation) ->
-		[{Key,{_, KeyLocation,_, _}}] = ets:lookup(NodesEts,Key),
+		[{Key,{_, KeyLocation,_, _, _}}] = ets:lookup(NodesEts,Key),
 		case distance(KeyLocation, MouseLocation) of
 				N when N =< ?CIRCE_RADIUS_SQURE ->
 					Key;
@@ -530,9 +534,9 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 		case SelectedNode of
 			all -> 	switch_to_full_map(DC, ets:first(MapEts), MapEts, NodesEts);
 			_ ->
-				[{SelectedNode,{_, {X,Y}, MediumMode,RoutingSet}}] = ets:lookup(NodesEts,SelectedNode),
+				[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] = ets:lookup(NodesEts,SelectedNode),
 				draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
-				configButtonUpdate(MediumMode,ConfigButtons)
+				configButtonUpdate(MediumMode ,ConfigButtons)
 		end,
 
 		draw_nodes(DC, SelectedNode ,ets:first(NodesEts), NodesEts,NodeChoice, CmbTo),
@@ -544,7 +548,7 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 	%%%%
 draw_nodes(_, _, '$end_of_table', _,_,_) -> ok;
 draw_nodes(DC, SelectedNode, NodeKey, NodesEts,NodeChoice, CmbTo) ->
-		[{NodeKey,{OldTime, {X,Y}, _MediumMode,_}}] = ets:lookup(NodesEts,NodeKey),
+		[{NodeKey,{OldTime, {X,Y}, _MediumMode, _, _}}] = ets:lookup(NodesEts,NodeKey),
 		Time = erlang:monotonic_time(),
 		if OldTime == -1 -> ok; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 			Time - OldTime < ?TIMEOUT ->
@@ -552,7 +556,7 @@ draw_nodes(DC, SelectedNode, NodeKey, NodesEts,NodeChoice, CmbTo) ->
 				wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50});
 			Time - OldTime >= ?TIMEOUT ->
 				io:format("TIMEOUT ~p~n",[NodeKey]),
-				ets:insert(NodesEts,{NodeKey,{-1, {0,0}, 0,0}}), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+				ets:insert(NodesEts,{NodeKey,{-1, {0,0}, 0, 0, []}}), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 				wxChoice:delete(NodeChoice,wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
 				wxChoice:delete(CmbTo,wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
 			end,
@@ -567,7 +571,7 @@ switch_to_full_map(DC, MapEtsKey, MapEts, NodesEts) ->
     [{{Node,NextNode},{Medium}}] = ets:lookup(MapEts,MapEtsKey),
     io:format("Node: ~p NextNode: ~p~n",[Node,NextNode]),
 		case {ets:lookup(NodesEts,Node), ets:lookup(NodesEts,NextNode)} of
-			{[{Node,{_, NodeLocation,_, _}}], [{NextNode,{_, NextNodeLocation,_, _}}]} ->
+			{[{Node,{_, NodeLocation,_, _,_}}], [{NextNode,{_, NextNodeLocation,_, _,_}}]} ->
 				draw_route(DC, NodeLocation,NextNodeLocation, Medium);
 				A -> io:format("switch_to_full_map: Node ~p or NextNode ~p are not in ETS ~p~n",[Node, NextNode, A]), ok
 		end,
@@ -585,7 +589,7 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node}
     %io:format("draw_routes_from_node N: ~p~n~n",[AtomNode]),
 
 	case ets:lookup(NodesEts,AtomNode) of
-		[{AtomNode,{_, NextLocation, _,_}}] ->
+		[{AtomNode,{_, NextLocation, _,_, _}}] ->
 			draw_route(DC, Location,NextLocation, Medium);
 		[] -> %io:format("draw_routes_from_node not found node"),
 			ok
@@ -598,7 +602,7 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
 	%io:format("draw_routes_from_node N: ~p~n~n",[AtomNode1]),
 	AtomNode2 = makeAtom(Node2),
 		case { ets:lookup(NodesEts,AtomNode1),ets:lookup(NodesEts,AtomNode2)}of
-			{[{AtomNode1,{_, Location1, _,_}}], [{AtomNode2,{_, Location2,_,_}}]} ->
+			{[{AtomNode1,{_, Location1, _,_,_}}], [{AtomNode2,{_, Location2,_,_,_}}]} ->
 
 			    draw_route(DC, Location,Location2, Medium),
 			    draw_route(DC, Location1,Location2, 0);
@@ -631,7 +635,9 @@ configButtonUpdate(_, ok)->ok;
 configButtonUpdate(idle, [PlcOff,_,RfOff,_])->selectRadio(PlcOff,RfOff);
 configButtonUpdate(rf_only, [PlcOff,_,_,RfOn])->selectRadio(PlcOff,RfOn);
 configButtonUpdate(plc_only, [_,PlcOn,RfOff,_])->selectRadio(PlcOn,RfOff);
-configButtonUpdate(dual, [_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn).
+configButtonUpdate(dual, [_,PlcOn,_,RfOn])->selectRadio(PlcOn,RfOn);
+configButtonUpdate(undefined, _)-> io:format("Medium mode is UNDEFINED, skiping"), ok.
+
 
 selectRadio(Plc,Rf) -> wxRadioButton:setValue(Plc,true), wxRadioButton:setValue(Rf,true).
 
