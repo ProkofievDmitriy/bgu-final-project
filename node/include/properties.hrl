@@ -86,7 +86,8 @@
 %                               {default_state, dual},
 %                               {default_state, plc_only},
                                {default_state, rf_only},
-                               {timeout, ?TIMEOUT}
+                               {timeout, ?TIMEOUT},
+                               {nodes_to_filter, []}
                                ]).
 -define(TRANSPORT_PROPS_LIST, [{default_state, idle},
                                {timeout, ?TIMEOUT}

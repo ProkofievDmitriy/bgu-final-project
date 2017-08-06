@@ -85,7 +85,6 @@ init(GlobalProperties) ->
 	LoggerREF = erlang:monitor(process, LoggerPID),
 	?LOGGER:debug("[~p]: Logger: ~p started with pid: ~p.~n", [?MODULE, ?LOGGER, LoggerPID]),
 
-
 	NodeProperties = proplists:get_value(?NODE_PROPERTIES, GlobalProperties),
 	NodeName = proplists:get_value(node_name, GlobalProperties),
 	?LOGGER:debug("[~p]: Node Name: ~p~n", [?MODULE, NodeName]),
@@ -94,8 +93,6 @@ init(GlobalProperties) ->
 	MAC = utils:get_mac(),
 	IP = utils:get_ip(),
 	?LOGGER:debug("[~p]: Node Name: ~p, Address: ~p,  IP: ~p, MAC: ~p~n", [?MODULE, NodeName, NodeAddress, IP, MAC]),
-
-
 
 	%initialize reporting-unit
 	ReportUnitProperties = [{node_name, NodeName} | proplists:get_value(?REPORT_UNIT_PROPERTIES, GlobalProperties)],

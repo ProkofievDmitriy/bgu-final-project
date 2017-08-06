@@ -19,7 +19,10 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
 	{frame,panel, mapEts, nodesEts, canvas, log, nodeChoice, selectedNode = all, numberOfNodes, buttons,%}).
 %-record(buttons, {
     counters, configButtons, updateLocation,
-    buttonExport, buttonFullMap, buttonDeleteTable, buttonDeleteAll,buttonSendConfig, buttonSendMSG, txtMsgSend, cmbTo}).
+    buttonExport, buttonFullMap, buttonDeleteTable, buttonDeleteAll,
+	buttonSendConfig, buttonSendMSG, txtMsgSend,
+	buttonUpdateNodesToFilter, nodesToFilterList,
+	cmbTo}).
 
 -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
 
@@ -85,10 +88,16 @@ init(WxServer) ->
 
 	%CmbTo = wxChoice:new(Panel, ?wxID_ANY, [{choices, []},{style, ?wxCB_READONLY}]),
 	CmbTo = wxChoice:new(Panel, ?wxID_ANY,[{size,{170,40}}]),
-    TxtMsgSend = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, ""}, {size,{170,130}},{style, ?wxDEFAULT bor ?wxTE_MULTILINE}]),
+    TxtMsgSend = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, "Default Message"}, {size,{170,130}},{style, ?wxDEFAULT bor ?wxTE_MULTILINE}]),
 
-    ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label, "Send Message"}]),
+	ButtonSendMSG = wxButton:new(Panel, ?wxID_ANY, [{label, "Send Message"}]),
     wxButton:connect(ButtonSendMSG, command_button_clicked),
+
+
+	NodesToFilterTxt = wxTextCtrl:new(Panel, ?wxID_ANY, [{value, "Accept All"}, {size,{170,25}},{style, ?wxDEFAULT}]),
+	ButtonUpdateNodesToFilter = wxButton:new(Panel, ?wxID_ANY, [{label, "Update Nodes To Filter List"}]),
+	wxButton:connect(ButtonUpdateNodesToFilter, command_button_clicked),
+
 
     ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
     wxButton:connect(ButtonSendConfig, command_button_clicked),
@@ -126,6 +135,10 @@ init(WxServer) ->
     wxSizer:add(ManagementSzLeftP, TxtMsgSend),
     wxSizer:addSpacer(ManagementSzLeftP, 10),
     wxSizer:add(ManagementSzLeftP, ButtonSendMSG),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, NodesToFilterTxt),
+    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:add(ManagementSzLeftP, ButtonUpdateNodesToFilter),
     wxSizer:addSpacer(ManagementSzLeftP, 10),
 
     wxSizer:add(ManagementSzRightP, RadioButtonSizer),
@@ -177,7 +190,7 @@ init(WxServer) ->
     erlang:send_after(?REFRESH_TIME,self(),timer),
 
     {Frame,#state{frame=Frame,panel=Panel,mapEts = MapEts, nodesEts = NodesEts, log = Log,canvas = Canvas,
-                    cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodeChoice = NodeChoice, numberOfNodes = 0,
+                    cmbTo = CmbTo,txtMsgSend = TxtMsgSend, nodesToFilterList = NodesToFilterTxt, nodeChoice = NodeChoice, numberOfNodes = 0,
                     counters = Counters,
                     buttonExport = wxButton:getId(ButtonExport),
                     configButtons = ConfigButtons,
@@ -186,6 +199,7 @@ init(WxServer) ->
                     updateLocation = UpdateLocation,
                     buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
 					buttonDeleteAll = wxButton:getId(ButtonDeleteAll),
+					buttonUpdateNodesToFilter = wxButton:getId(ButtonUpdateNodesToFilter),
                     buttonSendMSG = wxButton:getId(ButtonSendMSG)}}.
 
 
@@ -273,7 +287,7 @@ handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}
 handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap,
                 buttonDeleteTable = ButtonDeleteTable, buttonDeleteAll= ButtonDeleteAll, buttonSendConfig = ButtonSendConfig,
-                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG}) ->
+                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG, buttonUpdateNodesToFilter = ButtonUpdateNodesToFilter}) ->
     case ID of
         ButtonFullMap ->
             	io:format("Showing full map~n"),
@@ -293,10 +307,15 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
                     {noreply,State};
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
-
                     node_control_interface:initiate_transaction(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), wxTextCtrl:getValue(State#state.txtMsgSend)),
-                    wxTextCtrl:clear(State#state.txtMsgSend),
+                    % wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
+        ButtonUpdateNodesToFilter ->
+                    io:format("ButtonUpdateNodesToFilter send: ~p~n Nodes: ~p~n",[wxTextCtrl:getValue(State#state.nodesToFilterList), wxChoice:getStringSelection(State#state.cmbTo)]),
+					NodesToFilterList = getNodesToFilterList(wxTextCtrl:getValue(State#state.nodesToFilterList)),
+					node_control_interface:update_nodes_to_filter(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), NodesToFilterList),
+                    {noreply,State};
+
         ButtonSendConfig ->
                     %node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
 										RadioState = checkRadio(State#state.configButtons),
@@ -651,3 +670,13 @@ create_radio_buttons(Panel) ->
         end,
     wx:foreach(Fun, Buttons),
     {RadioButtonSizer,Buttons}.
+
+
+getNodesToFilterList(NodesToFilterString)->
+	case NodesToFilterString of
+		"Accept All" ->
+			[];
+		_ ->
+			% [fun(X)-> string:to_integer(X) end || X <- string:trim(NodesToFilterString)]
+			[]
+	end.

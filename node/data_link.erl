@@ -45,9 +45,9 @@ updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
 
 handle_incoming_message(FsmPid, Packet)->
     ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
-    <<Medium:8, RSSI:8, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
+    <<Medium:8, RSSI:8, Source:?ADDRESS_LENGTH, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
     ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
-    gen_fsm:send_event(FsmPid, {received_message, {Medium, Target, Data}}).
+    gen_fsm:send_event(FsmPid, {received_message, {Medium, Source, Target, Data}}).
 
 get_status(FsmPid) ->
     Result = (catch gen_fsm:sync_send_all_state_event(FsmPid, get_status, 60000)),
@@ -58,11 +58,15 @@ get_status(FsmPid) ->
             []
     end.
 
+update_nodes_to_filter(FsmPid, NodesToFilterList) ->
+    gen_fsm:sync_send_all_state_event(FsmPid, {update_nodes_to_filter, NodesToFilterList}).
+
+
 
 %% ====================================================================
 %% Behavioural functions
 %% ====================================================================
--record(state, {self_address, upper_level_pid, upper_level_module, bottom_level_pid, bottom_level_module}).
+-record(state, {self_address, upper_level_pid, upper_level_module, bottom_level_pid, bottom_level_module, nodes_to_filter}).
 
 %% ============================================================================================
 %% =========================================== Init ==========================================
@@ -70,10 +74,12 @@ get_status(FsmPid) ->
 init(Properties) ->
     ?LOGGER:info("[~p]: Starting FSM with params: ~p.~n", [?MODULE, Properties]),
     SelfAddress = proplists:get_value(?SELF_ADDRESS, Properties),
+    NodesToFilter = proplists:get_value(?NODES_TO_FILTER, Properties),
     StartState = proplists:get_value(default_state, Properties),
 
     {ok, StartState, #state{
-        self_address = SelfAddress
+        self_address = SelfAddress,
+        nodes_to_filter = NodesToFilter
     }}.
 
 %% ============================================================================================
@@ -92,7 +98,7 @@ idle(Event, _From, StateData) ->
 dual({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = ?MODEM_PORT:send(Medium, Payload),
     case Result of
         {error, ErrorMessage} ->
@@ -104,16 +110,16 @@ dual({send, {Hop, Data}}, _From, StateData) ->
 
 
 % Async dual events
-dual({received_message, {Medium, Target, Data}}, StateData) ->
-    ?LOGGER:debug("[~p]: DUAL - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
-    handle_message(Medium, Target, StateData, Data),
+dual({received_message, {Medium, Source, Target, Data}}, StateData) ->
+    ?LOGGER:debug("[~p]: DUAL - (received_message),Source: ~p, Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Source, Medium, Target, Data]),
+    handle_message(Medium, Source, Target, StateData, Data),
     {next_state, dual, StateData};
 
 
 dual({send, {Hop, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - ASYNC  (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = ?MODEM_PORT:send(Medium, Payload),
     case Result of
         {error, ErrorMessage} ->
@@ -129,7 +135,7 @@ dual({send, {Hop, Data}}, StateData) ->
 plc_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - Request(send) to ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = case Medium of
         ?PLC ->
             ?MODEM_PORT:send(?PLC, Payload);
@@ -147,11 +153,11 @@ plc_only({send, {Hop, Data}}, _From, StateData) ->
             {reply, Result, plc_only, StateData}
      end.
 
-plc_only({received_message, {Medium, Target, Data}}, StateData) ->
+plc_only({received_message, {Medium, Source, Target, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
     case Medium of
         ?PLC ->
-            handle_message(Medium, Target, StateData, Data);
+            handle_message(Medium, Source, Target, StateData, Data);
         _Else ->
             ?LOGGER:warn("[~p]: PLC_ONLY - (received_message) : Medium is NOT PLC - IGNORING incoming message ~n", [?MODULE])
     end,
@@ -162,7 +168,7 @@ plc_only({received_message, {Medium, Target, Data}}, StateData) ->
 plc_only({send, {Hop, Data}}, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - ASYNC (send) to ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = case Medium of
         ?PLC ->
             ?MODEM_PORT:send(?PLC, Payload);
@@ -186,7 +192,7 @@ plc_only({send, {Hop, Data}}, StateData) ->
 rf_only({send, {Hop, Data}}, _From, StateData) ->
     ?LOGGER:debug("[~p]: RF_ONLY - (send) to medium ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
-    Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+    Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
     Result = case Medium of
         ?RF ->
             ?MODEM_PORT:send(?RF, Payload);
@@ -204,11 +210,11 @@ rf_only({send, {Hop, Data}}, _From, StateData) ->
             {reply, Result, rf_only, StateData}
      end.
 
-rf_only({received_message, {Medium, Target, Data}}, StateData) ->
+rf_only({received_message, {Medium, Source, Target, Data}}, StateData) ->
      ?LOGGER:debug("[~p]: RF_ONLY - (received_message), Medium: ~p , Target: ~p, Data : ~w ~n", [?MODULE, Medium, Target, Data]),
      case Medium of
          ?RF ->
-             handle_message(Medium, Target, StateData, Data);
+             handle_message(Medium, Source, Target, StateData, Data);
          _Else ->
              ?LOGGER:warn("[~p]: RF_ONLY - (received_message) : Medium is NOT RF - IGNORING incoming message ~n", [?MODULE])
      end,
@@ -218,7 +224,7 @@ rf_only({received_message, {Medium, Target, Data}}, StateData) ->
  rf_only({send, {Hop, Data}}, StateData) ->
      ?LOGGER:debug("[~p]: RF_ONLY -  ASYNC (send) to medium ~p~n", [?MODULE, Hop]),
      {Medium, NextHopAddress} = Hop,
-     Payload = preparePayload(NextHopAddress, Data), % <<NextHopAddress/bitstring, Data/bitstring>>,
+     Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
      Result = case Medium of
          ?RF ->
              ?MODEM_PORT:send(?RF, Payload);
@@ -262,6 +268,10 @@ handle_sync_event({set_state, NewState}, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: Handle set_state, OldState: ~w, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, NewState, StateData};
 
+handle_sync_event({update_nodes_to_filter, NodesToFilterList}, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle update_nodes_to_filter, OldNodesToFilter: ~w, NewNodesToFilter: ~w~n", [?MODULE, StateData#state.nodes_to_filter, NodesToFilterList]),
+	{reply, ok, StateName, StateData#state{nodes_to_filter = NodesToFilterList}};
+
 handle_sync_event(Event, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
 	{reply, "Stub Reply", StateName, StateData}.
@@ -297,9 +307,10 @@ code_change(OldVsn, StateName, StateData, Extra) ->
 %% ============================================================================================
 %% ======================================== UTILS =============================================
 %% ============================================================================================
-preparePayload(Address, Data)->
+preparePayload(Address, Data, SelfAddress)->
     BinaryNextHopAddress = <<Address:?ADDRESS_LENGTH>>,
-    Payload = <<BinaryNextHopAddress/bitstring, Data/bitstring>>,
+    BinarySelfAddress = <<SelfAddress:?ADDRESS_LENGTH>>,
+    Payload = <<BinarySelfAddress/bitstring, BinaryNextHopAddress/bitstring, Data/bitstring>>,
     if (bit_size(Payload) =< ?MAX_FRAME_LENGTH) ->
             ?LOGGER:preciseDebug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
@@ -308,7 +319,8 @@ preparePayload(Address, Data)->
             {error, "Binary Data Length exceeded"}
     end.
 
-isValidTarget(Target, SelfAddress)->
+isValidTarget(Target, State)->
+    SelfAddress = State#state.self_address,
      case Target of
         SelfAddress ->
             true;
@@ -318,12 +330,20 @@ isValidTarget(Target, SelfAddress)->
             false
          end.
 
-handle_message(Medium, Target, StateData, Data)->
-    case isValidTarget(Target, StateData#state.self_address) of
+isValidSource(Source, State)->
+     not lists:member(Source, State#state.nodes_to_filter).
+
+handle_message(Medium, Source, Target, StateData, Data)->
+    case isValidTarget(Target, StateData) of
         true ->
-            UpperLevelModule = StateData#state.upper_level_module,
-            ?LOGGER:debug("[~p]: handle_message : target is valid forwarding to ~p~n", [?MODULE, UpperLevelModule]),
-            UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, {Medium, Data});
+            case isValidSource(Source, StateData) of
+                true ->
+                    UpperLevelModule = StateData#state.upper_level_module,
+                    ?LOGGER:debug("[~p]: handle_message : target and source are valid forwarding to ~p~n", [?MODULE, UpperLevelModule]),
+                    UpperLevelModule:handle_incoming_message(StateData#state.upper_level_pid, {Medium, Data});
+                _Else ->
+                    ?LOGGER:debug("[~p]: handle_message : Source(~w) is NOT valid - IGNORING incoming message ~n", [?MODULE, Source])
+            end;
         _Else ->
             ?LOGGER:debug("[~p]: handle_message : target(~w) is NOT valid - IGNORING incoming message ~n", [?MODULE, Target])
     end.

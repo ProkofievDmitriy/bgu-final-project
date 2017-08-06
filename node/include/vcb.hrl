@@ -14,6 +14,7 @@
 -define(REPORT_UNIT_PROPERTIES, report_unit_properties).
 -define(APPLICATION_PROPERTIES, application_properties).
 -define(SELF_ADDRESS, self_address).
+-define(NODES_TO_FILTER, nodes_to_filter).
 
 %LOADng Messages types
 -define(RREQ, 0).

@@ -36,6 +36,10 @@ initiate_transaction(NodeName, Destination, Data) when is_atom(Destination) anda
     gen_server:cast(A, {initiate_transaction, {Destination, Data}}).
 
 
+update_nodes_to_filter(NodeName, NodesToFilterList)->
+    io:format("update_nodes_to_filter to ~p, NodesToFilterList: ~p ~n", [NodeName, NodesToFilterList]),
+    gen_server:cast(NodeName, {update_nodes_to_filter, NodesToFilterList}).
+
 
 
 reset_node(NodeName)->

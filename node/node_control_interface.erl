@@ -21,10 +21,29 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_configuration(NodeName, OptionsList)->
-    gen_server:cast(NodeName, {update_configuration, OptionsList}).
+    gen_server:cast(global:whereis_name(NodeName), {update_configuration, OptionsList}).
 
-initiate_transaction(NodeName, Destination, Data)->
-    gen_server:cast(NodeName, {initiate_transaction, {Destination, Data}}).
+
+initiate_transaction(all, _ , _)->
+    io:format("initiate_transaction not matched .... INGNORED~n");
+
+initiate_transaction(_, '', _)->
+    io:format("initiate_transaction not matched .... INGNORED~n");
+
+initiate_transaction(NodeName, Destination, Data) when is_atom(Destination) andalso is_atom(NodeName)->
+    io:format("initiate_transaction Sending from ~p, to ~p, Data: ~p ~n", [NodeName, Destination, Data]),
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {initiate_transaction, {Destination, Data}}).
+
+
+update_nodes_to_filter(NodeName, NodesToFilterList)->
+    io:format("update_nodes_to_filter to ~p, NodesToFilterList: ~p ~n", [NodeName, NodesToFilterList]),
+    gen_server:cast(NodeName, {update_nodes_to_filter, NodesToFilterList}).
+
+
 
 reset_node(NodeName)->
-    gen_server:cast(NodeName, {reset_node}).
+    io:format("~nAAAA3: ~p~n",[NodeName]),
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {reset_node}),
+    io:format("BBBB: ~p~n~n",[A]).
