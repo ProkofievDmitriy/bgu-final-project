@@ -368,12 +368,12 @@ handle_cast({node_is_down,DownNode}, State) ->
 		{noreply, State};
 
 	handle_cast({remove_stations, StationList}, State) ->
-		remove_stations(NodesEts, StationList),
+		remove_stations(State#state.nodesEts, StationList),
 		io:format("loadNGgui.erl: remove_stations ~p~n",[StationList]),
 		{noreply, State};
 
 		handle_cast({update_medium, ListOfNodesAndMediums}, State) ->
-			update_medium(NodesEts, ListOfNodesAndMediums),
+			update_medium(State#state.nodesEts, ListOfNodesAndMediums),
 			io:format("loadNGgui.erl: update_medium ~p~n",[ListOfNodesAndMediums]),
 			{noreply, State};
 
@@ -472,11 +472,8 @@ update_medium(_,[]) ->
 	ok;
 update_medium(NodesEts,[{NodeName, MediumType}|ListOfNodesAndMediums]) ->
 	io:format("Assuming it should change Node- ~p to ~p~n",[NodeName, MediumType]),
-	node_control_interface:update_configuration(Station, MediumType),
+	node_control_interface:update_configuration(NodeName, MediumType),
 	update_medium(NodesEts,ListOfNodesAndMediums).
-
-
-update_medium(NodesEts, ListOfNodesAndMediums)->
 
 update_map_ets(MapEts, Node, NodeRoutingMap) ->
 			ets:match_delete(MapEts,{{Node, '_'},'_'}),
