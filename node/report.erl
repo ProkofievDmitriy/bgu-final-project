@@ -55,6 +55,7 @@ init(Properties) ->
     DataServerIp = proplists:get_value(data_server_ip, Properties),
     NodeName = proplists:get_value(node_name, Properties),
     % Offset = ntp:ask(),
+    spawn(fun()-> timer:sleep(1000), sync_time_offset() end),
     {ok, #context{
         node_name = NodeName,
         data_server_interface = DataServerInterface,
@@ -108,7 +109,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
     case Ans of
         true ->
             ?LOGGER:debug("[~w]: connected to server: ~w, erlang-wise (Ans is true)~n", [?MODULE, ServerNodeName]),
-            sync_time_offset(),
+            % sync_time_offset(),
             NewContext = Context#context{connected_to_server = true},
             {noreply, NewContext};
         Else ->
@@ -123,7 +124,7 @@ handle_cast(sync_time_offset, Context) ->
     % Offset = ntp:ask(),
     Offset = sntp:get_offset(),
     ?LOGGER:debug("[~w]: sync_time_offset - received offset = ~p ~n", [?MODULE, Offset]),
-    if Offset =:= 0 -> spawn(fun()-> timer:sleep(10000), sync_time_offset() end);
+    if Offset =:= 0 -> spawn(fun()-> timer:sleep(1000), sync_time_offset() end);
         true -> ok
     end,
     {noreply, Context#context{time_offset = Offset}};

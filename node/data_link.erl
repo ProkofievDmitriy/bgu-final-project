@@ -262,7 +262,7 @@ handle_sync_event(get_status, _From, StateName, StateData) ->
     StartTime = utils:get_current_millis(),
     ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
     ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
-	{reply, [{medium_mode, StateName}], StateName, StateData};
+	{reply, [{medium_mode, StateName},{nodes_to_filter, State#state.nodes_to_filter}], StateName, StateData};
 
 handle_sync_event({set_state, NewState}, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: Handle set_state, OldState: ~w, NewState: ~w~n", [?MODULE, StateName, NewState]),

@@ -313,7 +313,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
         ButtonUpdateNodesToFilter ->
                     io:format("ButtonUpdateNodesToFilter send: ~p~n Nodes: ~p~n",[wxTextCtrl:getValue(State#state.nodesToFilterList), wxChoice:getStringSelection(State#state.cmbTo)]),
 					NodesToFilterList = getNodesToFilterList(wxTextCtrl:getValue(State#state.nodesToFilterList)),
-					node_control_interface:update_nodes_to_filter(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), NodesToFilterList),
+					node_control_interface:update_nodes_to_filter(SelectedNode, NodesToFilterList),
                     {noreply,State};
 
         ButtonSendConfig ->
