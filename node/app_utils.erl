@@ -28,7 +28,7 @@ open_report_file(Me)->
   File.
 
 report_start_of_experiment(State)->
-  log:debug("[~p] entered report_start_of_experiment , State ~p ~n", [?MODULE,State]),
+%%  log:debug("[~p] entered report_start_of_experiment , State ~p ~n", [?MODULE,State]),
   Type = {app_info,experiment_start},
   Data = [{experiment_num, State#state.exp_counter},{new_meters_list, State#state.meters}],
   _Ok = report(Type,Data),
@@ -71,8 +71,8 @@ report(Type,Data) ->
     true -> []
   end,
   Fd = get(reporting_file),
-  io:format(Fd,"~p , ~p~n",[Type,Data]),
-  log:info("[~p] sending report ~p ~p~n", [?MODULE,Type,Data]),
+  io:format(Fd,"~w , ~w~n",[Type,Data]),
+  log:info("[~p] sending report ~w ~w~n", [?MODULE,Type,Data]),
   ok.
 
 hand_shake(Me,My_protocol,Times) when ?TEST_MODE == local->
@@ -288,6 +288,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
 %%      Bit_message = message_to_bit ({dreq,H,Seq}),
 %%      My_protocol ! Bit_message,
       My_protocol ! {dreq,H,Seq},
+      log:preciseDebug("sent"),
       _ = report_sent_dreq(H,Seq),
       send_dreq(My_protocol, T, Seq);
 

@@ -13,49 +13,49 @@ spawn(am_sem,start_link,[{node_2,self(),Meters}]).
 node_1_app ! ok.
 
 
-gen_fsm:send_event(node_2_app,{received_message,<<4,0:7>>}).
+gen_fsm:send_all_state_event(node_2_app,{received_message,<<4,0:7>>}).
 
 1:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_11,1}],0}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_11,1}],0}).
  
-  gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:7,0:8,1:7,1:17>>}).
+  gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,1:7,0:8,1:7,1:17>>}).
 
 2:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_11,1},{node_2,2}],0}).
-   gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:7,0:8,2:7,2:17>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_11,1},{node_2,2}],0}).
+   gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,1:7,0:8,2:7,2:17>>}).
 3:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_3,3}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,3:6,3:16>>}).
-  gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:7,0:8,3:7,3:17>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_3,3}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,3:6,3:16>>}).
+  gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,1:7,0:8,3:7,3:17>>}).
   
 4:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_3,3},{node_4,4}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,4:6,4:16,3:6,3:16>>}).
-   gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:7,0:8,4:7,4:17>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_3,3},{node_4,4}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,4:6,4:16,3:6,3:16>>}).
+   gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,1:7,0:8,4:7,4:17>>}).
  
 5:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_5,5}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,5:6,5:16>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_5,5}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,5:6,5:16>>}).
 
 6:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_5,5},{node_6,6}],0}).
- gen_fsm:send_event(node_1_app,{received_message, <<1:1,1:7,0:8,6:7,6:17,5:7,5:17>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_5,5},{node_6,6}],0}).
+ gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,1:7,0:8,6:7,6:17,5:7,5:17>>}).
 
 7:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_3,3},{node_7,7}],0}).
- gen_fsm:send_event(node_1_app,{received_message, <<1:1,11:6,0:8,7:6,7:16,3:6,3:16>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_3,3},{node_7,7}],0}).
+ gen_fsm:send_all_state_event(node_1_app,{received_message, <<1:1,11:6,0:8,7:6,7:16,3:6,3:16>>}).
 
 8:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_3,3},{node_7,7},{node_8,8}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,8:6,8:16,7:6,7:16,3:6,3:16>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_3,3},{node_7,7},{node_8,8}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,8:6,8:16,7:6,7:16,3:6,3:16>>}).
 
 9:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_5,5},{node_9,9}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,9:6,9:16,5:6,5:16>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_5,5},{node_9,9}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,9:6,9:16,5:6,5:16>>}).
 
 10:
- gen_fsm:send_event(node_1_app,{drep,node_1,[{node_5,5},{node_9,9},{node_10,10}],0}).
- gen_fsm:send_event(node_11_app,{received_message, <<1:1,11:6,0:8,10:6,10:16,9:6,9:16,5:6,5:16>>}).
+ gen_fsm:send_all_state_event(node_1_app,{drep,node_1,[{node_5,5},{node_9,9},{node_10,10}],0}).
+ gen_fsm:send_all_state_event(node_11_app,{received_message, <<1:1,11:6,0:8,10:6,10:16,9:6,9:16,5:6,5:16>>}).
  
  
  gen_fsm:stop(node_1_app).
@@ -65,30 +65,4 @@ gen_fsm:send_event(node_2_app,{received_message,<<4,0:7>>}).
 
  
  
- 
 
-
-
-
-
-
-
- 
- 
- 
- accidental bugs:
- - arrival of unexpected sequence number crashee phase2
-
- 
- 
- unhandeled stuff:
- - OTP behavior
- - timestamps
- - average number of rounds of phase 1
- - handleinfo
- - unresponsive station
- - supervision
- - change drep format in sem module
- 
- tested and working:
- - dc

@@ -121,7 +121,7 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
       phase2 ->
         log:info("[~p]=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n",
           [?MODULE]),
-        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        app_utils:report_next_session(State#state.sn+1,State#state.ter),
         NewState = prepare_for_phase_2(State),
         {next_state, collecting, NewState}
     end;
@@ -131,7 +131,7 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
           log:info("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
             [?MODULE,State#state.sn]);
         timeout ->
-          og:info("[~p]  didnt receive requested replies, preparing for another iteration of Sn ~p~n",
+          log:info("[~p]  didnt receive requested replies, preparing for another iteration of Sn ~p~n",
             [?MODULE,State#state.sn])
       end,
       UpdatedState = State#state{ nrs = Nrs_new },
@@ -141,7 +141,7 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
 
 
 
-collecting(rd_empy,State) ->
+collecting(rd_empty,State) ->
   log:debug("[~p]  received rd_empy event in state collecting,~n State data:
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p, Terms_time: ~p~n" ,
     [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn,State#state.term_times]),
@@ -155,7 +155,7 @@ collecting(rd_empy,State) ->
       phase2 ->
         log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
           [?MODULE,State#state.sn]),
-        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        app_utils:report_next_session(State#state.sn+1, State#state.ter),
         NewState = prepare_for_phase_2(State),
         {next_state, collecting, NewState}
     end;
@@ -181,7 +181,7 @@ collecting(timeout,State) ->
       phase2 ->
         log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
           [?MODULE,State#state.sn]),
-        app_utils:report_next_session(NewState#state.sn, NewState#state.rd),
+        app_utils:report_next_session(State#state.sn+1, State#state.ter),
         NewState = prepare_for_phase_2(State),
         {next_state, collecting, NewState}
     end;
@@ -210,24 +210,30 @@ handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To 
   log:info("[~p]  received drep from: ~p, with Seq: ~p in state ~p ~n state data:
       Nrs: ~p, Rd: ~p, Ter: ~p, Sn: ~p,  ~n",
     [?MODULE,V,Seq,StateName,State#state.nrs,State#state.rd,State#state.ter,State#state.sn]),
-  Nodes = app_utils:extract_nodes_from_drep([],Data),
-  log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
-  Nrs = lists:subtract(State#state.nrs,Nodes),
+  Bool =lists:member(V,State#state.nrs) or lists:member(V,State#state.rd),
+  if Bool ->
+    Nodes = app_utils:extract_nodes_from_drep([],Data),
+    log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
+    Nrs = lists:subtract(State#state.nrs,Nodes),
 %%  Rd = lists:subtract(lists:delete(V,State#state.rd),Nodes),
-  Rd = lists:subtract(State#state.rd,Nodes), %TODO remove above line after functionality check
+    Rd = lists:subtract(State#state.rd,Nodes), %TODO remove above line after functionality check
 %%  Ter = lists:subtract(lists:umerge([State#state.ter,[V]]),lists:delete(V,Nodes)),
-  Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]), %TODO remove above line after funcrionality check
-  ets:insert(mr_ets, Data),
-  log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
-  NewState = State#state{
-    rd = Rd,
-    nrs = Nrs,
-    ter = Ter},
-  if Rd == [] ->
-    gen_fsm:send_event(State#state.my_pid, rd_empty);
-    true ->[]
-  end,
-  {next_state, StateName, NewState};
+    Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]), %TODO remove above line after funcrionality check
+    ets:insert(mr_ets, Data),
+    log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
+    NewState = State#state{
+      rd = Rd,
+      nrs = Nrs,
+      ter = Ter},
+    if Rd == [] ->
+      gen_fsm:send_event(State#state.my_pid, rd_empty);
+      true ->[]
+    end,
+    {next_state, StateName, NewState};
+    true ->
+      log:info("[~p]  drep source was already read, ignoring ~n",[?MODULE]),
+      {next_state, StateName, State}
+  end;
 
 
 
@@ -260,7 +266,10 @@ handle_info(Info, StateName, State) ->
   {next_state, StateName, State}.
 
 
-terminate(_Reason, _StateName, _State) ->
+terminate(Reason, StateName, State) ->
+  State#state.timer ! stop,
+  log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+    [?MODULE,Reason,StateName,State]),
   ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->
@@ -320,7 +329,7 @@ prepare_for_phase_2(State)->
   Nrs = State#state.meters,
   Rd = State#state.ter,
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,Sn]),
-  app_utils:send_dreq(State#state.my_protocol, Rd, Sn),
+  _ = app_utils:send_dreq(State#state.my_protocol, Rd, Sn),
   app_utils:update_tracker_requests_time(Rd,Sn),
   Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?COLLECTING_TIMEOUT]),
   NewState = State#state{
@@ -332,12 +341,11 @@ prepare_for_phase_2(State)->
     term_times = 0},
   NewState.
 
-
 prepare_for_another_iteration_of_phase_1(State,TimerFlag)->
   Rd = app_utils:random_elements(State#state.nrs),
   Nrs = app_utils:delete_elements(State#state.nrs,Rd),
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,State#state.sn]),
-  app_utils:send_dreq(State#state.my_protocol,Rd,State#state.sn),
+  _ = app_utils:send_dreq(State#state.my_protocol,Rd,State#state.sn),
   app_utils:update_tracker_requests_time(Rd,State#state.sn),
   case TimerFlag of
     timeout ->
@@ -354,7 +362,7 @@ prepare_for_another_iteration_of_phase_1(State,TimerFlag)->
 
 prepare_for_another_iteration_of_phase_2(State,TimerFlag)->
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,State#state.rd,State#state.sn]),
-  app_utils:send_dreq(State#state.my_protocol,State#state.rd,State#state.sn),
+  _ = app_utils:send_dreq(State#state.my_protocol,State#state.rd,State#state.sn),
   app_utils:update_tracker_requests(State#state.rd,State#state.sn),
   case TimerFlag of
     timeout ->

@@ -34,7 +34,7 @@
                                            |
 {app_info, next_session}                   |    {utime, UTIME}   {node_name,NodeName}    {new_session, NewSessionNumber}        {current_terminals, CurrentTerminals}
                                            |
-{app_info, ignoring_unresponssive}         |    {utime, UTIME}   {node_name,NodeName}    {ignored_station, IgnoredStation}      {session, SessionNumber}
+{app_info, ignoring_unresponsive}         |    {utime, UTIME}   {node_name,NodeName}    {ignored_station, IgnoredStation}      {session, SessionNumber}
 
 
 
