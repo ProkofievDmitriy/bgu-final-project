@@ -102,7 +102,7 @@ export() ->
 init([]) ->
   io:format("initiating stats server~n"),
 
-  A = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]),
+  A = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}, {type, duplicate_bag}]),
   DM_ets = ets:new(data_messages, [set]),
   io:format("dets: ~p~n",[A]),
   {ok,DB} = A,
@@ -193,7 +193,7 @@ handle_cast({{management_message, received_message}, Data}, State = #state{db = 
   Destination = proplists:get_value(destination, Data),
   Type = proplists:get_value(type, Data),
 
-  dets:insert(DB, {UTIME, management_message, received_message,Source,Destination,Type}),
+  dets:insert(DB, {{management_message, received_message, UTIME}, {Source,Destination,Type}}),
   NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
 %  io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgReceived = NumberOfManagementMsgReceived + 1}}};
@@ -210,7 +210,7 @@ handle_cast({{management_message, send_message}, Data}, State = #state{db = DB, 
   Destination = proplists:get_value(destination, Data),
   Type = proplists:get_value(type, Data),
 
-  dets:insert(DB, {UTIME, management_message, sent_message,Source,Destination,Type}),
+  dets:insert(DB, {{management_message, sent_message, UTIME}, {Source,Destination,Type}}),
   NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
  % io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
 {noreply, State#state{counters = Counters#counters{numberOfManagementMsgSent = NumberOfManagementMsgSent + 1}}};
@@ -229,7 +229,7 @@ handle_cast({{data_message, received_message}, Data}, State = #state{dm_ets = DM
 
   NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
   AvgTime = Counters#counters.data_msg_avg_time,
-  dets:insert(DB, {{data_message, received_message,Id}, UTIME ,Source,Destination}),
+  dets:insert(DB, {{data_message, received_message,Id}, {UTIME ,Source,Destination}}),
   io:format("stats_server got report about: Incoming data msg ~p from ~p to ~p at ~p sent~n",[Id, Source,Destination, UTIME]),
   io:format("Counters#counters.numberOfDataMsgReceived ~p ~n",[Counters#counters.numberOfDataMsgReceived]),
 
@@ -261,7 +261,7 @@ handle_cast({{data_message, send_message}, Data}, State = #state{dm_ets = DM_ets
   Id = proplists:get_value(id, Data),
 
 	NumberOfDataMsgSent = Counters#counters.numberOfDataMsgSent,
-  dets:insert(DB, {{data_message, sent_message,Id},UTIME, Source,Destination}),
+  dets:insert(DB, {{data_message, sent_message,Id}, {UTIME, Source,Destination}}),
   ets:insert(DM_ets,{Id,{UTIME,-1 ,0}}),
 
 	io:format("stats_server got report about: Sent data msg ~p from ~p to ~p at ~p~n",[Id, Source,Destination, UTIME]),
@@ -279,7 +279,7 @@ handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = C
   Node = proplists:get_value(node, Data),
 
   NumberOfRelayMsg = Counters#counters.numberOfRelayMsg,
-  dets:insert(DB, {{data_message, relay_message, {Id, UTIME}}, Source, Destination}),
+  dets:insert(DB, {{data_message, relay_message, {Id, UTIME}}, {Source, Destination}}),
  % [{Id,{StartTime,EndTime ,Relays}}] = ets:lookup(DM_ets,Id),%%%%%%%%%%%%%%%%%%%%%
  % ets:insert(DM_ets,{Id,{StartTime,EndTime ,Relays+1}}),
 
@@ -337,6 +337,16 @@ handle_cast({export_db, Time}, State = #state{db = DB}) ->
 handle_cast(stop, State) ->
     io:format("stats_server got stop Messages~n"),
     {stop, normal,State};
+
+handle_cast({{app_data_message , Dre , Type}, {Data}}, State = #state{db = DB}) ->
+      dets:insert(DB, {{app_data_message , Dre , Type},{Data}}),
+      io:format("stats_server got app_data_message ~p, ~p, ~p~n", [Dre , Type, Data]),
+      {noreply, State};
+
+handle_cast({{app_info, Type} ,Data}, State = #state{db = DB}) ->
+          dets:insert(DB, {{app_info, Type} , {Data}}),
+          io:format("stats_server got app_info  ~p, ~p~n", [Type, Data]),
+          {noreply, State};
 
 handle_cast(Msg, State) ->
     io:format("~n~n~nstats_server got cast with bad arg:~p~n~n~n", [Msg]),
