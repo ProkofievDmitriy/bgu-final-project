@@ -18,6 +18,7 @@
 
 %% gen_fsm callbacks
 -export([init/1,
+reinitialize/2,
   discovering/2,
   collecting/2,
 handle_sync_event/3,
@@ -65,8 +66,7 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
       Fd = app_utils:open_report_file(Me),
       put(reporting_unit, ReportingUnit),
       put(reporting_file, Fd),
-      app_utils:create_and_initialize_sets(Meters),
-      Timerpid = erlang:spawn(app_utils, timer, [Me,?DISCOVERING_TIMEOUT]),
+      Timerpid = erlang:spawn(app_utils, timer, [Me,?INITIALIZATION_TIMEOUT]),
       State = #state{
           my_pid = Me,
           my_node = MyNode,
@@ -78,7 +78,6 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
           exp_counter = 1,
           sn =0,
           timer = Timerpid},
-      app_utils:report_start_of_experiment(State),
       {ok, discovering, State};
 
     {terminate, Reason} ->
@@ -88,9 +87,22 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
 end.
 
 
+reinitialize(timeout,State) ->
+  log:info("[~p]  entering reinitialization~n",[?MODULE]),
+  app_utils:clear_sets(),
+  Timerpid = erlang:spawn(app_utils, timer, [State#state.my_pid,?INITIALIZATION_TIMEOUT]),
+  NewState = State#state{
+    exp_counter = State#state.exp_counter +1,
+    sn =0,
+    timer = Timerpid},
+  {next_state, discovering, NewState}.
+
+
 
 
 discovering(timeout,State) when State#state.sn==0 ->
+  app_utils:report_start_of_experiment(State),
+  app_utils:create_and_initialize_sets(State#state.meters),
   Rd = app_utils:random_elements(State#state.meters),
   Nrs = app_utils:delete_elements(State#state.meters,Rd),
   _ = app_utils:send_dreq(State#state.my_protocol,Rd,1),
@@ -116,8 +128,12 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
   if Nrs_new == [] ->
     Result = check_phase1_exp(State#state.exp_counter),
     case Result of
-      finish ->  ok;
-      reinitialize -> ok;
+      finish -> {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
+      reinitialize ->
+        log:info("[~p]~~~~~~~~~~~~FINISHED EXPERIMENT N. ~p, STARTING OVER ~~~~~~~~~~~~~~~~~~~~~n",
+          [?MODULE, State#state.exp_counter]),
+        NewState = prepare_for_reinitialization(State,Event),
+        {next_state, reinitialize, NewState};
       phase2 ->
         log:info("[~p]=========FINISHED reading sems in phase1, preparing for PHASE 2 ========~n",
           [?MODULE]),
@@ -150,12 +166,16 @@ collecting(rd_empty,State) ->
   if Ter8 == [] ->
     Result = check_phase2_exp(State#state.exp_counter, State#state.sn),
     case Result of
-      finish ->  ok;
-      reinitialize -> ok;
+      finish ->  {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
+      reinitialize ->
+        log:info("[~p]~~~~~~~~~~~~FINISHED EXPERIMENT N. ~p, STARTING OVER ~~~~~~~~~~~~~~~~~~~~~n",
+        [?MODULE, State#state.exp_counter]),
+        NewState = prepare_for_reinitialization(State,rd_empty),
+        {next_state, reinitialize, NewState};
       phase2 ->
         log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
           [?MODULE,State#state.sn]),
-        app_utils:report_next_session(State#state.sn+1, State#state.ter),
+        app_utils:report_next_session(State#state.sn+1,State#state.ter),
         NewState = prepare_for_phase_2(State),
         {next_state, collecting, NewState}
     end;
@@ -176,12 +196,16 @@ collecting(timeout,State) ->
   if Nrs_new == [] ->
     Result = check_phase2_exp(State#state.exp_counter, State#state.sn),
     case Result of
-      finish ->  ok;
-      reinitialize -> ok;
+      finish -> {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
+      reinitialize ->
+        log:info("[~p]~~~~~~~~~~~~FINISHED EXPERIMENT N. ~p, STARTING OVER ~~~~~~~~~~~~~~~~~~~~~n",
+          [?MODULE, State#state.exp_counter]),
+        NewState = prepare_for_reinitialization(State,timeout),
+        {next_state, reinitialize, NewState};
       phase2 ->
         log:info("[~p]======== FINISHED ROUND ~p of collecting, preparing for next round =======~n",
           [?MODULE,State#state.sn]),
-        app_utils:report_next_session(State#state.sn+1, State#state.ter),
+        app_utils:report_next_session(State#state.sn+1,State#state.ter),
         NewState = prepare_for_phase_2(State),
         {next_state, collecting, NewState}
     end;
@@ -204,7 +228,8 @@ collecting(timeout,State) ->
   end.
 
 
-handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To ->
+%%handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To andalso StateName== discovering orelse State#state.my_node == To andalso StateName== collecting ->
+handle_event({drep,To,Data,Seq},StateName,State) when StateName== discovering ;StateName== collecting ->
   {V,_} = lists:last(Data),
   app_utils:report_received_drep(V,To,Seq),
   log:info("[~p]  received drep from: ~p, with Seq: ~p in state ~p ~n state data:
@@ -215,10 +240,8 @@ handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To 
     Nodes = app_utils:extract_nodes_from_drep([],Data),
     log:info("[~p]  extarcting nodes from drep: ~p~n",[?MODULE,Nodes]),
     Nrs = lists:subtract(State#state.nrs,Nodes),
-%%  Rd = lists:subtract(lists:delete(V,State#state.rd),Nodes),
-    Rd = lists:subtract(State#state.rd,Nodes), %TODO remove above line after functionality check
-%%  Ter = lists:subtract(lists:umerge([State#state.ter,[V]]),lists:delete(V,Nodes)),
-    Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]), %TODO remove above line after funcrionality check
+    Rd = lists:subtract(State#state.rd,Nodes),
+    Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]),
     ets:insert(mr_ets, Data),
     log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
     NewState = State#state{
@@ -252,7 +275,16 @@ handle_event({received_message, Bit_string}, StateName, State) ->
         true ->
          {next_state, StateName, State}
         end
-  end.
+  end;
+
+handle_event(Event,StateName,State) ->
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
+    [?MODULE,self(),Event,StateName,State]),
+  {next_state, StateName, State}.
+
+
+
+
 
 
 handle_sync_event(get_state, StateName, StateData) ->
@@ -261,7 +293,7 @@ handle_sync_event(get_state, StateName, StateData) ->
 
 
 handle_info(Info, StateName, State) ->
-  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
     [?MODULE,self(),Info,StateName,State]),
   {next_state, StateName, State}.
 
@@ -278,6 +310,8 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
 
 
 merge_and_delete_unresponsive(CleaningList,ListToMerge,State,Sn)->
@@ -312,7 +346,7 @@ check_phase1_exp (CurrentExp) ->
   end.
 
 check_phase2_exp(CurrentExp, CurrentSession)->
- if CurrentSession == ?PHASE2_COUNT-1 ->     % finished required times of phase 2 per experiment
+ if CurrentSession-1 == ?PHASE2_COUNT ->     % finished required times of phase 2 per experiment
    if CurrentExp == ?EXP_COUNT -> finish;    % done experimenting
      true ->reinitialize                     % start next experiment
    end;
@@ -378,7 +412,12 @@ prepare_for_another_iteration_of_phase_2(State,TimerFlag)->
   NewState.
 
 
-
+prepare_for_reinitialization(State,Event) ->
+  app_utils:clear_routing_tables(State),
+  case Event of rd_empty -> State#state.timer!stop  end,
+  Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?BETWEEN_EXP_TIMEOUT]),
+  NewState = State#state{timer = Timerpid},
+  NewState.
 
 
 

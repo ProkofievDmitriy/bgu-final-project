@@ -46,6 +46,12 @@ report_next_session(SessionNumber, CurrentTerminals) ->
   _Ok = report(Type,Data),
   ok.
 
+report_routing_tables_cleared(ExperimentNum)->
+  Type = {app_info,routing_table_cleared},
+  Data = [{experiment_num,ExperimentNum}],
+  _Ok = report(Type,Data),
+  ok.
+
 report_sent_dreq(Destination, SessionNumber)->
   Type = {app_data_message , dreq , sent},
   Data = [{source, ?DC_NODE},{destination, Destination},{session, SessionNumber}],
@@ -192,6 +198,28 @@ create_and_initialize_sets(Meters)->
   _Ok1 = ets:insert(stats, {avg_reqs,{0,1,0}}),
   _OK2 = ets:insert(stats, {avg_round_time,{ 0, 1, get_current_millis()}}),
   ok.
+
+clear_sets() ->
+  ets:delete(mr_ets),
+  ets:delete(stats),
+  ets:delete(tracker),
+  ok.
+
+clear_routing_tables(State) ->
+  case ?TEST_MODE of
+    local ->
+      ok;
+    integrated ->
+      Result = stats_server_interface:clear_routing_tables(),
+      case Result of
+        {ok, cleared} -> report_routing_tables_cleared(State#state.exp_counter);
+        Result ->
+          log:error("[~p] failed clearing routing tables, Result: ~w",
+            [?MODULE,Result])
+      end
+
+  end.
+
 
 insert_nodes_to_tracker([]) -> ok;
 insert_nodes_to_tracker([H|T])->

@@ -26,12 +26,12 @@
 % ========================== experiment properties========================
 
 -define(EXP_ID, "1").
--define(METERS, [node_4,node7,node10]).
+-define(METERS, [node_4,node_7,node_10]).
 -define(MEDIUMS,[{node_1, plc},{node_4,dual},{node7_dual},{node_10,dual}]).
 -define(AMR_MODE, am).
 -define(PHASE1_COUNT, 1).
--define(PHASE2_COUNT, 1).
--define(EXP_COUNT, 1).
+-define(PHASE2_COUNT, 0).
+-define(EXP_COUNT, 2).
 
 
 % ================================ macros ================================
@@ -59,6 +59,9 @@
 %%-define(DISCOVERING_TIMEOUT,30000).
 %%-define(COLLECTING_TIMEOUT,30000).
 
+
+-define(BETWEEN_EXP_TIMEOUT,30000).
+-define(INITIALIZATION_TIMEOUT, 10000).
 -define(DISCOVERING_TIMEOUT,30000).
 -define(COLLECTING_TIMEOUT,30000).
 
