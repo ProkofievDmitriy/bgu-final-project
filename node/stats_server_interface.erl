@@ -53,15 +53,22 @@ export() ->
 
 clear_routing_tables() ->
     % clear routing tables on all nodes
+    Server = global:whereis_name(loadNGgui),
+    wx_object:cast(Server, {resetAllNodes}),
     {ok, cleared}.
 
-remove_station(_ListOfNodes)->
+remove_stations(ListOfNodes)->
     % remove all the nodes in ListOfNodes from the network
+    Server = global:whereis_name(loadNGgui),
+    wx_object:cast(Server, {remove_stations,ListOfNodes}),
     {ok,removed}.
 
-update_medium(_ListOfNodesAndMediums)->
+update_medium(ListOfNodesAndMediums)->
     % update configurations for the given ListOfNodesAndMediums where each element is a tuple {NodeName, MediumType},
     % MediumType can be plc or rf or dual
+    Server = global:whereis_name(loadNGgui),
+    wx_object:cast(Server, {update_medium,ListOfNodesAndMediums}),
+
     {ok, updated}.
 
 %% ---------------------------------------------------------------------------------------------------------
@@ -125,43 +132,3 @@ getOffset (CurrentMillis) ->
         ?LOGGER:debug("[~p]: Time sync: ERROR OCCURED WHILE COMMUNICATING DATA SERVER, reply was: ~p, returning offset = 0~n",[unfiltered, Reply]),
         0
     end.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
