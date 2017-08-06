@@ -101,7 +101,7 @@ export() ->
   {stop, Reason :: term()} | ignore).
 init([]) ->
   io:format("initiating stats server~n"),
-
+  file:make_dir(?TEMP_DETS_FILE_DIR),
   A = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}, {type, duplicate_bag}]),
   DM_ets = ets:new(data_messages, [set]),
   io:format("dets: ~p~n",[A]),
