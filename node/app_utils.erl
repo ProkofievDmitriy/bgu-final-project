@@ -64,10 +64,34 @@ report_sent_dreq_failed(Destination, SessionNumber) ->
   _Ok = report(Type, Data),
   ok.
 
+report_sent_drep_relayed(Source, SessionNumber) ->
+  Type = {app_data_message, drep, relayed },
+  Data = [{source, Source},{destination,?DC_NODE},{session,SessionNumber}],
+  _Ok = report(Type, Data),
+  ok.
+
+report_sent_drep(Source,SessionNumber) ->
+  Type = {app_data_message, drep, sent },
+  Data = [{source, Source},{destination,?DC_NODE},{session,SessionNumber}],
+  _Ok = report(Type, Data),
+  ok.
+
+report_sent_drep_failed(Source,SessionNumber) ->
+  Type = {app_data_message, drep, sent_failed },
+  Data = [{source, Source},{destination,?DC_NODE},{session,SessionNumber}],
+  _Ok = report(Type, Data),
+  ok.
+
 report_received_drep(Source, Destination,SessionNumber)->
   Type = {app_data_message, drep, received},
   Data = [{source,Source},{destination,Destination},{session,SessionNumber}],
   _Ok = report(Type,Data),
+  ok.
+
+report_received_dreq(Destination, SessionNumber) ->
+  Type = {app_data_message , drep , received},
+  Data = [{source, ?DC_NODE}, {destination, Destination}, {session, SessionNumber}],
+  _Ok = report(Type, Data),
   ok.
 
 report(Type,Data) ->
@@ -80,6 +104,15 @@ report(Type,Data) ->
   io:format(Fd,"~w , ~w~n",[Type,Data]),
   log:info("[~p] sending report ~w ~w~n", [?MODULE,Type,Data]),
   ok.
+
+update_mediums([],State) -> State;
+update_mediums( [{Node,Medium}|T] ,State)->
+  Mediums = State#state.mediums,
+  NewMediums = lists:keyreplace(Node,1,Mediums,{Node,Medium}),
+  NewState = State#state{ mediums = NewMediums},
+  update_mediums(T,NewState).
+
+
 
 hand_shake(Me,My_protocol,Times) when ?TEST_MODE == local->
   log:debug("[~p] entered local handshake , Me ~p, My_protocol ~p ,Times ~p ~n",
@@ -136,26 +169,6 @@ hand_shake(Me,My_protocol,Times) when ?TEST_MODE == integrated->
       end
   end.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 get_current_millis() ->
   {Mega, Sec, Micro} = os:timestamp(),
   (Mega*1000000 + Sec)*1000 + round(Micro/1000).
@@ -208,7 +221,10 @@ clear_sets() ->
 clear_routing_tables(State) ->
   case ?TEST_MODE of
     local ->
-      ok;
+      report_routing_tables_cleared(State#state.exp_counter);
+    Result ->
+      log:error("[~p] failed clearing routing tables, Result: ~w",
+        [?MODULE,Result]);
     integrated ->
       Result = stats_server_interface:clear_routing_tables(),
       case Result of
@@ -345,6 +361,43 @@ send_dreq(My_protocol, [H|T], Seq) ->
 
       end
   end.
+
+send_drep(My_protocol,Data,Seq,RelayFlag) ->
+  {Source,_} = lists:last(Data),
+  case ?TEST_MODE of
+    local ->
+      log:debug("[~p]  sending drep to ~p with seq ~p",[?MODULE,?DC_NODE, Seq]),
+%%      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+%%      My_protocol ! Bit_message,
+      My_protocol! {drep,?DC_NODE,Data,Seq},
+      case RelayFlag of
+        relay -> report_sent_drep_relayed(Source, Seq);
+        normal -> report_sent_drep(Source,Seq)
+      end;
+    integrated ->
+      log:debug("[~p]  sending drep to: ~p with sequence ~p~n",[?MODULE,?DC_NODE,Seq]) ,
+      % Reply = (catch gen_server:call(My_protocol, {drep,?DC_NODE,Data,Seq}, ?PROTOCOL_REQUEST_TIMEOUT)),
+
+      Bit_message = message_to_bit({drep,?DC_NODE,Data,Seq}),
+      log:debug ("[~p]: sending bit message: ~p~n" , [?MODULE,Bit_message]),
+      Reply = (catch protocol_interface:send_data_reply(?DC_NODE,Bit_message)),
+      %  Reply = (catch protocol_interface:send_data_reply(?DC_NODE,{drep,?DC_NODE,Data,Seq})),
+      case Reply of
+        {ok, sent} ->
+          case RelayFlag of
+            relay -> report_sent_drep_relayed(Source, Seq);
+            normal -> report_sent_drep(Source,Seq)
+          end;
+        {error, timeout_exceeded} ->
+          log:debug("[~p]: TIMEOUT FROM PROTOCOL ~n", [?MODULE]),
+          _ = report_sent_drep_failed(Source, Seq);
+        Err -> log:critical("[~p]  error in gen_server:call in send_dreq : ~p~n",[?MODULE,Err]),
+          _ = report_sent_drep_failed(Source, Seq)
+      end
+  end .
+
+
+
 
 extract_nodes_from_drep(List,[]) -> List;
 extract_nodes_from_drep(List,[{Node,_}|T]) ->

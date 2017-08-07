@@ -8,7 +8,8 @@
 %%%----------------------------------------------------------------------
 -author("liya").
 
--record(state, {my_pid,                % app name
+-record(state, {
+  my_pid,                % app name
   my_node,               % pid of protocol process in the same node
   my_protocol,           % pid of node process
   reporting_unit,        % report module
@@ -23,12 +24,24 @@
   timer,
   term_times}).
 
+
+-record(sem_state, {
+  my_pid,
+  my_node,
+  my_protocol,
+  reporting_unit,
+  reporting_file,
+  count
+}).
+
+
 % ========================== experiment properties========================
 
+-define(EXP_MODE, gui). %% hardcoded / gui
 -define(EXP_ID, "1").
 -define(METERS, [node_4,node_7,node_10]).
 -define(MEDIUMS,[{node_1, plc},{node_4,dual},{node7_dual},{node_10,dual}]).
--define(AMR_MODE, am).
+-define(AMR_MODE, sm).
 -define(PHASE1_COUNT, 1).
 -define(PHASE2_COUNT, 0).
 -define(EXP_COUNT, 2).

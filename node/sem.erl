@@ -11,188 +11,151 @@
 
 -behaviour(gen_fsm).
 
+-include("app_macros.hrl").
+
 %% API
--export([start_link/0]).
+-export([start_link/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
-  state_name/2,
-  state_name/3,
   handle_event/3,
   handle_sync_event/4,
   handle_info/3,
   terminate/3,
   code_change/4]).
 
--define(SERVER, ?MODULE).
+%%-record(sem_state, {
+%%  my_pid,
+%%  my_node,
+%%  my_protocol,
+%%  reporting_unit,
+%%  reporting_file,
+%%  count
+%%}).
 
--record(state, {}).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates a gen_fsm process which calls Module:init/1 to
-%% initialize. To ensure a synchronized start-up procedure, this
-%% function does not return until Module:init/1 has returned.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}).
-start_link() ->
-  gen_fsm:start_link({local, ?SERVER}, ?MODULE, [], []).
+
+start_link({MyNode, MyProtocol,ReportingUnit, _Meters}) ->
+  Me = erlang:list_to_atom(atom_to_list(MyNode)++"_app"),
+  log:info("[~p]  ~p created ~n",[?MODULE,Me]),
+  {ok,Pid}=gen_fsm:start({local,Me}, ?MODULE, {Me,MyProtocol,MyNode,ReportingUnit},[]),
+  Pid.
 
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm is started using gen_fsm:start/[3,4] or
-%% gen_fsm:start_link/[3,4], this function is called by the new
-%% process to initialize.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-  {ok, StateName :: atom(), StateData :: #state{}} |
-  {ok, StateName :: atom(), StateData :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
-init([]) ->
-  {ok, state_name, #state{}}.
+init({MyName,MyProtocol,MyNode,ReportingUnit}) ->
+  Hand_shake = app_utils:hand_shake(MyName,MyProtocol,1),
+  case Hand_shake of
+    ready ->
+      log:info("[~p]  ~p initialized~n", [?MODULE,MyName]),
+      Fd = app_utils:open_report_file(MyName),
+      put(reporting_unit, ReportingUnit),
+      put(reporting_file, Fd),
+      put(my_node, MyNode),
+      State = #sem_state{
+        my_pid = MyName,
+        my_node = MyNode,
+        my_protocol = MyProtocol,
+        reporting_unit = ReportingUnit,
+        reporting_file = Fd,
+        count = 0
+      },
+       {ok, idle, State};
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
-%% the event. It is also called if a timeout occurs.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(state_name(Event :: term(), State :: #state{}) ->
-  {next_state, NextStateName :: atom(), NextState :: #state{}} |
-  {next_state, NextStateName :: atom(), NextState :: #state{},
-    timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}).
-state_name(_Event, State) ->
-  {next_state, state_name, State}.
+    {terminate, Reason} ->
+      log:critical("[~p]  handshake with ~p failed with message:~p~n",
+        [?MODULE,MyProtocol,Reason]),
+      {stop,{handshake_failure,Reason}}
+  end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_event/[2,3], the instance of this function with
-%% the same name as the current state name StateName is called to
-%% handle the event.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(state_name(Event :: term(), From :: {pid(), term()},
-    State :: #state{}) ->
-  {next_state, NextStateName :: atom(), NextState :: #state{}} |
-  {next_state, NextStateName :: atom(), NextState :: #state{},
-    timeout() | hibernate} |
-  {reply, Reply, NextStateName :: atom(), NextState :: #state{}} |
-  {reply, Reply, NextStateName :: atom(), NextState :: #state{},
-    timeout() | hibernate} |
-  {stop, Reason :: normal | term(), NewState :: #state{}} |
-  {stop, Reason :: normal | term(), Reply :: term(),
-    NewState :: #state{}}).
-state_name(_Event, _From, State) ->
-  Reply = ok,
-  {reply, Reply, state_name, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_all_state_event/2, this function is called to handle
-%% the event.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_event(Event :: term(), StateName :: atom(),
-    StateData :: #state{}) ->
-  {next_state, NextStateName :: atom(), NewStateData :: #state{}} |
-  {next_state, NextStateName :: atom(), NewStateData :: #state{},
-    timeout() | hibernate} |
-  {stop, Reason :: term(), NewStateData :: #state{}}).
-handle_event(_Event, StateName, State) ->
+
+handle_event({received_message, Bit_string},StateName, State) ->
+  log:info("[~p]  received bit string: ~p in state: ~p~n", [?MODULE,Bit_string,idle]),
+  <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
+  To = utils:get_node_name(To_n),
+  case Type of
+    ?DREQ_BIT -> gen_fsm:send_event(State#sem_state.my_pid, {dreq,To,Seq}),
+      {next_state, StateName, State};
+    ?DREP_BIT ->
+      Data_size = bit_size(Data_b),
+      if Data_size rem ?ENTRY_SIZE =/= 0 ->
+        log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
+        {next_state, StateName, State};
+        true ->
+          Data = app_utils:bit_to_data(Data_b,[]),
+          gen_fsm:send_event(State#sem_state.my_pid, {drep, To,Data,Seq}),
+          {next_state, StateName, State}
+      end
+  end;
+
+handle_event({dreq,To,Seq},StateName,State) ->
+  log:info("[~p]  ~p received dreq with Sn ~p~n", [?MODULE,State#sem_state.my_pid,Seq]),
+  app_utils:report_received_dreq(To, Seq),
+  if To == State#sem_state.my_node ->
+    log:info(" [~p]   ~p is sending reading ~n", [?MODULE,State#sem_state.my_pid]),
+    _Ok = app_utils:send_drep(State#sem_state.my_protocol,
+      [{State#sem_state.my_node,State#sem_state.count}|[]],Seq,normal),
+    {next_state, StateName, State};
+
+    true ->
+      log:err("[~p]  ~p received dreq with destination missmatch, passing on to ~p~n",
+        [?MODULE,State#sem_state.my_pid,To] ),
+      _Ok = app_utils:send_dreq(State#sem_state.my_protocol, To, Seq),
+      {nex_state,StateName,State}
+  end;
+
+handle_event({drep,To,Data,Seq},StateName, State) when To == ?DC_NODE ->
+  log:info(" [~p]   ~p received drep with Seq ~p, state data: ~p ~n",
+    [?MODULE,State#sem_state.my_pid,Seq,State] ),
+  case ?AMR_MODE of
+    am ->
+      log:debug("[~p]  ~p is appending reading ~n", [?MODULE,State#sem_state.my_pid] ),
+      _Ok = app_utils:send_drep(State#sem_state.my_protocol,
+        [{State#sem_state.my_node,State#sem_state.count}|Data],Seq,relay),
+      {next_state,StateName,State};
+    sm ->
+      log:debug("[~p]  ~p is passing reading and generating a new one ~n",
+        [?MODULE,State#sem_state.my_pid] ),
+      _Ok1 = app_utils:send_drep(State#sem_state.my_protocol, Data,Seq,relay),
+      _Ok = app_utils:send_drep(State#sem_state.my_protocol,
+      [{State#sem_state.my_node,State#sem_state.count}|[]],Seq,normal),
+      {next_state,StateName,State};
+    naive ->
+      log:debug("[~p]  ~p is relaying drep without providing response ~n",
+        [?MODULE,State#sem_state.my_pid]),
+      _Ok1 = app_utils:send_drep(State#sem_state.my_protocol, Data,Seq,relay),
+      {next_state,StateName,State}
+  end;
+
+
+handle_event(Event,StateName,State) ->
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
+    [?MODULE,self(),Event,StateName,State]),
   {next_state, StateName, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_all_state_event/[2,3], this function is called
-%% to handle the event.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_sync_event(Event :: term(), From :: {pid(), Tag :: term()},
-    StateName :: atom(), StateData :: term()) ->
-  {reply, Reply :: term(), NextStateName :: atom(), NewStateData :: term()} |
-  {reply, Reply :: term(), NextStateName :: atom(), NewStateData :: term(),
-    timeout() | hibernate} |
-  {next_state, NextStateName :: atom(), NewStateData :: term()} |
-  {next_state, NextStateName :: atom(), NewStateData :: term(),
-    timeout() | hibernate} |
-  {stop, Reason :: term(), Reply :: term(), NewStateData :: term()} |
-  {stop, Reason :: term(), NewStateData :: term()}).
+
 handle_sync_event(_Event, _From, StateName, State) ->
   Reply = ok,
   {reply, Reply, StateName, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it receives any
-%% message other than a synchronous or asynchronous event
-%% (or a system message).
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: term(), StateName :: atom(),
-    StateData :: term()) ->
-  {next_state, NextStateName :: atom(), NewStateData :: term()} |
-  {next_state, NextStateName :: atom(), NewStateData :: term(),
-    timeout() | hibernate} |
-  {stop, Reason :: normal | term(), NewStateData :: term()}).
-handle_info(_Info, StateName, State) ->
+handle_info(Info, StateName, State) ->
+  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~p with data ~p",[?MODULE,self(),Info,StateName,State]),
   {next_state, StateName, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_fsm terminates with
-%% Reason. The return value is ignored.
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: normal | shutdown | {shutdown, term()}
-| term(), StateName :: atom(), StateData :: term()) -> term()).
-terminate(_Reason, _StateName, _State) ->
+terminate(Reason, StateName, State) ->
+  log:info(" [~p] terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
+    [?MODULE,Reason,StateName,State]),
   ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec(code_change(OldVsn :: term() | {down, term()}, StateName :: atom(),
-    StateData :: #state{}, Extra :: term()) ->
-  {ok, NextStateName :: atom(), NewStateData :: #state{}}).
+
 code_change(_OldVsn, StateName, State, _Extra) ->
   {ok, StateName, State}.
 

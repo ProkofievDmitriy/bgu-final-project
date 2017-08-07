@@ -33,7 +33,7 @@
 
 %% API
 -export([report/2, report/1, getOffset/1]).
--export([clear_routing_tables/0,remove_stations/1,update_medium/1,configuration_updated_from_gui/1,routing_tables_cleared_from_gui/0]).
+-export([clear_routing_tables/0,remove_stations/1,update_medium/1,configuration_updated_from_gui/1,routing_tables_cleared_from_gui/0,stations_removed_from_gui/1,start_from_gui/0]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -85,7 +85,11 @@ configuration_updated_from_gui (_ListOfNodesAndMediums) ->
 routing_tables_cleared_from_gui() ->
     {ok}.
 
+stations_removed_from_gui(_ListOfNodes) ->
+    {ok}.
 
+start_from_gui() ->
+    {ok}.
 
 
 %**************************************************************************************

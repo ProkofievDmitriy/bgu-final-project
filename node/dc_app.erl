@@ -14,10 +14,12 @@
 -include("app_macros.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/1,configuration_updated_from_gui/2,stations_removed_from_gui/2,
+  routing_tables_cleared_from_gui/1,start_from_gui/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
+  idle/2,
 reinitialize/2,
   discovering/2,
   collecting/2,
@@ -54,6 +56,19 @@ start_link({MyNode, MyProtocol,ReportingUnit, Meters}) ->
   {ok,Pid}=gen_fsm:start({local,Me}, ?MODULE, {Me,MyProtocol,MyNode,ReportingUnit,Meters},[]),
   Pid.
 
+configuration_updated_from_gui(Pid,ListOfNodesAndMediums) ->
+  log:debug("[~p] configuration_updated_from_gui , Pid ~w ~n",[?MODULE,Pid]),
+  gen_fsm:send_event(Pid, {configuration_update_gui, ListOfNodesAndMediums}).
+
+stations_removed_from_gui(Pid,ListOfNodes)->
+  gen_fsm:send_event(Pid, {stations_removed_gui,ListOfNodes}).
+
+routing_tables_cleared_from_gui(Pid) ->
+  gen_fsm:send_all_state_event(Pid,tables_cleared_gui).
+
+start_from_gui(Pid)->
+  gen_fsm:send_event(Pid, start_from_gui).
+
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -66,6 +81,7 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
       Fd = app_utils:open_report_file(Me),
       put(reporting_unit, ReportingUnit),
       put(reporting_file, Fd),
+      put(my_pid, Me),
       Timerpid = erlang:spawn(app_utils, timer, [Me,?INITIALIZATION_TIMEOUT]),
       State = #state{
           my_pid = Me,
@@ -78,13 +94,40 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
           exp_counter = 1,
           sn =0,
           timer = Timerpid},
-      {ok, discovering, State};
+      case ?EXP_MODE of
+        hardcoded -> {ok, discovering, State};
+        gui -> Timerpid!stop, {ok,idle,State}
+      end;
+
 
     {terminate, Reason} ->
       log:critical("[~p]  handshake with ~p failed with message:~p~n",
         [?MODULE,MyProtocol,Reason]),
       {stop,{handshake_failure,Reason}}
 end.
+
+
+idle({configuration_update_gui, ListOfNodesAndMediums},State)->
+  NewState = app_utils:update_mediums(ListOfNodesAndMediums,State),
+  log:info("[~p]  updating configuration from ~w to ~w~n",
+    [?MODULE, State#state.mediums, NewState#state.mediums]),
+  {next_state, idle, NewState};
+
+idle({stations_removed_gui,ListOfNodes},State)->
+  Meters = State#state.meters,
+  NewMeters = lists:subtract(Meters,ListOfNodes),
+  NewState = State#state{meters = NewMeters},
+  log:info("[~p]  removing station: ~w, new list: ~w~n",
+    [?MODULE, ListOfNodes, NewState#state.meters]),
+  {next_state, idle, NewState};
+
+idle(start_from_gui,State)->
+  Timerpid = erlang:spawn(app_utils, timer, [State#state.my_pid,?INITIALIZATION_TIMEOUT]),
+  NewState = State#state{timer = Timerpid},
+  log:info("[~p]  received start_from_gui mark, starting discovery ~n", [?MODULE]),
+  {next_state, discovering, NewState}.
+
+
 
 
 reinitialize(timeout,State) ->
@@ -96,8 +139,6 @@ reinitialize(timeout,State) ->
     sn =0,
     timer = Timerpid},
   {next_state, discovering, NewState}.
-
-
 
 
 discovering(timeout,State) when State#state.sn==0 ->
@@ -228,8 +269,8 @@ collecting(timeout,State) ->
   end.
 
 
-%%handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To andalso StateName== discovering orelse State#state.my_node == To andalso StateName== collecting ->
-handle_event({drep,To,Data,Seq},StateName,State) when StateName== discovering ;StateName== collecting ->
+handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To andalso StateName== discovering orelse State#state.my_node == To andalso StateName== collecting ->
+%%handle_event({drep,To,Data,Seq},StateName,State) when StateName== discovering ;StateName== collecting ->
   {V,_} = lists:last(Data),
   app_utils:report_received_drep(V,To,Seq),
   log:info("[~p]  received drep from: ~p, with Seq: ~p in state ~p ~n state data:
@@ -273,9 +314,16 @@ handle_event({received_message, Bit_string}, StateName, State) ->
         log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
         {next_state, StateName, State};
         true ->
+          Data = app_utils:bit_to_data(Data_b,[]),
+          gen_fsm:send_event(State#state.my_pid, {drep, To,Data,Seq}),
          {next_state, StateName, State}
         end
   end;
+
+handle_event(tables_cleared_gui, StateName, State)->
+  app_utils:report_routing_tables_cleared(State#state.exp_counter),
+  {next_state, StateName, State};
+
 
 handle_event(Event,StateName,State) ->
   log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",

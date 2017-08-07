@@ -1,0 +1,6 @@
+{app_data_message,drep,received} , [{source,node_1},{destination,node_2},{session,1}]
+{app_data_message,drep,sent} , [{source,node_2},{destination,node_1},{session,1}]
+{app_data_message,drep,relayed} , [{source,node_11},{destination,node_1},{session,1}]
+{app_data_message,drep,sent} , [{source,node_2},{destination,node_1},{session,1}]
+{app_data_message,drep,relayed} , [{source,node_7},{destination,node_1},{session,1}]
+{app_data_message,drep,sent} , [{source,node_2},{destination,node_1},{session,1}]
