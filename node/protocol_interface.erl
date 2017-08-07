@@ -36,17 +36,20 @@ stop() ->
 
 %%%%%%%%%%%%%%%%%%%%%%%% APLICATION INSTERFACE
 send(Destination, Data) when is_binary(Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT);
+    % gen_server:call(?PROTOCOL_NAME, {data_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT);
+    handle_send_message(data_message, Destination, Data);
 
 send(Destination, Data)->
     send(Destination, term_to_binary(Data)).
 
 
 send_data_request(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_request_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
+    % gen_server:call(?PROTOCOL_NAME, {data_request_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
+    handle_send_message(data_request_message, Destination, Data).
 
 send_data_reply(Destination, Data)->
-    gen_server:call(?PROTOCOL_NAME, {data_reply_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
+    % gen_server:call(?PROTOCOL_NAME, {data_reply_message, {utils:get_node_number(Destination), Data}}, ?TIMEOUT).
+    handle_send_message(data_reply_message, Destination, Data).
 
 
 handle_send_message(Type, Destination, Data)->
@@ -57,7 +60,7 @@ handle_send_message(Type, Destination, Data)->
                {error, Error} ->
                    {error, Error}
                after 2 * ?NET_TRAVERSAL_TIME ->
-               ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
+               ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, Type, Destination]),
                ResultSyncSend = gen_server:call(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data}}, ?TIMEOUT),
                case ResultSyncSend of
                    {ok , sent} -> {ok, sent};
@@ -66,7 +69,7 @@ handle_send_message(Type, Destination, Data)->
                       {error, timeout_exceeded}
                end
            end,
-    ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
+    ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, Type, Destination, Result]),
     Result.
 
 

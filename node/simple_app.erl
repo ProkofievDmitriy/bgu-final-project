@@ -6,13 +6,13 @@
 
 
 stop()->
-    ?APPLICATION_NAME ! stop.
+    ?MODULE ! stop.
 
 
-start_link({My_node, _My_protocol, _Meters})->
+start_link({My_node, _My_protocol, _, _Meters})->
 	?LOGGER:info("[~p]: Starting Simple Smart Meter Application with props: ~w~n", [?MODULE, {My_node, _My_protocol, _Meters}]),
     PID = spawn(fun()->smart_meter_loop(?MESSAGE_SEND_INTERVAL, 1000, term_to_binary({My_node, "Some Random Message"})) end),
-    register(?APPLICATION_NAME, PID),
+    register(?MODULE, PID),
     ?PROTOCOL:hand_shake(PID),
     PID.
 

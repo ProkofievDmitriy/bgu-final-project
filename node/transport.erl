@@ -12,13 +12,13 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2, reset/1]).
+-export([start/1, stop/1, send/3, send_async/4, send_async/3, updateUpperLevel/3, updateBottomLevel/3, disable/1, enable/1, handle_incoming_message/2, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
 -export([idle/3, disable/3, idle/2, disable/2]).
 %% ====================================================================
-%% API functions
+%% API functionsPidToReply
 %% ====================================================================
 
 
@@ -42,8 +42,12 @@ send(FsmPid, Destination, Data)->
     gen_fsm:sync_send_event(FsmPid, {send, {Destination, Data}}, ?TIMEOUT).
 
 %Managing events
+send_async(FsmPid, Destination, Data, PidToReply)->
+    gen_fsm:send_event(FsmPid, {send, {Destination, Data, PidToReply}}).
+
 send_async(FsmPid, Destination, Data)->
-    gen_fsm:send_event(FsmPid, {send, {Destination, Data}}).
+    gen_fsm:send_event(FsmPid, {send, {Destination, Data, undefined}}).
+
 
 updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
     gen_fsm:sync_send_all_state_event(FsmPid, {updateUpperLevel, UpperLevelModule, UpperLevelPid}).
@@ -97,14 +101,14 @@ idle({received_message, {Medium, Data}}, StateData) ->
     {next_state, idle, StateData};
 
 
-%Synchronous event call
-idle({send, {Destination, Data}}, StateData) ->
+%ASynchronous event call
+idle({send, {Destination, Data, PidToReply}}, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - ASYNC Event(send) , {Destination, Data} : {~p, ~w}~n", [?MODULE, Destination, Data]),
     MessagesList = get_messages_list(Data),
     BottomLevelModule = StateData#state.bottom_level_module,
-    SendFunc = fun(X) -> Res = BottomLevelModule:send_async(StateData#state.bottom_level_pid, Destination, X),
+    SendFunc = fun(X) -> Res = BottomLevelModule:send_async(StateData#state.bottom_level_pid, Destination, X, PidToReply),
                          ?LOGGER:info("[~p]: Sending Message: {~w, ~w}, Result: ~w~n", [?MODULE, Destination, X, Res]),
-                         timer:sleep(50),
+                        %  timer:sleep(50),
                          Res end,
     [ SendFunc(X) || X <- MessagesList],
     {next_state, idle, StateData};
@@ -125,7 +129,7 @@ idle({send, {Destination, Data}}, _From, StateData) ->
     BottomLevelModule = StateData#state.bottom_level_module,
     SendFunc = fun(X) -> Res = BottomLevelModule:send(StateData#state.bottom_level_pid, Destination, X),
                          ?LOGGER:info("[~p]: Sending Message: {~w, ~w}, Result: ~w~n", [?MODULE, Destination, X, Res]),
-                         timer:sleep(50),
+                        %  timer:sleep(50),
                          Res end,
     ResultsList = [ SendFunc(X) || X <- MessagesList],
     Result = lists:foldl(fun(X, Acc) -> case Acc of

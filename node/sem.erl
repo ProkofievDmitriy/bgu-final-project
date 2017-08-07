@@ -14,7 +14,7 @@
 -include("app_macros.hrl").
 
 %% API
--export([start_link/1]).
+-export([start_link/1, start_from_gui/1]).
 
 %% gen_fsm callbacks
 -export([init/1,
@@ -45,6 +45,9 @@ start_link({MyNode, MyProtocol,ReportingUnit, _Meters}) ->
   log:info("[~p]  ~p created ~n",[?MODULE,Me]),
   {ok,Pid}=gen_fsm:start({local,Me}, ?MODULE, {Me,MyProtocol,MyNode,ReportingUnit},[]),
   Pid.
+
+
+start_from_gui(_Pid)-> ok.
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -82,16 +85,17 @@ handle_event({received_message, Bit_string},StateName, State) ->
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   To = utils:get_node_name(To_n),
   case Type of
-    ?DREQ_BIT -> gen_fsm:send_event(State#sem_state.my_pid, {dreq,To,Seq}),
+    ?DREQ_BIT -> gen_fsm:send_all_state_event(State#sem_state.my_pid, {dreq,To,Seq}),
       {next_state, StateName, State};
     ?DREP_BIT ->
       Data_size = bit_size(Data_b),
-      if Data_size rem ?ENTRY_SIZE =/= 0 ->
-        log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
+      EntrySize = ?ENTRY_SIZE,
+      if Data_size rem EntrySize /= 0 ->
+        log:err("[~p]  received invalid(~p) data of size ~p, dropping drep~n",[?MODULE, EntrySize, Data_size]),
         {next_state, StateName, State};
         true ->
           Data = app_utils:bit_to_data(Data_b,[]),
-          gen_fsm:send_event(State#sem_state.my_pid, {drep, To,Data,Seq}),
+          gen_fsm:send_all_state_event(State#sem_state.my_pid, {drep, To,Data,Seq}),
           {next_state, StateName, State}
       end
   end;

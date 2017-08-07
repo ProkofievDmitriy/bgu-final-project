@@ -6,7 +6,7 @@
 -define(X_SIZE, 1080).
 -define(Y_SIZE, 700).
 -define(REFRESH_TIME, 1000).
--define(TIMEOUT, 100000000000).
+-define(TIMEOUT, 7000).
 
 -define( LOG_DIR,"./logger/").
 -define(CIRCE_RADIUS, 15).
@@ -21,7 +21,7 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
     counters, configButtons, updateLocation,
     buttonExport, buttonFullMap, buttonDeleteTable, buttonDeleteAll,
 	buttonSendConfig, buttonSendMSG, txtMsgSend,
-	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp,
+	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp, buttonRemoveNode,
 	cmbTo}).
 
 -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
@@ -80,10 +80,10 @@ init(WxServer) ->
     Title = wxStaticText:new(Panel, ?wxID_ANY,"Smart Meter Network Management Tool:",[{style, ?wxALIGN_CENTER}]),
 
     %%Setup Buttons:
-    ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete Node Routes Table"}]),
+    ButtonDeleteTable = wxButton:new(Panel, ?wxID_ANY, [{label,"Clear Node Routing Table"}]),
     wxButton:connect(ButtonDeleteTable, command_button_clicked),
 
-	ButtonDeleteAll = wxButton:new(Panel, ?wxID_ANY, [{label,"Delete All Nodes"}]),
+	ButtonDeleteAll = wxButton:new(Panel, ?wxID_ANY, [{label,"Clear All Nodes"}]),
     wxButton:connect(ButtonDeleteAll, command_button_clicked),
 
 	%CmbTo = wxChoice:new(Panel, ?wxID_ANY, [{choices, []},{style, ?wxCB_READONLY}]),
@@ -101,6 +101,9 @@ init(WxServer) ->
 
     ButtonStartApp = wxButton:new(Panel, ?wxID_ANY, [{label,"Start Application"}]),
 	wxButton:connect(ButtonStartApp, command_button_clicked),
+
+    ButtonRemoveNode = wxButton:new(Panel, ?wxID_ANY, [{label,"Remove Node"}]),
+	wxButton:connect(ButtonRemoveNode, command_button_clicked),
 
 	ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
     wxButton:connect(ButtonSendConfig, command_button_clicked),
@@ -153,6 +156,8 @@ init(WxServer) ->
     wxSizer:add(ManagementSzRightP, ButtonUpdateNodesToFilter),
 	wxSizer:addSpacer(ManagementSzRightP, 30),
 	wxSizer:add(ManagementSzRightP, ButtonStartApp),
+	wxSizer:addSpacer(ManagementSzRightP, 30),
+	wxSizer:add(ManagementSzRightP, ButtonRemoveNode),
 
     %% Nodes:
     wxSizer:add(NodesSz, Canvas),
@@ -205,6 +210,7 @@ init(WxServer) ->
 					buttonDeleteAll = wxButton:getId(ButtonDeleteAll),
 					buttonUpdateNodesToFilter = wxButton:getId(ButtonUpdateNodesToFilter),
 					buttonStartApp = wxButton:getId(ButtonStartApp),
+					buttonRemoveNode = wxButton:getId(ButtonRemoveNode),
                     buttonSendMSG = wxButton:getId(ButtonSendMSG)}}.
 
 
@@ -298,7 +304,8 @@ handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}
 handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap,
                 buttonDeleteTable = ButtonDeleteTable, buttonDeleteAll= ButtonDeleteAll, buttonSendConfig = ButtonSendConfig,
-                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG, buttonUpdateNodesToFilter = ButtonUpdateNodesToFilter, buttonStartApp = ButtonStartApp}) ->
+                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG, buttonUpdateNodesToFilter = ButtonUpdateNodesToFilter,
+				buttonStartApp = ButtonStartApp, buttonRemoveNode = ButtonRemoveNode}) ->
     case ID of
         ButtonFullMap ->
             	io:format("Showing full map~n"),
@@ -312,13 +319,17 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
                     {noreply,State};
 		ButtonDeleteAll ->
                     io:format("ButtonDeleteAll need to delete everything~n"),
-										stats_server_interface:routing_tables_cleared_from_gui(),
+										node_control_interface:routing_tables_cleared_from_gui(),
 					resetAllNodes(State#state.nodesEts, ets:first(State#state.nodesEts)),
                     %io:format("buttonDeleteTable delete ~p res ~p~n",[SelectedNode, A]),
                     {noreply,State};
 		ButtonStartApp ->
                     io:format("ButtonStartApp starting application on all nodes~n"),
 					start_application(State#state.nodesEts, ets:first(State#state.nodesEts)),
+                    {noreply,State};
+		ButtonRemoveNode ->
+                    io:format("ButtonRemoveNode : removing node ~p~n", [SelectedNode]),
+					node_control_interface:disable(SelectedNode),
                     {noreply,State};
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
@@ -334,7 +345,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
         ButtonSendConfig ->
                     %node_control_interface:update_configuration(SelectedNode, checkRadio(State#state.configButtons)),
 										RadioState = checkRadio(State#state.configButtons),
-										stats_server_interface:configuration_updated_from_gui ([SelectedNode, RadioState]),
+										node_control_interface:configuration_updated_from_gui ([SelectedNode, RadioState]),
                     io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
                     node_control_interface:update_configuration(SelectedNode,RadioState),
                     %rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
@@ -380,7 +391,7 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             %io:format("loadNGgui.erl: node updated: ID=~p~n",[NodeNameAtom]),
             [{NodeNameAtom,{_,Location, _,_,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
     end,
-		Time = erlang:monotonic_time(),
+		Time = get_current_millis(),
 		NodeInfo = {NodeNameAtom, {Time, Location, proplists:get_value(medium_mode, Data),RoutingSet, list_of_integers_to_string(proplists:get_value(nodes_to_filter, Data))}},
 		% io:format("Data:  ~p~n",[Data]),
 		% io:format("NodeInfo:  ~p~n",[NodeInfo]),
@@ -504,6 +515,7 @@ remove_stations(_,[]) ->
 remove_stations(NodesEts,[Station|StationList]) ->
 	io:format("Assuming it should turn off Node- ~p~n",[Station]),
 	node_control_interface:update_configuration(Station, idle),
+	node_control_interface:reset_node(Station),
 	remove_stations(NodesEts,StationList).
 
 update_medium(_,[]) ->
@@ -550,33 +562,42 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 		case SelectedNode of
 			all -> 	switch_to_full_map(DC, ets:first(MapEts), MapEts, NodesEts);
 			_ ->
-				[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] = ets:lookup(NodesEts,SelectedNode),
-				draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
-				configButtonUpdate(MediumMode ,ConfigButtons)
+				Result = ets:lookup(NodesEts,SelectedNode),
+				case Result of
+					[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] ->
+							draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
+							configButtonUpdate(MediumMode ,ConfigButtons);
+				     [] -> ok
+			end
 		end,
 
-		draw_nodes(DC, SelectedNode ,ets:first(NodesEts), NodesEts,NodeChoice, CmbTo),
+		draw_nodes(DC, SelectedNode ,ets:tab2list(NodesEts), NodesEts,NodeChoice, CmbTo),
 		if UpdateLocation =/= ok -> wxToggleButton:setValue(UpdateLocation,false); true -> ok end,
 		wxWindowDC:destroy(DC).
 
 	%%%%
 	%%  Draws all nodes
 	%%%%
-draw_nodes(_, _, '$end_of_table', _,_,_) -> ok;
-draw_nodes(DC, SelectedNode, NodeKey, NodesEts,NodeChoice, CmbTo) ->
-		[{NodeKey,{OldTime, {X,Y}, _MediumMode, _, _}}] = ets:lookup(NodesEts,NodeKey),
-		Time = erlang:monotonic_time(),
-		if OldTime == -1 -> ok; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-			Time - OldTime < ?TIMEOUT ->
-				wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
-				wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50});
-			Time - OldTime >= ?TIMEOUT ->
-				io:format("TIMEOUT ~p~n",[NodeKey]),
-				ets:insert(NodesEts,{NodeKey,{-1, {0,0}, 0, 0, []}}), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-				wxChoice:delete(NodeChoice,wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
-				wxChoice:delete(CmbTo,wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
-			end,
-		draw_nodes(DC, SelectedNode, ets:next(NodesEts,NodeKey), NodesEts,NodeChoice, CmbTo).
+draw_nodes(_, _, [] , _,_,_) -> ok;
+draw_nodes(DC, SelectedNode, [Head|RestNodes], NodesEts,NodeChoice, CmbTo) ->
+		% Result = ets:lookup(NodesEts,NodeKey),
+		case Head of
+			{NodeKey,{OldTime, {X,Y}, _MediumMode, _, _}} ->
+				Time = get_current_millis(),
+				if OldTime == -1 -> ok; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+					Time - OldTime < ?TIMEOUT ->
+						wxDC:drawCircle(DC, {X,Y}, ?CIRCE_RADIUS),
+						wxDC:drawLabel(DC,atom_to_list(NodeKey), {X-10,Y-10,X+50,Y+50});
+					Time - OldTime >= ?TIMEOUT ->
+						io:format("TIMEOUT ~p~n",[NodeKey]),
+						ets:delete(NodesEts, NodeKey), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+						wxChoice:delete(NodeChoice, wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
+						wxChoice:delete(CmbTo, wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
+					end;
+		_ ->
+			io:format("draw_nodes UNEXPECTED ERROR:  ~p~n",[Head])
+		end,
+		draw_nodes(DC, SelectedNode, RestNodes, NodesEts,NodeChoice, CmbTo).
 
 
 %%%%
@@ -626,7 +647,10 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
 			_ -> %io:format("draw_routes_from_node not found node"),
 				ok
 		end,
-    draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet).
+    draw_routes_from_node(DC, SelectedNode, Location, NodesEts,RoutingSet);
+
+draw_routes_from_node(_, _, _,_,_) -> ok.
+
 
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
@@ -725,6 +749,10 @@ trim_string([H|RestString], Delimiter, ValueAcc, Acc)->
     end.
 
 
-list_of_integers_to_string([])->[];
-list_of_integers_to_string(ListOfIntegers)->
-	[ integer_to_list(X) ++ " " || X <- ListOfIntegers].
+list_of_integers_to_string([]) -> [];
+list_of_integers_to_string(ListOfIntegers) when is_list(ListOfIntegers) -> [ integer_to_list(X) ++ " " || X <- ListOfIntegers];
+list_of_integers_to_string(_) -> [].
+
+get_current_millis() ->
+    {Mega, Sec, Micro} = os:timestamp(),
+    (Mega*1000000 + Sec)*1000 + round(Micro/1000).

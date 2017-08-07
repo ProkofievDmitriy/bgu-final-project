@@ -28,12 +28,14 @@
                   application_monitor_ref,
                   application_properties,
                   application_type,
+                  application_pid,
                   protocol_monitor_ref,
                   protocol_properties,
                   logger_ref,
                   report_unit_monitor_ref,
                   report_unit_properties,
-                  node_status_timer
+                  node_status_timer,
+                  enabled
 
                   }).
 
@@ -114,7 +116,7 @@ init(GlobalProperties) ->
     ApplicationType = proplists:get_value(role, ApplicationProperties),
     Meters_list = proplists:get_value(meters_list, ApplicationProperties),
 	% Application_Pid = ?APPLICATION:start(ApplicationProperties),
-	Application_Pid = ApplicationType:start_link({list_to_atom(NodeName), Protocol_Pid, Meters_list}),
+	Application_Pid = ApplicationType:start_link({list_to_atom(NodeName), Protocol_Pid, ?REPORT_UNIT, Meters_list}),
     % ?PROTOCOL:hand_shake(Application_Pid),
 	Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
 	?LOGGER:debug("[~p]: Application started  started with pid: ~p and monitored by node: ~p.~n", [?MODULE, Application_Pid, NodeName]),
@@ -127,13 +129,15 @@ init(GlobalProperties) ->
         protocol_monitor_ref = Protocol_Monitor_Reference,
         protocol_properties = ProtocolProperties,
         application_monitor_ref = Application_Monitor_Reference,
-        application_properties = {list_to_atom(NodeName), Protocol_Pid, Meters_list},
+        application_properties = {list_to_atom(NodeName), Protocol_Pid, ?REPORT_UNIT, Meters_list},
         application_type = ApplicationType,
+        application_pid = Application_Pid,
         % application_properties = ApplicationProperties,
         report_unit_monitor_ref = ReportUnitMonitorReference,
         report_unit_properties = ReportUnitProperties,
         node_status_timer = Timer,
-        logger_ref = LoggerREF
+        logger_ref = LoggerREF,
+        enabled = true
     },
     ?LOGGER:info("[~p]: Node: ~p, is up with context: ~p .~n", [?MODULE, NodeName, Context]),
 
@@ -165,6 +169,29 @@ handle_cast({reset_node}, Context) ->
 
 handle_cast({start_application}, Context) ->
     ?LOGGER:debug("[~p]: CAST Request(start_application)~n", [?MODULE]),
+    Application = Context#context.application_type,
+    Application:start_from_gui(Context#context.application_pid),
+    {noreply, Context};
+
+
+handle_cast({configuration_updated_from_gui, ListOfNodesAndMediums}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(configuration_updated_from_gui), ListOfNodesAndMediums: ~p~n", [?MODULE, ListOfNodesAndMediums]),
+    Application = Context#context.application_type,
+    Application:configuration_updated_from_gui(Context#context.application_pid, ListOfNodesAndMediums),
+    {noreply, Context};
+
+
+handle_cast({routing_tables_cleared_from_gui}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(routing_tables_cleared_from_gui)~n", [?MODULE]),
+    Application = Context#context.application_type,
+    Application:routing_tables_cleared_from_gui(Context#context.application_pid),
+    {noreply, Context};
+
+
+handle_cast({stations_removed_from_gui, ListOfNodes}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(stations_removed_from_gui), ListOfNodes:~p~n", [?MODULE, ListOfNodes]),
+    Application = Context#context.application_type,
+    Application:stations_removed_from_gui(Context#context.application_pid, ListOfNodes),
     {noreply, Context};
 
 
@@ -178,6 +205,17 @@ handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
     ?LOGGER:debug("[~p]: CAST Request(initiate_transaction), Destination:~p, Data: ~p, Context: ~w ~n", [?MODULE, Destination, Data, Context]),
     ?PROTOCOL:send(utils:get_node_number(Destination), term_to_binary(Data)),
     {noreply, Context};
+
+
+handle_cast(enable, Context)  ->
+    ?LOGGER:info("[~p]: CAST Request(enable)~n", [?MODULE]),
+    ?PROTOCOL:reset(),
+    {noreply, Context#context{enabled = true}};
+
+handle_cast(disable, Context)  ->
+    ?LOGGER:info("[~p]: CAST Request(disable)~n", [?MODULE]),
+    ?PROTOCOL:update_configuration(idle),
+    {noreply, Context#context{enabled = false}};
 
 
 handle_cast(Request, Context) ->
@@ -226,7 +264,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{logger_ref 
     NewContext = Context#context{logger_ref = LoggerREF},
     {noreply, NewContext};
 
-handle_info(send_node_status, Context)  ->
+handle_info(send_node_status, #context{enabled = true} = Context)  ->
     ?LOGGER:preciseDebug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
     StartTime = utils:get_current_millis(),
     Status = ?PROTOCOL:get_status(),

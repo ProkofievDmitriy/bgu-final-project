@@ -6,13 +6,13 @@
 
 
 stop()->
-    ?APPLICATION_NAME ! stop.
+    ?MODULE ! stop.
 
 
 start_link(Properties)->
 	?LOGGER:info("[~p]: Starting Simple Data Concentration Application with props: ~w~n", [?MODULE, Properties]),
 	PID = spawn(fun()-> data_concentration_loop() end),
-	register(?APPLICATION_NAME, PID),
+	register(?MODULE, PID),
     ?PROTOCOL:hand_shake(PID),
 	PID.
 

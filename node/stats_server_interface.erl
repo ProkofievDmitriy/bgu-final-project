@@ -33,7 +33,7 @@
 
 %% API
 -export([report/2, report/1, getOffset/1]).
--export([clear_routing_tables/0,remove_stations/1,update_medium/1,configuration_updated_from_gui/1,routing_tables_cleared_from_gui/0,stations_removed_from_gui/1,start_from_gui/0]).
+-export([clear_routing_tables/0,remove_stations/1,update_medium/1]).
 -export([export/0]).
 
 %%%=======================================loadNGgui============================
@@ -65,31 +65,12 @@ remove_stations(ListOfNodes)->
 
 update_medium(ListOfNodesAndMediums)->
     % update configurations for the given ListOfNodesAndMediums where each element is a tuple {NodeName, MediumType},
-    % MediumType can be plc or rf or dual
+    % MediumType can be: plc_only , rf_only , dual
     Server = global:whereis_name(loadNGgui),
     wx_object:cast(Server, {update_medium,ListOfNodesAndMediums}),
 
     {ok, updated}.
 
-%% ---------------------------------------------------------------------------------------------------------
-%%                    Server -> Application notifications (for Liya to fill)
-%% ---------------------------------------------------------------------------------------------------------
-
-
-% in case a configuration update was issued from gui interface, the server should notify the app by calling this function
-% ListOfNodesAndMediums - each element is a tuple {NodeName, MediumType}, MediumType can be plc or rf or dual
-configuration_updated_from_gui (_ListOfNodesAndMediums) ->
-    {ok}.
-
-% in case routing tables were cleared from gui interface, the server should notify the app by calling this function
-routing_tables_cleared_from_gui() ->
-    {ok}.
-
-stations_removed_from_gui(_ListOfNodes) ->
-    {ok}.
-
-start_from_gui() ->
-    {ok}.
 
 
 %**************************************************************************************

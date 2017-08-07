@@ -1,10 +1,10 @@
-132.73.199.156 node_1 simple_dc plc_only
-132.73.199.232 node_10 simple_dc plc_only
-132.73.199.234 node_7 simple_dc dual
-132.73.199.238 node_9 simple_dc dual
-132.73.199.200 node_4 simple_dc dual
-132.73.199.225 node_6 simple_dc dual
+132.73.199.156 node_1 dc_app dual
+132.73.199.232 node_10 sem dual
+132.73.199.238 node_9 sem dual
+132.73.199.200 node_4 sem dual
+132.73.199.225 node_6 sem dual
 
+132.73.199.234 node_7 simple_dc dual
 132.73.192.31 node_14 am_sem dual
 132.73.192.42 node_15 am_sem plc_only
 132.73.192.80 node_16 am_sem dual

@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, report, modem_port, load_ng, application_interface, stats_server_interface]).
+-define(MODULES_TO_FILTER, [utils, report, transport, data_link, modem_port, application_interface, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -38,7 +38,7 @@
                          application_interface,
                          node_control_interface,
                          isg_time,
-                         dc, am_sem,sm_sem, sem_naive, dc_naive, simple_app, simple_dc,
+                         dc_naive, simple_app, simple_dc, dc_app, sem, app_utils,
                          stats_server_interface]).
 
 
@@ -69,7 +69,7 @@
 -define(MAX_DATA_LENGTH, (?MAX_DATA_LENGTH_IN_BITS / 8)). % number of BYTES for data
 
 
--define(NET_TRAVERSAL_TIME, 4000).
+-define(NET_TRAVERSAL_TIME, 3000).
 -define(TIMEOUT, ?NET_TRAVERSAL_TIME * 3).
 -define(ACK_REQUIRED, 0). % 0 = false, 1 = true
 -define(PATH_ACCUMULATION_ENABLED, 1). % 0 = false, 1 = true
@@ -107,7 +107,7 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {data_server_ip, "132.73.204.223"}
+                                 {data_server_ip, "132.73.204.17"}
                                 %  {data_server_ip, "192.168.14.30"} %Dima home server
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
@@ -115,16 +115,16 @@
 
 
 %%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_NAME, simple_application).
-% -define(APPLICATION_NAME, other).
+% -define(APPLICATION_TYPE, simple_application).
+-define(APPLICATION_TYPE, other).
+
 -define(MESSAGE_SEND_INTERVAL, 5). % in second
 
--define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},
-                         {send_message_interval, ?MESSAGE_SEND_INTERVAL},
+-define(APP_PROPS_LIST, [{send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
                         %  {meters_list, [node_7]}
-                         {meters_list, [node_10, node_4, node_6, node_7, node_9, node_14, node_15, node_16]}
+                         {meters_list, [node_10, node_4, node_6, node_9]}
                         %  {meters_list, [node_10, node_4, node_7, node_14]}
                         %  {meters_list, [node_22, node_25]}
                         ]).

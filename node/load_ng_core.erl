@@ -12,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/3, enable/1, disable/1, handle_incoming_message/2, get_status/1, reset/1]).
+-export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/3, send_a_sync/2, enable/1, disable/1, handle_incoming_message/2, get_status/1, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -72,6 +72,25 @@ send_sync(FsmPid, {Type, Destination, Data})->
     ?LOGGER:info("[~p]: Send SYNC ~p to ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
     gen_fsm:sync_send_event(FsmPid, {send_message, {Type, Destination, Data}}, ?TIMEOUT).
 
+send_a_sync(FsmPid, {Type, Destination, Data, PidToReply})->
+    gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, PidToReply}}).
+    % StartTime = utils:get_current_millis(),
+    % Result = receive
+    %            {ok , sent} -> {ok , sent};
+    %            {error, Error} ->
+    %                {error, Error}
+    %            after 2 * ?NET_TRAVERSAL_TIME ->
+    %            ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
+    %            ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
+    %            case ResultSyncSend of
+    %                {ok , sent} -> {ok, sent};
+    %                _ ->
+    %                    ?LOGGER:err("[~p]: send ASYNCH TIMEOUT EXCEEDED : ~p.~n", [?MODULE, utils:get_current_millis() - StartTime]),
+    %                   {error, timeout_exceeded}
+    %            end
+    %        end,
+    % ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
+    % Result.
 
 enable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, enable).
@@ -208,13 +227,13 @@ active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
                    {next_state, active, NewState};
                 _ ->
                     BottomLevelModule = StateData#state.bottom_level_module,
-                    Result = BottomLevelModule:send(StateData#state.bottom_level_pid, {Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload),
+                    Result = BottomLevelModule:send_async(StateData#state.bottom_level_pid, {Hop#routing_set_entry.medium, Hop#routing_set_entry.next_addr}, Payload, PIDToAnswer),
                     report_data_message_sent(Packet, NewState),
-                    PIDToAnswer ! Result,
+                    % PIDToAnswer ! Result,
                     {next_state, active, NewState}
             end;
         wait ->
-            PIDToAnswer ! wait,
+            PIDToAnswer ! {error, timeout_exceeded},
             {next_state, active, NewState};
         Else ->
             ?LOGGER:critical("[~p]: ACTIVE - ASYNC send_message: ~p,  - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),

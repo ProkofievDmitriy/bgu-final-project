@@ -580,7 +580,7 @@ insert_requests(Nodes, Sn) ->
   [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
   Current = erlang:length(Nodes),
   if Round =/= Sn ->
-    log:error("insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[?MODULE,Round,Sn]),
+    log:err("insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[?MODULE,Round,Sn]),
     ok;
 
     true ->

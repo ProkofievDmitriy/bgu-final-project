@@ -23,8 +23,8 @@
 
 open_report_file(Me)->
   log:debug("[~p] entered open_report_file ~n", [?MODULE]),
-  Name = "exp_"++?EXP_ID++"_"++atom_to_list(Me),
-  {ok,File} = file:open(filename:absname(Name),write),
+  Name = "exp_"++?EXP_ID++"_"++atom_to_list(Me) ++ ".temp",
+  {ok,File} = file:open(filename:absname(Name), write),
   File.
 
 report_start_of_experiment(State)->
@@ -222,19 +222,16 @@ clear_routing_tables(State) ->
   case ?TEST_MODE of
     local ->
       report_routing_tables_cleared(State#state.exp_counter);
-    Result ->
-      log:error("[~p] failed clearing routing tables, Result: ~w",
-        [?MODULE,Result]);
     integrated ->
       Result = stats_server_interface:clear_routing_tables(),
       case Result of
         {ok, cleared} -> report_routing_tables_cleared(State#state.exp_counter);
         Result ->
-          log:error("[~p] failed clearing routing tables, Result: ~w",
+          log:err("[~p] failed clearing routing tables, Result: ~w",
             [?MODULE,Result])
       end
 
-  end.
+    end.
 
 
 insert_nodes_to_tracker([]) -> ok;
@@ -256,7 +253,7 @@ insert_requests(Nodes, Sn) ->
   [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
   Current = erlang:length(Nodes),
   if Round =/= Sn ->
-    log:error("[~p] insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring insertion",
+    log:err("[~p] insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring insertion",
       [?MODULE,Round,Sn]),
     ok;
 

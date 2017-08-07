@@ -101,7 +101,7 @@ trim_string(String)->
 
 trim_string([], _Delimiter, ValueAcc, Acc)-> Acc ++ [ValueAcc];
 trim_string([H|RestString], Delimiter, ValueAcc, Acc)->
-    io:format("[~p]: trim_string H: ~p, RestString: ~p, Delimiter: ~p, ValueAcc: ~p, Acc: ~p~n", [?MODULE, H, RestString, Delimiter, ValueAcc, Acc]),
+    % io:format("[~p]: trim_string H: ~p, RestString: ~p, Delimiter: ~p, ValueAcc: ~p, Acc: ~p~n", [?MODULE, H, RestString, Delimiter, ValueAcc, Acc]),
     case H of
         Delimiter ->
             trim_string(RestString, Delimiter, "", Acc ++ [ValueAcc]);

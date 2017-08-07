@@ -24,9 +24,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_incoming_message(ApplicationPid, Message)->
-    case ?APPLICATION_NAME of
+    case ?APPLICATION_TYPE of
         simple_application ->
             ApplicationPid ! Message;
         _ ->
-            gen_fsm:send_event(ApplicationPid, {received_message, Message})
+            gen_fsm:send_all_state_event(ApplicationPid, {received_message, Message})
         end.

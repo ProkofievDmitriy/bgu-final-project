@@ -96,7 +96,7 @@
 
 
 %%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_NAME, simple_application).
+-define(APPLICATION_TYPE, simple_application).
 -define(MESSAGE_SEND_INTERVAL, 5). % in second
 
 -define(APP_PROPS_LIST, [{app_name, ?APPLICATION_NAME},

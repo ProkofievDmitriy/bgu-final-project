@@ -6,7 +6,7 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2, update_nodes_to_filter/2]).
+-export([start/1, stop/1, send/3, send_async/4, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2, update_nodes_to_filter/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -34,8 +34,8 @@ send(FsmPid, Hop, Payload)->
     gen_fsm:sync_send_event(FsmPid, {send, {Hop, Payload}}, ?TIMEOUT).
 
 %Managing events
-send_async(FsmPid, Hop, Payload)->
-    gen_fsm:send_event(FsmPid, {send, {Hop, Payload}}).
+send_async(FsmPid, Hop, Payload, PidToReply)->
+    gen_fsm:send_event(FsmPid, {send, {Hop, Payload, PidToReply}}).
 
 
 updateUpperLevel(FsmPid, UpperLevelModule, UpperLevelPid)->
@@ -116,7 +116,7 @@ dual({received_message, {Medium, Source, Target, Data}}, StateData) ->
     {next_state, dual, StateData};
 
 
-dual({send, {Hop, Data}}, StateData) ->
+dual({send, {Hop, Data, PidToReply}}, StateData) ->
     ?LOGGER:debug("[~p]: DUAL - ASYNC  (send) to medium ~p, StateData: ~w~n", [?MODULE, Hop, StateData]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
@@ -126,7 +126,14 @@ dual({send, {Hop, Data}}, StateData) ->
             ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
             {next_state, dual, StateData};
 	    _ ->
-            {next_state, dual, StateData}
+            case PidToReply of
+                undefined ->
+                    ?LOGGER:debug("[~p]: undefined pid to reply, no reply~n",[?MODULE]),
+                    {next_state, dual, StateData};
+                _ ->
+                    PidToReply ! Result,
+                    {next_state, dual, StateData}
+            end
 	end.
 
 %% =========================================== PLC ONLY =========================================
@@ -165,7 +172,7 @@ plc_only({received_message, {Medium, Source, Target, Data}}, StateData) ->
 
 
 
-plc_only({send, {Hop, Data}}, StateData) ->
+plc_only({send, {Hop, Data, PidToReply}}, StateData) ->
     ?LOGGER:debug("[~p]: PLC_ONLY - ASYNC (send) to ~p~n", [?MODULE, Hop]),
     {Medium, NextHopAddress} = Hop,
     Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
@@ -182,9 +189,16 @@ plc_only({send, {Hop, Data}}, StateData) ->
          {error, ErrorMessage} ->
              ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
              {next_state, plc_only, StateData};
-        _ ->
-            {next_state, plc_only, StateData}
-     end.
+ 	    _ ->
+             case PidToReply of
+                 undefined ->
+                    ?LOGGER:debug("[~p]: undefined pid to reply, no reply~n",[?MODULE]),
+                    {next_state, plc_only, StateData};
+                 _ ->
+                     PidToReply ! Result,
+                     {next_state, plc_only, StateData}
+             end
+ 	end.
 
 
 %% =========================================== RF ONLY =========================================
@@ -221,7 +235,7 @@ rf_only({received_message, {Medium, Source, Target, Data}}, StateData) ->
      {next_state, rf_only, StateData};
 
 
- rf_only({send, {Hop, Data}}, StateData) ->
+ rf_only({send, {Hop, Data, PidToReply}}, StateData) ->
      ?LOGGER:debug("[~p]: RF_ONLY -  ASYNC (send) to medium ~p~n", [?MODULE, Hop]),
      {Medium, NextHopAddress} = Hop,
      Payload = preparePayload(NextHopAddress, Data, StateData#state.self_address), % <<NextHopAddress/bitstring, Data/bitstring>>,
@@ -234,14 +248,20 @@ rf_only({received_message, {Medium, Source, Target, Data}}, StateData) ->
  	        {error, not_active_medium}
  	 end,
 
-      case Result of
-          {error, ErrorMessage} ->
-              ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+  case Result of
+      {error, ErrorMessage} ->
+          ?LOGGER:err("[~p]: Error received from modem port : ~p~n",[?MODULE, ErrorMessage]),
+          {next_state, plc_only, StateData};
+	    _ ->
+          case PidToReply of
+              undefined ->
+              ?LOGGER:debug("[~p]: undefined pid to reply, no reply~n",[?MODULE]),
               {next_state, rf_only, StateData};
-         _ ->
-             {next_state, rf_only, StateData}
-      end.
-
+              _ ->
+                  PidToReply ! Result,
+                  {next_state, rf_only, StateData}
+          end
+	end.
 %% ============================================================================================
 %% ============================== Sync Event Handling =========================================
 %% ============================================================================================
@@ -325,6 +345,7 @@ preparePayload(Address, Data, SelfAddress)->
 
 isValidTarget(Target, State)->
     SelfAddress = State#state.self_address,
+    ?LOGGER:debug("[~p]: isValidTarget : SelfAddress: ~p~n", [?MODULE, SelfAddress]),
      case Target of
         SelfAddress ->
             true;

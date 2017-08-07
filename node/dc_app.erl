@@ -306,16 +306,17 @@ handle_event({received_message, Bit_string}, StateName, State) ->
   <<Type:1, To_n:?NODE_BITS, Seq:?SEQ_BITS, Data_b/bitstring>> = Bit_string,
   To = utils:get_node_name(To_n),
   case Type of
-    ?DREQ_BIT -> gen_fsm:send_event(State#state.my_pid, {dreq,To,Seq}),
+    ?DREQ_BIT -> gen_fsm:send__all_state_event(State#state.my_pid, {dreq,To,Seq}),
       {next_state, StateName, State};
     ?DREP_BIT ->
       Data_size = bit_size(Data_b),
-      if Data_size rem ?ENTRY_SIZE =/= 0 ->
-        log:err("[~p]  received invalid data of size ~p, dropping drep~n",[?MODULE,Data_size]),
+      EntrySize = ?ENTRY_SIZE,
+      if Data_size rem EntrySize /= 0 ->
+        log:err("[~p]  received invalid(~p) data of size ~p, dropping drep~n",[?MODULE, EntrySize, Data_size]),
         {next_state, StateName, State};
         true ->
           Data = app_utils:bit_to_data(Data_b,[]),
-          gen_fsm:send_event(State#state.my_pid, {drep, To,Data,Seq}),
+          gen_fsm:send_all_state_event(State#state.my_pid, {drep, To,Data,Seq}),
          {next_state, StateName, State}
         end
   end;
@@ -348,6 +349,11 @@ handle_info(Info, StateName, State) ->
 
 terminate(Reason, StateName, State) ->
   State#state.timer ! stop,
+  case Reason of
+      {done_experiment_number,Exp_counter} -> stats_server_interface:export();
+      Reason ->[]
+  end,
+
   log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",
     [?MODULE,Reason,StateName,State]),
   ok.
@@ -466,32 +472,3 @@ prepare_for_reinitialization(State,Event) ->
   Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?BETWEEN_EXP_TIMEOUT]),
   NewState = State#state{timer = Timerpid},
   NewState.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

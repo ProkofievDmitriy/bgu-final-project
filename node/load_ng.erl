@@ -168,27 +168,27 @@ handle_call(Request, From, Context) ->
      {noreply, Context};
 
  handle_cast({data_message, {Destination, Data, PIDToResponse}}, Context) ->
-     ?LOGGER:info("[~p]: ASYNC data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
+     ?LOGGER:info("[~p]: ASYNC data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.top_level_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
+     Result = TopLevelModule:send_a_sync(Context#context.top_level_pid, {?DATA, Destination, Data, PIDToResponse}),
      ?LOGGER:preciseDebug("[~p]: data_message, Result : ~p~n", [?MODULE, Result]),
-     PIDToResponse ! Result,
+    %  PIDToResponse ! Result,
      {noreply, Context};
 
  handle_cast({data_request_message, {Destination, Data, PIDToResponse}}, Context) ->
-     ?LOGGER:info("[~p]: ASYNC data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.transport_pid]),
+     ?LOGGER:info("[~p]: ASYNC data_request_message, Destination: ~w, transport pid = ~p~n", [?MODULE, Destination, Context#context.top_level_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
+     Result = TopLevelModule:send_a_sync(Context#context.top_level_pid, {?DREQ, Destination, Data, PIDToResponse}),
      ?LOGGER:preciseDebug("[~p]: data_request_message, Result : ~p~n", [?MODULE, Result]),
-     PIDToResponse ! Result,
+    %  PIDToResponse ! Result,
      {noreply, Context};
 
  handle_cast({data_reply_message, {Destination, Data, PIDToResponse}}, Context) ->
-     ?LOGGER:info("[~p]: ASYNC data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
+     ?LOGGER:info("[~p]: ASYNC data_reply_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.top_level_pid]),
      TopLevelModule = Context#context.top_level,
-     Result = TopLevelModule:send(Context#context.top_level_pid, {?DATA, Destination}, Data),
+     Result = TopLevelModule:send_a_sync(Context#context.top_level_pid, {?DREP, Destination, Data, PIDToResponse}),
      ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
-     PIDToResponse ! Result,
+    %  PIDToResponse ! Result,
      {noreply, Context};
 
 
