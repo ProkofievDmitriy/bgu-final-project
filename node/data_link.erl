@@ -6,7 +6,7 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2]).
+-export([start/1, stop/1, send/3, send_async/3, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2, update_nodes_to_filter/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -25,6 +25,9 @@ stop(FsmPid)->
 %Controlling events
 set_state(FsmPid, NewState)->
     gen_fsm:sync_send_all_state_event(FsmPid, {set_state, NewState}).
+
+update_nodes_to_filter(FsmPid, NodesToFilter)->
+    gen_fsm:sync_send_all_state_event(FsmPid, {update_nodes_to_filter, NodesToFilter}).
 
 %Managing events
 send(FsmPid, Hop, Payload)->
@@ -57,9 +60,6 @@ get_status(FsmPid) ->
             ?LOGGER:critical("[~p]: error occured while get_status, Result = ~p ~n", [?MODULE, Result]),
             []
     end.
-
-update_nodes_to_filter(FsmPid, NodesToFilterList) ->
-    gen_fsm:sync_send_all_state_event(FsmPid, {update_nodes_to_filter, NodesToFilterList}).
 
 
 
@@ -268,6 +268,10 @@ handle_sync_event({set_state, NewState}, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: Handle set_state, OldState: ~w, NewState: ~w~n", [?MODULE, StateName, NewState]),
 	{reply, ok, NewState, StateData};
 
+handle_sync_event({update_nodes_to_filter, NewNodesToFilter}, _From, StateName, StateData) ->
+    ?LOGGER:debug("[~p]: Handle update_nodes_to_filter, OldNodesToFilter: ~w, NewNodesToFilter: ~w~n", [?MODULE, StateData#state.nodes_to_filter, NewNodesToFilter]),
+	{reply, ok, StateName, StateData#state{nodes_to_filter = NewNodesToFilter}};
+
 handle_sync_event({update_nodes_to_filter, NodesToFilterList}, _From, StateName, StateData) ->
     ?LOGGER:debug("[~p]: Handle update_nodes_to_filter, OldNodesToFilter: ~w, NewNodesToFilter: ~w~n", [?MODULE, StateData#state.nodes_to_filter, NodesToFilterList]),
 	{reply, ok, StateName, StateData#state{nodes_to_filter = NodesToFilterList}};
@@ -315,7 +319,7 @@ preparePayload(Address, Data, SelfAddress)->
             ?LOGGER:preciseDebug("[~p]: prepare_payload Payload: ~p.~n", [?MODULE, Payload]),
             Payload;
         true ->
-            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: byte_size : ~p, bit_size: ~p ~n", [?MODULE, byte_size(Payload), bit_size(Payload)]),
+            ?LOGGER:err("[~p]: prepare_payload Binary Data Length exceeded: byte_size : ~p, bit_size: ~p, ?MAX_FRAME_LENGTH: ~p ~n", [?MODULE, byte_size(Payload), bit_size(Payload), ?MAX_FRAME_LENGTH]),
             {error, "Binary Data Length exceeded"}
     end.
 
@@ -331,6 +335,7 @@ isValidTarget(Target, State)->
          end.
 
 isValidSource(Source, State)->
+    ?LOGGER:debug("[~p]: isValidSource : source:~p , nodes_to_filter: ~p~n", [?MODULE, Source, State#state.nodes_to_filter]),
      not lists:member(Source, State#state.nodes_to_filter).
 
 handle_message(Medium, Source, Target, StateData, Data)->

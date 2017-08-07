@@ -6,7 +6,7 @@
 
 
 -export([get_node_number/1, get_node_name/1, get_mac/0, get_ip/0, remove_end_of_line/1, remove_end_of_line/2,
-         cut_list_from_delimiter/2, exec_curl/4, grafana_report/3, get_current_millis/0]).
+         cut_list_from_delimiter/2, exec_curl/4, grafana_report/3, get_current_millis/0, trim_string/1]).
 
  get_current_millis() ->
      {Mega, Sec, Micro} = os:timestamp(),
@@ -95,3 +95,16 @@ exec_curl(GrafanaServerIP, DataBase, Table, Values)->
     ?LOGGER:debug("[~p]: exec_curl CurlCmd = : ~p ~n",[?MODULE, CurlCmd]),
     Result = os:cmd(CurlCmd),
     ?LOGGER:preciseDebug("[~p]: exec_curl Result = : ~p ~n",[?MODULE, Result]).
+
+trim_string(String)->
+    trim_string(String, 32, "", []).
+
+trim_string([], _Delimiter, ValueAcc, Acc)-> Acc ++ [ValueAcc];
+trim_string([H|RestString], Delimiter, ValueAcc, Acc)->
+    io:format("[~p]: trim_string H: ~p, RestString: ~p, Delimiter: ~p, ValueAcc: ~p, Acc: ~p~n", [?MODULE, H, RestString, Delimiter, ValueAcc, Acc]),
+    case H of
+        Delimiter ->
+            trim_string(RestString, Delimiter, "", Acc ++ [ValueAcc]);
+        _ ->
+            trim_string(RestString, Delimiter, ValueAcc ++ [H], Acc)
+    end.

@@ -5,7 +5,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([update_configuration/2, initiate_transaction/3, reset_node/1, update_nodes_to_filter/2]).
+-export([update_configuration/2, initiate_transaction/3, reset_node/1, update_nodes_to_filter/2, start_application/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -44,7 +44,14 @@ update_nodes_to_filter(all, _)->
 
 update_nodes_to_filter(NodeName, NodesToFilterList)->
     io:format("update_nodes_to_filter to ~p, NodesToFilterList: ~p ~n", [NodeName, NodesToFilterList]),
-    gen_server:cast(NodeName, {update_nodes_to_filter, NodesToFilterList}).
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {update_nodes_to_filter, NodesToFilterList}).
+
+
+start_application(NodeName)->
+    io:format("sending start_application to ~p~n", [NodeName]),
+    A = global:whereis_name(NodeName),
+    gen_server:cast(A, {start_application}).
 
 reset_node(NodeName)->
     io:format("~nAAAA3: ~p~n",[NodeName]),

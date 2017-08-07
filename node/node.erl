@@ -163,6 +163,17 @@ handle_cast({reset_node}, Context) ->
     {noreply, Context};
 
 
+handle_cast({start_application}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(start_application)~n", [?MODULE]),
+    {noreply, Context};
+
+
+handle_cast({update_nodes_to_filter, NodesToFilterList}, Context) ->
+    ?LOGGER:debug("[~p]: CAST Request(update_nodes_to_filter), NodesToFilter: ~p~n", [?MODULE, NodesToFilterList]),
+    ?PROTOCOL:update_nodes_to_filter(NodesToFilterList),
+    {noreply, Context};
+
+
 handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
     ?LOGGER:debug("[~p]: CAST Request(initiate_transaction), Destination:~p, Data: ~p, Context: ~w ~n", [?MODULE, Destination, Data, Context]),
     ?PROTOCOL:send(utils:get_node_number(Destination), term_to_binary(Data)),
@@ -228,7 +239,7 @@ handle_info(send_node_status, Context)  ->
 	{noreply, Context};
 
 handle_info(Request, Context)  ->
-    ?LOGGER:info("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    ?LOGGER:info("[~p]: STUB Handle INFO Request(~w), Node Name: ~p~n", [?MODULE, Request, Context#context.node_name]),
 	{noreply, Context}.
 
 

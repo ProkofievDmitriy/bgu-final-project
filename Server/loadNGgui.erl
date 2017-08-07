@@ -21,7 +21,7 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
     counters, configButtons, updateLocation,
     buttonExport, buttonFullMap, buttonDeleteTable, buttonDeleteAll,
 	buttonSendConfig, buttonSendMSG, txtMsgSend,
-	buttonUpdateNodesToFilter, nodesToFilterList,
+	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp,
 	cmbTo}).
 
 -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
@@ -99,7 +99,10 @@ init(WxServer) ->
 	wxButton:connect(ButtonUpdateNodesToFilter, command_button_clicked),
 
 
-    ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
+    ButtonStartApp = wxButton:new(Panel, ?wxID_ANY, [{label,"Start Application"}]),
+	wxButton:connect(ButtonStartApp, command_button_clicked),
+
+	ButtonSendConfig = wxButton:new(Panel, ?wxID_ANY, [{label,"Send New Configurations"}]),
     wxButton:connect(ButtonSendConfig, command_button_clicked),
     ButtonFullMap = wxButton:new(Panel, ?wxID_ANY, [{label,"Show Full Map"}]),
 
@@ -136,10 +139,6 @@ init(WxServer) ->
     wxSizer:addSpacer(ManagementSzLeftP, 10),
     wxSizer:add(ManagementSzLeftP, ButtonSendMSG),
     wxSizer:addSpacer(ManagementSzLeftP, 10),
-    wxSizer:add(ManagementSzLeftP, NodesToFilterTxt),
-    wxSizer:addSpacer(ManagementSzLeftP, 10),
-    wxSizer:add(ManagementSzLeftP, ButtonUpdateNodesToFilter),
-    wxSizer:addSpacer(ManagementSzLeftP, 10),
 
     wxSizer:add(ManagementSzRightP, RadioButtonSizer),
     wxSizer:addSpacer(ManagementSzRightP, 10),
@@ -148,7 +147,12 @@ init(WxServer) ->
     wxSizer:add(ManagementSzRightP, UpdateLocation),
     wxSizer:addSpacer(ManagementSzRightP, 10),
     wxSizer:add(ManagementSzLeftP, ButtonExport),
-    wxSizer:addSpacer(ManagementSzLeftP, 10),
+    wxSizer:addSpacer(ManagementSzRightP, 30),
+    wxSizer:add(ManagementSzRightP, NodesToFilterTxt),
+    wxSizer:addSpacer(ManagementSzRightP, 10),
+    wxSizer:add(ManagementSzRightP, ButtonUpdateNodesToFilter),
+	wxSizer:addSpacer(ManagementSzRightP, 30),
+	wxSizer:add(ManagementSzRightP, ButtonStartApp),
 
     %% Nodes:
     wxSizer:add(NodesSz, Canvas),
@@ -200,6 +204,7 @@ init(WxServer) ->
                     buttonDeleteTable = wxButton:getId(ButtonDeleteTable),
 					buttonDeleteAll = wxButton:getId(ButtonDeleteAll),
 					buttonUpdateNodesToFilter = wxButton:getId(ButtonUpdateNodesToFilter),
+					buttonStartApp = wxButton:getId(ButtonStartApp),
                     buttonSendMSG = wxButton:getId(ButtonSendMSG)}}.
 
 
@@ -261,11 +266,13 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 				Node = find_node(State#state.nodesEts,ets:first(NodesEts), {X,Y}),
 				case Node of
 					ok -> {noreply,State};
-					N ->
+					[{N,{_Time, _, _Mode,_RoutingSet, NodesToFilterList}}] ->
 						wxChoice:setStringSelection(State#state.nodeChoice,atom_to_list(N)),
 						update_map(State#state.canvas, N, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
+
 						%TODO - Update nodes to filter per node
-					%		{noreply,State#state{selectedNode = N}}
+						wxTextCtrl:setValue(State#state.nodesToFilterList, NodesToFilterList),
+
 						{noreply,State#state{selectedNode = N}}
 				end;
 			true ->
@@ -274,20 +281,24 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 		            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet, NodesToFilterList}}),
 		            %io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 					wxToggleButton:setValue(UpdateLocation,false),
+					wxTextCtrl:setValue(State#state.nodesToFilterList, NodesToFilterList),
+
 					{noreply,State}
 			end;
 
 handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}, State) ->
     io:format("command_choice_selected ~p~n",[Ex]),
     SelectedNode = list_to_atom(Ex),
-		update_map(State#state.canvas, SelectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
+	update_map(State#state.canvas, SelectedNode, State#state.nodesEts,State#state.mapEts,State#state.configButtons,State#state.updateLocation,State#state.nodeChoice, State#state.cmbTo),
+	[{_,{Time, _, _Mode,_RoutingSet, NodesToFilterList}}] = ets:lookup(State#state.nodesEts,SelectedNode),
+	wxTextCtrl:setValue(State#state.nodesToFilterList, NodesToFilterList),
 
 {noreply,State#state{selectedNode = SelectedNode}};
 
 handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 	     State = #state{selectedNode = SelectedNode,buttonFullMap = ButtonFullMap,
                 buttonDeleteTable = ButtonDeleteTable, buttonDeleteAll= ButtonDeleteAll, buttonSendConfig = ButtonSendConfig,
-                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG, buttonUpdateNodesToFilter = ButtonUpdateNodesToFilter}) ->
+                buttonExport = ButtonExport, buttonSendMSG = ButtonSendMSG, buttonUpdateNodesToFilter = ButtonUpdateNodesToFilter, buttonStartApp = ButtonStartApp}) ->
     case ID of
         ButtonFullMap ->
             	io:format("Showing full map~n"),
@@ -304,6 +315,10 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 										stats_server_interface:routing_tables_cleared_from_gui(),
 					resetAllNodes(State#state.nodesEts, ets:first(State#state.nodesEts)),
                     %io:format("buttonDeleteTable delete ~p res ~p~n",[SelectedNode, A]),
+                    {noreply,State};
+		ButtonStartApp ->
+                    io:format("ButtonStartApp starting application on all nodes~n"),
+					start_application(State#state.nodesEts, ets:first(State#state.nodesEts)),
                     {noreply,State};
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
@@ -366,9 +381,9 @@ handle_cast({node_state,Data}, State = #state{nodeChoice = NodeChoice, cmbTo = C
             [{NodeNameAtom,{_,Location, _,_,_}}] = ets:lookup(State#state.nodesEts,NodeNameAtom)
     end,
 		Time = erlang:monotonic_time(),
-		NodeInfo = {NodeNameAtom, {Time, Location, proplists:get_value(medium_mode, Data),RoutingSet, proplists:get_value(nodes_to_filter, Data)}},
-		io:format("Data:  ~p~n",[Data]),
-		io:format("NodeInfo:  ~p~n",[NodeInfo]),
+		NodeInfo = {NodeNameAtom, {Time, Location, proplists:get_value(medium_mode, Data),RoutingSet, list_of_integers_to_string(proplists:get_value(nodes_to_filter, Data))}},
+		% io:format("Data:  ~p~n",[Data]),
+		% io:format("NodeInfo:  ~p~n",[NodeInfo]),
 
     ets:insert(State#state.nodesEts, NodeInfo),
     update_map_ets(State#state.mapEts,NodeNameAtom,RoutingSet),
@@ -515,10 +530,11 @@ update_map_ets_2(MapEts, Node, [_|NodeRoutingMap])->
 
 find_node(_,'$end_of_table',_) -> ok;
 find_node(NodesEts,Key, MouseLocation) ->
-		[{Key,{_, KeyLocation,_, _, _}}] = ets:lookup(NodesEts,Key),
+		Node = ets:lookup(NodesEts,Key),
+		[{Key,{_, KeyLocation,_, _, _}}] = Node,
 		case distance(KeyLocation, MouseLocation) of
 				N when N =< ?CIRCE_RADIUS_SQURE ->
-					Key;
+					Node;
 				_ ->
 					find_node(NodesEts,ets:next(NodesEts,Key), MouseLocation)
 				end.
@@ -655,6 +671,12 @@ resetAllNodes(NodesEts, Key) ->
 	node_control_interface:reset_node(Key),
 	resetAllNodes(NodesEts, ets:next(NodesEts,Key)).
 
+
+start_application(_, '$end_of_table') -> ok;
+start_application(NodesEts, Key) ->
+	node_control_interface:start_application(Key),
+	start_application(NodesEts, ets:next(NodesEts,Key)).
+
 printRoutingSet(SelectedNode, SelectedNode, NodesEts) ->
 	A = ets:lookup(NodesEts,SelectedNode),
 	io:format("~n~nSelectedNode Info: ~n~p~n~n",[A]);
@@ -680,9 +702,29 @@ create_radio_buttons(Panel) ->
 
 getNodesToFilterList(NodesToFilterString)->
 	case NodesToFilterString of
-		"Accept All" ->
-			[];
+		"Accept All" ->	[];
+		" " ->	[];
+		"" ->	[];
+		[] -> [];
 		_ ->
-			% [fun(X)-> string:to_integer(X) end || X <- string:trim(NodesToFilterString)]
-			[]
+			[ list_to_integer(X) || X <- trim_string(NodesToFilterString)]
+			% []
 	end.
+
+trim_string(String)->
+    trim_string(String, 32, "", []).
+
+trim_string([], _Delimiter, ValueAcc, Acc)-> Acc ++ [ValueAcc];
+trim_string([H|RestString], Delimiter, ValueAcc, Acc)->
+    % io:format("[~p]: trim_string H: ~p, RestString: ~p, Delimiter: ~p, ValueAcc: ~p, Acc: ~p~n", [?MODULE, H, RestString, Delimiter, ValueAcc, Acc]),
+    case H of
+        Delimiter ->
+            trim_string(RestString, Delimiter, "", Acc ++ [ValueAcc]);
+        _ ->
+            trim_string(RestString, Delimiter, ValueAcc ++ [H], Acc)
+    end.
+
+
+list_of_integers_to_string([])->[];
+list_of_integers_to_string(ListOfIntegers)->
+	[ integer_to_list(X) ++ " " || X <- ListOfIntegers].

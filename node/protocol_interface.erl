@@ -8,7 +8,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/2, hand_shake/2, hand_shake/1, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0]).
+-export([start/2, stop/0, send/2, hand_shake/2, hand_shake/1, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0, update_nodes_to_filter/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -88,6 +88,9 @@ update_configuration(OptionsList)->
 
 reset()->
     gen_server:call(?PROTOCOL_NAME, reset).
+
+update_nodes_to_filter(NodesToFilter)->
+    gen_server:call(?PROTOCOL_NAME, {update_nodes_to_filter, NodesToFilter}).
 
 % return list of tuples [{destination, Destination}, {next_address, NextAddress}, {medium, Medium}]
 get_status()->

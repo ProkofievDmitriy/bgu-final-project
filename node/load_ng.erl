@@ -149,6 +149,11 @@ handle_call(reset, _From, Context) ->
     ResetStatus = ?TRANSPORT:reset(Context#context.transport_pid),
     {reply, ResetStatus , Context};
 
+handle_call({update_nodes_to_filter, NodesToFilter}, _From, Context) ->
+    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(update_nodes_to_filter), NodesToFilter: ~p ~n", [?MODULE, NodesToFilter]),
+    ResetStatus = ?DATA_LINK:update_nodes_to_filter(Context#context.data_link_pid, NodesToFilter),
+    {reply, ResetStatus , Context};
+
 
 handle_call(Request, From, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),

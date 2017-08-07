@@ -241,7 +241,7 @@ trim_data(BinaryData)->
 
 trim_data(BinaryData, List, SeqNum, UUID)->
     BitLength = bit_size(BinaryData),
-    ?LOGGER:preciseDebug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , Data bits: ~w, MAX_DATA_LENGTH = ~w, List: ~w~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, BitLength, ?MAX_DATA_LENGTH, List]),
+    ?LOGGER:debug("[~p]: MAX_DATA_LENGTH_IN_BITS = ~w , Data bits: ~w, MAX_DATA_LENGTH = ~w, List: ~w~n", [?MODULE, ?MAX_DATA_LENGTH_IN_BITS, BitLength, ?MAX_DATA_LENGTH, List]),
     if (BitLength =< ?MAX_DATA_LENGTH_IN_BITS) ->
             {_ , NewList} = lists:foldl(fun(X, {Num, Temp}) ->
                 TH = #transport_header{max = SeqNum, seq = Num, id = UUID},
