@@ -363,7 +363,9 @@ update_dm_ets(DM_ets, relay, Id, _UTIME) ->
     [] ->
       ets:insert(DM_ets,{Id,{0, 0, 1}});
     [{Id,{SentTime, ReceivedTime, Relays}}] ->
-      ets:insert(DM_ets,{Id,{SentTime, ReceivedTime, Relays + 1}})
+      ets:insert(DM_ets,{Id,{SentTime, ReceivedTime, Relays + 1}});
+    _ -> io:format(" CASE CLAUSE FAILED !!!!!!!!!!! Suka 2 AM !!!!!"),
+         ok
   end;
 
 update_dm_ets(DM_ets, received_message, Id, UTIME) ->
@@ -372,7 +374,9 @@ update_dm_ets(DM_ets, received_message, Id, UTIME) ->
     [] ->
       ets:insert(DM_ets,{Id,{0, UTIME, 0}});
     [{Id,{SentTime,0, Relays}}] ->
-      ets:insert(DM_ets,{Id,{SentTime, UTIME, Relays}})
+      ets:insert(DM_ets,{Id,{SentTime, UTIME, Relays}});
+    _ -> io:format(" CASE CLAUSE FAILED !!!!!!!!!!! Suka 2 AM !!!!!"),
+         ok
   end;
 update_dm_ets(DM_ets, send_message, Id, UTIME) ->
   Curr = ets:lookup(DM_ets,Id),
@@ -380,7 +384,9 @@ update_dm_ets(DM_ets, send_message, Id, UTIME) ->
     [] ->
       ets:insert(DM_ets,{Id,{UTIME,0 ,0}});
     [{Id,{0,ReceivedTime, Relays}}] ->
-      ets:insert(DM_ets,{Id,{UTIME, ReceivedTime, Relays}})
+      ets:insert(DM_ets,{Id,{UTIME, ReceivedTime, Relays}});
+    _ -> io:format(" CASE CLAUSE FAILED !!!!!!!!!!! Suka 2 AM !!!!!"),
+         ok
   end.
 
 %%%===================================================================

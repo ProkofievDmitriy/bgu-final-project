@@ -453,9 +453,8 @@ handle_info({update_metrics, Counters}, State) ->
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
                 "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(Counters#counters.data_msg_avg_time)),
-				%  ++
-				% "\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
+                "\nEnd to End Data Message Average Delay: " ++ float_to_list(Counters#counters.data_msg_avg_time)  ++
+				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
   {noreply, State};
 
 handle_info(E, State) ->
@@ -670,21 +669,26 @@ draw_routes_from_node_to_node(DC, SourceNode, SourceNode, NodesEts) -> ok;
 draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts) ->
 	io:format("draw_routes_from_node_to_node SourceNode ~p, DestinationNode ~p~n",[SourceNode, DestinationNode]),
 	[{SourceNode,{_, Location1, _,RoutingSet, _}}] = ets:lookup(NodesEts,SourceNode),
-	case findNodeInRoutingSet(DestinationNode, RoutingSet) of
-		{NextNode, Medium} ->
+	case findNodeInRoutingSet2(DestinationNode, RoutingSet) of
+		{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}} ->
+			NextNode = makeAtom(Node),
 			[{NextNode,{_, Location2, _,_, _}}] = ets:lookup(NodesEts,NextNode),
 			draw_route(DC, Location1,Location2, Medium),
 			draw_routes_from_node_to_node(DC, NextNode, DestinationNode, NodesEts);
-		_ ->	io:format("No Route to DestinationNode ~p from ~p RoutingSet: ~p~n",[DestinationNode,SourceNode,RoutingSet]),
+		_ ->	io:format("No Route to DestinationNode ~p from ~p RoutingSet: ~p~n",[DestinationNode, SourceNode,RoutingSet]),
 				ok
 	end.
 
-findNodeInRoutingSet(DestinationNode, [{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
+findNodeInRoutingSet(DestinationNode, [{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}} | RoutingSet]) ->
 	{makeAtom(Node), Medium};
 findNodeInRoutingSet(DestinationNode, [{{destination, Node1}, {_, _}}|RoutingSet]) ->
 	findNodeInRoutingSet(DestinationNode,RoutingSet);
 findNodeInRoutingSet(DestinationNode, []) ->
 	ok.
+
+findNodeInRoutingSet2(DestinationNode,RoutingSet)->
+	lists:keyfind({destination, DestinationNode}, 1, RoutingSet).
+
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
 %%%%
