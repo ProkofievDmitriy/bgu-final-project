@@ -5,11 +5,17 @@
 #### Environment setup proggress:
 ##### Ensure that all properties configured to desired parameters in properties.hrl file:
 ```erlang data_server_ip ```
+
 ```erlang grafana_server_ip``` - set atom```erlang undefined``` if not relevant
+
 ```erlang APPLICATION_TYPE``` - set atom```erlang other``` for you application
+
 ```erlang meters_list```
+
 ```erlang MODULES_TO_FILTER``` - to filter modules from log
+
 ```erlang LOGGER_MODE``` - set atom```erlang file``` to allow background running of application - path to file no edisson```bash~/node/file.log```
+
 
 ##### Define environment setup in  lab-env.txt file :
 For example 
@@ -27,7 +33,8 @@ For example
 132.73.198.241 local stats_server not_relevant
 ```
 
-##### Run run-all-nodes.sh to generate starting line - ```scripts/run-all-nodes.sh scripts/dima-env-file.txt Unnamed``` where Unnamed is terminal profile, on lab machine it is Default instead
+##### Run run-all-nodes.sh to generate starting line 
+```scripts/run-all-nodes.sh scripts/dima-env-file.txt Unnamed``` where Unnamed is terminal profile, on lab machine it is Default instead
 
 ##### Run Generated line
 
