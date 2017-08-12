@@ -24,7 +24,8 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
 	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp, buttonRemoveNode,
 	cmbTo}).
 
--record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
+  -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent,
+                      numberOfDataMsgReceived, data_msg_avg_time, data_msg_avg_relay_length}).
 
 
 %%%%%%%%%%%%
@@ -452,7 +453,7 @@ handle_info({update_metrics, Counters}, State) ->
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
                 "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(Counters#counters.data_msg_avg_time) ++
+                "\nEnd to End Data Message Average Delay: " ++ float_to_list(Counters#counters.data_msg_avg_time) ++
 				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
   {noreply, State};
 
