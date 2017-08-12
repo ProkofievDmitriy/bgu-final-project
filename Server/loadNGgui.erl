@@ -453,8 +453,8 @@ handle_info({update_metrics, Counters}, State) ->
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
                 "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nEnd to End Data Message Average Delay: " ++ float_to_list(Counters#counters.data_msg_avg_time)  ++
-				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
+                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(round(Counters#counters.data_msg_avg_time))  ++
+				"\nAverage Data Message Route Length: " ++ float_to_list(Counters#counters.data_msg_avg_relay_length)),
   {noreply, State};
 
 handle_info(E, State) ->
@@ -660,7 +660,8 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
 
 draw_routes_from_node(_, _, _,_,_) -> ok.
 
-draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, [])-> ok;
+draw_routes_from_node_to_each_node(_DC, _NodesEts, _SourceNode, undefined)-> ok;
+draw_routes_from_node_to_each_node(_DC, _NodesEts, _SourceNode, [])-> ok;
 draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, [{{destination, DestinationNode},_, _}|RoutingSet])->
 	draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts),
 	draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, RoutingSet).
@@ -686,6 +687,8 @@ findNodeInRoutingSet(DestinationNode, [{{destination, Node1}, {_, _}}|RoutingSet
 findNodeInRoutingSet(DestinationNode, []) ->
 	ok.
 
+findNodeInRoutingSet2(DestinationNode, undefined)->
+	ok;
 findNodeInRoutingSet2(DestinationNode,RoutingSet)->
 	lists:keyfind({destination, DestinationNode}, 1, RoutingSet).
 
