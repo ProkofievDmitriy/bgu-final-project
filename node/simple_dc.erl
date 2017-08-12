@@ -1,5 +1,6 @@
 -module(simple_dc).
 -export([start_link/1, stop/0]).
+-export([start_from_gui/1, configuration_updated_from_gui/2, routing_tables_cleared_from_gui/1, stations_removed_from_gui/1]).
 
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
@@ -33,3 +34,10 @@ data_concentration_loop()->
                     ?LOGGER:info("[~p]: Other Message : ~p  ~n", [?MODULE, Other])
             end
 	end.
+
+
+
+start_from_gui(_)-> ok.
+configuration_updated_from_gui(_, _)-> ok.
+routing_tables_cleared_from_gui(_)-> ok.
+stations_removed_from_gui(_)-> ok.

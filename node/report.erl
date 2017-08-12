@@ -76,7 +76,7 @@ handle_call(Request, From, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({report, {Type, DataList}}, #context{connected_to_server = true} = Context) ->
+handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, time_offset = Offset} = Context) when Offset /= 0->
     spawn(fun()-> utils:grafana_report(Type, Context#context.data_server_ip, DataList) end),
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,

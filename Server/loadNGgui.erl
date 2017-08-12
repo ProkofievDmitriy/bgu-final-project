@@ -538,7 +538,12 @@ update_map_ets_2(MapEts, Node, [{{destination,NextNode},{next_address,NextNode},
     update_map_ets_2(MapEts, Node, NodeRoutingMap);
 
 update_map_ets_2(MapEts, Node, [_|NodeRoutingMap])->
-	update_map_ets_2(MapEts, Node, NodeRoutingMap).
+	update_map_ets_2(MapEts, Node, NodeRoutingMap);
+
+update_map_ets_2(A, B, C)->
+	io:format("IGNORING update_map_ets_2 - received Values: A: ~p, B: ~p, C: ~p", [A, B, C]),
+	ok.
+
 
 find_node(_,'$end_of_table',_) -> ok;
 find_node(NodesEts,Key, MouseLocation) ->

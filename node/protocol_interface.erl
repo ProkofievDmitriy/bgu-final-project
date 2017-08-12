@@ -8,7 +8,7 @@
 %   API
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--export([start/2, stop/0, send/2, hand_shake/2, hand_shake/1, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0, update_nodes_to_filter/1]).
+-export([start/2, stop/0, send/2, hand_shake/2, hand_shake/1, send_data_request/2, send_data_reply/2, update_configuration/1, reset/0, get_status/0, a_sync_get_status/0, update_nodes_to_filter/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   Defines
@@ -60,14 +60,14 @@ handle_send_message(Type, Destination, Data)->
                {error, Error} ->
                    {error, Error}
                after 2 * ?NET_TRAVERSAL_TIME ->
-               ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, Type, Destination]),
-               ResultSyncSend = gen_server:call(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data}}, ?TIMEOUT),
-               case ResultSyncSend of
-                   {ok , sent} -> {ok, sent};
-                   _ ->
-                       ?LOGGER:err("[~p]: send TIMEOUT EXCEEDED : ~p.~n", [?MODULE, utils:get_current_millis() - StartTime]),
-                      {error, timeout_exceeded}
-               end
+                   ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, Type, Destination]),
+                   ResultSyncSend = gen_server:call(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data}}, ?TIMEOUT),
+                   case ResultSyncSend of
+                       {ok , sent} -> {ok, sent};
+                       _ ->
+                           ?LOGGER:err("[~p]: send TIMEOUT EXCEEDED : ~p.~n", [?MODULE, utils:get_current_millis() - StartTime]),
+                          {error, timeout_exceeded}
+                   end
            end,
     ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, Type, Destination, Result]),
     Result.
@@ -106,4 +106,19 @@ get_status()->
           _ -> {ok, Status}
       end,
     ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
+    Result.
+
+a_sync_get_status()->
+    PidToReply = self(),
+    StartTime = utils:get_current_millis(),
+    gen_server:cast(?PROTOCOL_NAME, {get_status, PidToReply}),
+    Result = receive
+        {'EXIT',{timeout,{gen_server,call,_}}} ->
+          ?LOGGER:err("[~p]: ERROR TIMEOUT IN get_status", [?MODULE]),
+          {error};
+        Status -> {ok, Status}
+    after 2 * ?GET_STATUS_HALF_TIMEOUT ->
+        ?LOGGER:warn("[~p]: TIMEOUT IN get_status, result is empty list", [?MODULE]),
+        []
+    end,
     Result.

@@ -128,7 +128,7 @@ handle_call({data_reply_message, {Destination, Data}}, _From, Context) ->
     {reply, Result, Context};
 
 handle_call({hand_shake, ApplicationPid}, From, Context) ->
-    ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~p, From : ~p~n", [?MODULE, ApplicationPid, From]),
+    ?LOGGER:info("[~p]: Handle CALL Request(hand_shake), ApplicationPid: ~w, From : ~w~n", [?MODULE, ApplicationPid, From]),
     %TODO implement hand_shake with application
     NewContext = Context#context{application_pid = ApplicationPid},
     TopLevelModule = Context#context.top_level,
@@ -190,6 +190,28 @@ handle_call(Request, From, Context) ->
      ?LOGGER:preciseDebug("[~p]: data_reply_message, Result : ~p~n", [?MODULE, Result]),
     %  PIDToResponse ! Result,
      {noreply, Context};
+
+
+handle_cast({get_status, PidToReply} , Context) ->
+    spawn(fun() ->
+        StartTime = utils:get_current_millis(),
+        ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
+        Self = self(),
+        ?NETWORK:a_sync_get_status(Context#context.network_pid, Self),
+        ?DATA_LINK:a_sync_get_status(Context#context.data_link_pid, Self),
+        Tmp = receive
+            List when is_list(List) -> List
+            after ?GET_STATUS_HALF_TIMEOUT ->
+                []
+            end,
+        Result = receive
+            List2 when is_list(List2) -> List2 ++ Tmp
+            after ?GET_STATUS_HALF_TIMEOUT ->
+                []
+            end,
+        ?LOGGER:preciseDebug("[~p]: get_status took ~p, Result: ~w ~n", [?MODULE, utils:get_current_millis() - StartTime, Result]),
+        PidToReply ! Result end),
+    {noreply, Context};
 
 
 handle_cast(Request, Context) ->

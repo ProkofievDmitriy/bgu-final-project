@@ -6,7 +6,7 @@
 -include("./include/vcb.hrl").
 -include("./include/macros.hrl").
 
--export([start/1, stop/1, send/3, send_async/4, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, set_state/2, update_nodes_to_filter/2]).
+-export([start/1, stop/1, send/3, send_async/4, updateUpperLevel/3, updateBottomLevel/3, handle_incoming_message/2, get_status/1, a_sync_get_status/2, set_state/2, update_nodes_to_filter/2]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
@@ -60,6 +60,10 @@ get_status(FsmPid) ->
             ?LOGGER:critical("[~p]: error occured while get_status, Result = ~p ~n", [?MODULE, Result]),
             []
     end.
+
+a_sync_get_status(FsmPid, PidToReply) ->
+    catch gen_fsm:send_all_state_event(FsmPid, {get_status, PidToReply}).
+
 
 
 
@@ -310,9 +314,16 @@ handle_info(Request, StateName, StateData) ->
 %% ============================================================================================
 %% ============================ A-Sync Event Handling =========================================
 %% ============================================================================================
+handle_event({get_status, PidToReply}, StateName, StateData) ->
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status), StateName: ~p~n", [?MODULE, StateName]),
+	PidToReply ! [{medium_mode, StateName}, {nodes_to_filter, StateData#state.nodes_to_filter}],
+    {next_state, StateName, StateData};
+
+
+
 handle_event(Event, StateName, StateData) ->
     ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
-    {next_state, normal, StateData}.
+    {next_state, StateName, StateData}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================

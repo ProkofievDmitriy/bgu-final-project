@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, report, transport, data_link, modem_port, application_interface, stats_server_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, application_interface, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -50,6 +50,7 @@
 -define(BROADCAST_ADDRESS, 0).
 -define(LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS, 720000).
 -define(NODE_STATUS_TIMER_INTERVAL, 3000).
+-define(GET_STATUS_HALF_TIMEOUT, 3000).
 -define(REMOVE_NOT_VALID_ROUTES_TIMER, ?LOAD_NG_ROUTE_VALID_TIME_IN_MILLIS + 500).
 
 -define(MEDIUM_LENGTH, 2). % number of bits to store address
@@ -74,6 +75,23 @@
 -define(ACK_REQUIRED, 0). % 0 = false, 1 = true
 -define(PATH_ACCUMULATION_ENABLED, 1). % 0 = false, 1 = true
 -define(SEQUENCE_NUMBER_MAX_VALUE, 256). %maximum value for sequence number
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 -define(NODE_PROPS_LIST, [{protocol, ?LOAD_NG},
@@ -107,18 +125,18 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {data_server_ip, "132.73.204.17"}
-                                %  {data_server_ip, "192.168.14.30"} %Dima home server
+                                %  {data_server_ip, "132.73.204.17"}
+                                 {data_server_ip, "192.168.14.30"} %Dima home server
                                 %  {data_server_ip, "127.0.0.1"}
                                 ]).
 
 
 
 %%% SIMPLE APPLICATION PROPERTIES
-% -define(APPLICATION_TYPE, simple_application).
--define(APPLICATION_TYPE, other).
+-define(APPLICATION_TYPE, simple_application).
+% -define(APPLICATION_TYPE, other).
 
--define(MESSAGE_SEND_INTERVAL, 5). % in second
+-define(MESSAGE_SEND_INTERVAL, 1). % in second
 
 -define(APP_PROPS_LIST, [{send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}

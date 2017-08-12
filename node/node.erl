@@ -266,14 +266,15 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{logger_ref 
 
 handle_info(send_node_status, #context{enabled = true} = Context)  ->
     ?LOGGER:preciseDebug("[~p]: Handle INFO Request(send_node_status)~n", [?MODULE]),
-    StartTime = utils:get_current_millis(),
-    Status = ?PROTOCOL:get_status(),
-    case Status of
-        {ok, Result}->
-            ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Result);
-        _ -> ok
-    end,
-    ?LOGGER:preciseDebug("[~p]: send_node_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
+    spawn(fun() ->
+        StartTime = utils:get_current_millis(),
+        Status = ?PROTOCOL:a_sync_get_status(),
+        case Status of
+            {ok, Result}->
+                ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Result);
+            _ -> ok
+        end,
+        ?LOGGER:preciseDebug("[~p]: send_node_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]) end),
 	{noreply, Context};
 
 handle_info(Request, Context)  ->

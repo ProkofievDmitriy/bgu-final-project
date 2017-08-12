@@ -208,7 +208,7 @@ handle_info(Request, StateName, StateData) ->
 %% ============================================================================================
 handle_event(Event, StateName, StateData) ->
     ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
-    {next_state, normal, StateData}.
+    {next_state, StateName, StateData}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================

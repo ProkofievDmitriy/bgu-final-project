@@ -145,7 +145,11 @@ init(Super_PID, DataLinkFsmPid) ->
     register(?MODEM_PORT, P),
     compile_c_port(),
     UartConfigResult = os:cmd("./scripts/uart_config.sh"),
-    ?LOGGER:debug("[~p]: UartConfigResult: ~p~n", [?MODULE, UartConfigResult]),
+    case UartConfigResult of
+        [] ->   ?LOGGER:debug("[~p]: UART CONFIGURED SUCCESSFULLY~n", [?MODULE]);
+        _ ->
+            ?LOGGER:critical("[~p]: UART FAILED TO CONFIG : Result: ~p~n~n", [?MODULE, UartConfigResult])
+    end,
     process_flag(trap_exit, true),
     PRG = "./" ++ ?PROGRAM_NAME,
     ?LOGGER:debug("[~p]: start port:  ~p~n", [?MODULE, PRG]),

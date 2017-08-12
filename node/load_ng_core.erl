@@ -12,7 +12,7 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 
--export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/3, send_a_sync/2, enable/1, disable/1, handle_incoming_message/2, get_status/1, reset/1]).
+-export([start/1, stop/1, updateBottomLevel/3, updateUpperLevel/3, send/3, send_a_sync/2, enable/1, disable/1, handle_incoming_message/2, get_status/1, a_sync_get_status/2, reset/1]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export
@@ -74,23 +74,6 @@ send_sync(FsmPid, {Type, Destination, Data})->
 
 send_a_sync(FsmPid, {Type, Destination, Data, PidToReply})->
     gen_fsm:send_event(FsmPid, {send_message, {Type, Destination, Data, PidToReply}}).
-    % StartTime = utils:get_current_millis(),
-    % Result = receive
-    %            {ok , sent} -> {ok , sent};
-    %            {error, Error} ->
-    %                {error, Error}
-    %            after 2 * ?NET_TRAVERSAL_TIME ->
-    %            ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination]),
-    %            ResultSyncSend = send_sync(FsmPid, {Type, Destination, Data}),
-    %            case ResultSyncSend of
-    %                {ok , sent} -> {ok, sent};
-    %                _ ->
-    %                    ?LOGGER:err("[~p]: send ASYNCH TIMEOUT EXCEEDED : ~p.~n", [?MODULE, utils:get_current_millis() - StartTime]),
-    %                   {error, timeout_exceeded}
-    %            end
-    %        end,
-    % ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, ?GET_TYPE_NAME(Type), Destination, Result]),
-    % Result.
 
 enable(FsmPid)->
     gen_fsm:sync_send_event(FsmPid, enable).
@@ -125,6 +108,10 @@ handle_incoming_message(FsmPid, Payload)->
 
 get_status(FsmPid) ->
     gen_fsm:sync_send_all_state_event(FsmPid, get_status, 30000).
+
+
+a_sync_get_status(FsmPid, PidToReply) ->
+    gen_fsm:send_all_state_event(FsmPid, {get_status, PidToReply}).
 
 
 reset(FsmPid) ->
@@ -254,16 +241,19 @@ active(remove_not_valid_routes, StateData)->
     end;
 
 active(remove_expired_rreq, StateData)->
-    ExpiredRREQ = query_expired_rreq(StateData#state.rreq_handling_set),
-    gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
-    case ExpiredRREQ of
-        [] -> {next_state, active, StateData};
+    spawn(fun() ->
+        ExpiredRREQ = query_expired_rreq(StateData#state.rreq_handling_set),
+        gen_fsm:send_event_after(?NET_TRAVERSAL_TIME, remove_expired_rreq),
+        case ExpiredRREQ of
+        [] -> ok;
         _ ->
             ?LOGGER:debug("[~p]: ACTIVE - remove_expired_rreq Routes number =  ~w.~n", [?MODULE, length(ExpiredRREQ)]),
             ?LOGGER:debug("[~p]: ACTIVE - remove_expired_rreq Routes : ~w.~n", [?MODULE, ExpiredRREQ]),
             lists:foreach(fun({Key, _Value}) -> ets:delete(StateData#state.rreq_handling_set, Key) end, ExpiredRREQ),
-            {next_state, active, StateData}
-    end;
+            ok
+        end
+    end),
+    {next_state, active, StateData};
 
 
 
@@ -445,9 +435,23 @@ handle_info(Request, StateName, StateData) ->
 %% ============================================================================================
 %% =========================================== A-Sync Event Handling =========================================
 %% ============================================================================================
-handle_event(Event, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle A-SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
-    {next_state, normal, StateData}.
+handle_event({get_status, PidToReply}, StateName, State) ->
+    spawn(fun()->
+        StartTime = utils:get_current_millis(),
+        ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
+        RoutingSet = query_valid_routes(State#state.routing_set),
+        ?LOGGER:preciseDebug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
+        RoutingSetList = [
+            {{destination, RoutingSetEntry#routing_set_entry.dest_addr},
+             {next_address, RoutingSetEntry#routing_set_entry.next_addr},
+             {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
+        ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
+        PidToReply ! [{routing_set, RoutingSetList}] end),
+    {next_state, StateName, State};
+
+handle_event(Event, StateName, State) ->
+    ?LOGGER:debug("[~p]: STUB Handle A-SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,State]),
+    {next_state, StateName, State}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================
