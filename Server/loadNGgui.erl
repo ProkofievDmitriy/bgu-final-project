@@ -24,9 +24,8 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
 	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp, buttonRemoveNode,
 	cmbTo}).
 
-  -record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent,
-                      numberOfDataMsgReceived, data_msg_avg_time, data_msg_avg_relay_length}).
-
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent,
+                    numberOfDataMsgReceived, data_msg_avg_time, data_msg_avg_relay_length}).
 
 %%%%%%%%%%%%
 %%%     MapEts: {{NodeNameAtom,NextNode},{Medium}}
@@ -571,7 +570,10 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 				Result = ets:lookup(NodesEts,SelectedNode),
 				case Result of
 					[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] ->
-							draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
+							%draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
+              io:format("draw map from SelectedNode ~p, RoutingSet ~p~n",[SelectedNode, RoutingSet]),
+
+      				draw_routes_from_node_to_each_node(DC, NodesEts, SelectedNode, RoutingSet),
 							configButtonUpdate(MediumMode ,ConfigButtons);
 				     [] -> ok
 			end
@@ -657,7 +659,30 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
 
 draw_routes_from_node(_, _, _,_,_) -> ok.
 
+draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, [])-> ok;
+draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, [{{destination, DestinationNode},_, _}|RoutingSet])->
+	draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts),
+	draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, RoutingSet).
 
+draw_routes_from_node_to_node(DC, SourceNode, SourceNode, NodesEts) -> ok;
+draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts) ->
+	io:format("draw_routes_from_node_to_node SourceNode ~p, DestinationNode ~p~n",[SourceNode, DestinationNode]),
+	[{SourceNode,{_, Location1, _,RoutingSet, _}}] = ets:lookup(NodesEts,SourceNode),
+	case findNodeInRoutingSet(DestinationNode, RoutingSet) of
+		{NextNode, Medium} ->
+			[{NextNode,{_, Location2, _,_, _}}] = ets:lookup(NodesEts,NextNode),
+			draw_route(DC, Location1,Location2, Medium),
+			draw_routes_from_node_to_node(DC, NextNode, DestinationNode, NodesEts);
+		_ ->	io:format("No Route to DestinationNode ~p from ~p RoutingSet: ~p~n",[DestinationNode,SourceNode,RoutingSet]),
+				ok
+	end.
+
+findNodeInRoutingSet(DestinationNode, [{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}}|RoutingSet]) ->
+	{makeAtom(Node), Medium};
+findNodeInRoutingSet(DestinationNode, [{{destination, Node1}, {_, _}}|RoutingSet]) ->
+	findNodeInRoutingSet(DestinationNode,RoutingSet);
+findNodeInRoutingSet(DestinationNode, []) ->
+	ok.
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
 %%%%
