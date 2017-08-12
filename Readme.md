@@ -2,9 +2,8 @@
 ####Routing and Distributed Monitoring in Smart PLC Networks (p-2017-063)               
 #####Reports :    [PDR](https://drive.google.com/open?id=0BwYXH0n9ZthMblJyOXNEZzBxWjg)      [PRE](https://drive.google.com/open?id=0BwYXH0n9ZthMT1l1dHlhZEI4Szg)       [PROGRESS1](https://drive.google.com/open?id=0BwYXH0n9ZthMdjl2YnhHRHBxdEE)       [PROGRESS2](https://drive.google.com/open?id=0BwYXH0n9ZthMOS13ck54SldrLUE)       [FINAL]()       [POSTER](https://drive.google.com/open?id=0B-tdbX-lO15iUGMxUEpsMDJFeHc)
 ---
-#### Node setup proggress:
->TODO
-1. Ensure that all properties configured to desired parameters in properties.hrl file:
+#### Environment setup proggress:
+##### Ensure that all properties configured to desired parameters in properties.hrl file:
 ```erlang data_server_ip ```
 ```erlang grafana_server_ip``` - set atom```erlang undefined``` if not relevant
 ```erlang APPLICATION_TYPE``` - set atom```erlang other``` for you application
@@ -12,7 +11,7 @@
 ```erlang MODULES_TO_FILTER``` - to filter modules from log
 ```erlang LOGGER_MODE``` - set atom```erlang file``` to allow background running of application - path to file no edisson```bash~/node/file.log```
 
-2. Define environment setup in  lab-env.txt file :
+##### Define environment setup in  lab-env.txt file :
 For example 
 ```
 132.73.199.156 node_1 dc_app dual
@@ -28,13 +27,12 @@ For example
 132.73.198.241 local stats_server not_relevant
 ```
 
-3. Run run-all-nodes.sh to generate starting line - ```scripts/run-all-nodes.sh scripts/dima-env-file.txt Unnamed``` where Unnamed is terminal profile, on lab machine it is Default instead
+##### Run run-all-nodes.sh to generate starting line - ```scripts/run-all-nodes.sh scripts/dima-env-file.txt Unnamed``` where Unnamed is terminal profile, on lab machine it is Default instead
 
-4. Run Generated line
+##### Run Generated line
 
 
 
->
 ```bash
 scripts/run-all-nodes.sh scripts/lab-env.txt Default % To generate command to run all environment configured in scripts/lab-env.txt
 
