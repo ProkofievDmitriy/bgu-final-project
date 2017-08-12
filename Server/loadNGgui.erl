@@ -49,7 +49,7 @@ init(WxServer) ->
     %%                          GUI Setup:                          %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%.
 
-    Frame = wxFrame:new(WxServer, ?wxID_ANY, "LOADng", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
+    Frame = wxFrame:new(WxServer, ?wxID_ANY, "Smart Meter Network Management Tool", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
     io:format("Frame: ~p~n",[Frame]),
     Panel = wxPanel:new(Frame),
 
@@ -334,7 +334,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
                     node_control_interface:initiate_transaction(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), wxTextCtrl:getValue(State#state.txtMsgSend)),
-                    % wxTextCtrl:clear(State#state.txtMsgSend),
+				                    % wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonUpdateNodesToFilter ->
                     io:format("ButtonUpdateNodesToFilter send: ~p~n Nodes: ~p~n",[wxTextCtrl:getValue(State#state.nodesToFilterList), wxChoice:getStringSelection(State#state.cmbTo)]),
@@ -348,6 +348,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 										node_control_interface:configuration_updated_from_gui ([SelectedNode, RadioState]),
                     io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
                     node_control_interface:update_configuration(SelectedNode,RadioState),
+					node_control_interface:reset_node(SelectedNode),
                     %rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
@@ -452,8 +453,9 @@ handle_info({update_metrics, Counters}, State) ->
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
                 "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nEnd to End Data Message Average Delay: " ++ float_to_list(Counters#counters.data_msg_avg_time) ++
-				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
+                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(Counters#counters.data_msg_avg_time)),
+				%  ++
+				% "\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
   {noreply, State};
 
 handle_info(E, State) ->
@@ -600,7 +602,7 @@ draw_nodes(DC, SelectedNode, [Head|RestNodes], NodesEts,NodeChoice, CmbTo) ->
 						io:format("TIMEOUT ~p~n",[NodeKey]),
 						ets:delete(NodesEts, NodeKey), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 						wxChoice:delete(NodeChoice, wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
-						wxChoice:delete(CmbTo, wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
+						wxChoice:delete(CmbTo, wxChoice:findString(CmbTo, atom_to_list(NodeKey)))
 					end;
 		_ ->
 			io:format("draw_nodes UNEXPECTED ERROR:  ~p~n",[Head])

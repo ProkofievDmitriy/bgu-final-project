@@ -36,7 +36,8 @@
                   transport_monitor_ref,
                   transport_properties,
                   application_pid,
-                  top_level, top_level_pid
+                  top_level, top_level_pid,
+                  enabled
                 }).
 
 
@@ -95,17 +96,20 @@ init(Properties) ->
         modem_port_pid = ModemPortPid,
         modem_port_restart_timer_interval = 30000,
         modem_port_properties = ModemPortProperties,
-        % top_level = ?TRANSPORT,
-        % top_level_pid = TransportPid
         top_level = ?NETWORK,
-        top_level_pid = NetworkPid
+        top_level_pid = NetworkPid,
+        enabled = true
 
     }}.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CALL's synchronous requests, reply is needed
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+handle_call(Request, From, #context{enabled = false} = Context) ->
+    ?LOGGER:debug("[~p]: LoadNG DISABLED, Ignoring ~w~n", [?MODULE, Request]),
+    {reply, ok, Context};
+
 handle_call({data_message, {Destination, Data}}, _From, Context) ->
     ?LOGGER:info("[~p]: data_message, Message: {~w, ~w}, transport pid = ~p~n", [?MODULE, Destination, Data, Context#context.transport_pid]),
     TopLevelModule = Context#context.top_level,
@@ -143,28 +147,39 @@ handle_call(get_status, _From, Context) ->
     ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, NetworkStatus ++ DataLinkStatus , Context};
 
-handle_call(reset, _From, Context) ->
-    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
-    ResetStatus = ?NETWORK:reset(Context#context.network_pid),
-    ResetStatus = ?TRANSPORT:reset(Context#context.transport_pid),
-    {reply, ResetStatus , Context};
-
-handle_call({update_nodes_to_filter, NodesToFilter}, _From, Context) ->
-    ?LOGGER:preciseDebug("[~p]: Handle CALL Request(update_nodes_to_filter), NodesToFilter: ~p ~n", [?MODULE, NodesToFilter]),
-    ResetStatus = ?DATA_LINK:update_nodes_to_filter(Context#context.data_link_pid, NodesToFilter),
-    {reply, ResetStatus , Context};
-
-
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:critical("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ handle_cast(enable, #context{ enabled = false} = Context) ->
+      ?LOGGER:debug("[~p]: CAST Request(enable)~n", [?MODULE]),
+      {noreply, Context#context{ enabled = true}};
+
+ handle_cast(Request, #context{enabled = false} = Context) ->
+     ?LOGGER:debug("[~p]: LoadNG DISABLED, Ignoring ~w~n", [?MODULE, Request]),
+     {noreply, Context};
+
  handle_cast({update_configuration, OptionsList}, Context) ->
      ?LOGGER:debug("[~p]: CAST Request(update_configuration), Options: ~w~n", [?MODULE, OptionsList]),
      ?DATA_LINK:set_state(Context#context.data_link_pid, OptionsList),
+     {noreply, Context};
+
+ handle_cast(disable, Context) ->
+     ?LOGGER:debug("[~p]: CAST Request(disable)~n", [?MODULE]),
+     {noreply, Context#context{ enabled = false}};
+
+ handle_cast({update_nodes_to_filter, NodesToFilter}, Context) ->
+     ?LOGGER:preciseDebug("[~p]: Handle CAST Request(update_nodes_to_filter), NodesToFilter: ~p ~n", [?MODULE, NodesToFilter]),
+     ?DATA_LINK:update_nodes_to_filter(Context#context.data_link_pid, NodesToFilter),
+     {noreply, Context};
+
+ handle_cast(reset, Context) ->
+     ?LOGGER:preciseDebug("[~p]: Handle CALL Request(get_status)~n", [?MODULE]),
+     ?NETWORK:reset(Context#context.network_pid),
+     ?TRANSPORT:reset(Context#context.transport_pid),
      {noreply, Context};
 
  handle_cast({data_message, {Destination, Data, PIDToResponse}}, Context) ->
@@ -215,7 +230,7 @@ handle_cast({get_status, PidToReply} , Context) ->
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    ?LOGGER:critical("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -226,40 +241,40 @@ handle_cast(Request, Context) ->
 
 %case DATA LINK crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{data_link_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("[~p]: DATA LINK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
+    ?LOGGER:critical("[~p]: DATA LINK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     DataLinkPid = ?DATA_LINK:start(Context#context.data_link_properties),
     ?MODEM_PORT:stop(),
     ?MODEM_PORT:start(DataLinkPid),
     bind_levels(?TRANSPORT, Context#context.transport_pid, ?DATA_LINK, DataLinkPid),
     DataLinkMonitorRef = erlang:monitor(process, DataLinkPid),
     NewContext = Context#context{data_link_monitor_ref = DataLinkMonitorRef, data_link_pid = DataLinkPid},
-    ?LOGGER:info("[~p]: DATA LINK AND MODEM PORT RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
+    ?LOGGER:critical("[~p]: DATA LINK AND MODEM PORT RESTARTED with pid: ~p.~n",[?MODULE, DataLinkPid]),
     {noreply, NewContext};
 
 %case LOADng Core crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{network_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("[~p]: NETWORK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
+    ?LOGGER:critical("[~p]: NETWORK crashed, reason: ~p, restarting application.~n",[?MODULE, Reason]),
     NetworkPid = ?NETWORK:start(Context#context.network_properties),
     bind_levels(?NETWORK, NetworkPid, ?TRANSPORT, Context#context.transport_pid),
     NetworkMonitorRef = erlang:monitor(process, NetworkPid),
     NewContext = Context#context{data_link_monitor_ref = NetworkMonitorRef, network_pid = NetworkPid, top_level_pid = NetworkPid},
-    ?LOGGER:info("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, NetworkPid]),
+    ?LOGGER:critical("[~p]: LOADng CORE RESTARTED with pid: ~p.~n",[?MODULE, NetworkPid]),
     {noreply, NewContext};
 
 %case Transport Core crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{transport_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:info("[~p]: TRANSPORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
+    ?LOGGER:critical("[~p]: TRANSPORT crashed, reason: ~p, restarting ...~n",[?MODULE, Reason]),
     TransportPid = ?TRANSPORT:start(Context#context.transport_properties),
     bind_levels(?TRANSPORT, TransportPid, ?DATA_LINK, Context#context.data_link_properties),
     bind_levels(?NETWORK, Context#context.network_pid, ?TRANSPORT, TransportPid),
     TransportMonitorRef = erlang:monitor(process, TransportPid),
     NewContext = Context#context{transport_monitor_ref = TransportMonitorRef, transport_pid = TransportPid},
-    ?LOGGER:info("[~p]: TRANSPORT restarted with pid: ~p.~n",[?MODULE, TransportPid]),
+    ?LOGGER:critical("[~p]: TRANSPORT restarted with pid: ~p.~n",[?MODULE, TransportPid]),
     {noreply, NewContext};
 
 %case Transport Core crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, Pid, Reason}, #context{modem_port_monitor_ref = Monitor_Ref} = Context) ->
-    ?LOGGER:info("[~p]: MODEM_PORT crashed, starting TIMER (~p)  to next restart ...~n",[?MODULE, Context#context.modem_port_restart_timer_interval]),
+    ?LOGGER:critical("[~p]: MODEM_PORT crashed, starting TIMER (~p)  to next restart ...~n",[?MODULE, Context#context.modem_port_restart_timer_interval]),
     TimerRef = erlang:start_timer(Context#context.modem_port_restart_timer_interval, self(), {'DOWN', Monitor_Ref , process, Pid, Reason} ),
     {noreply, Context#context{modem_port_restart_timer_ref = TimerRef}};
 
@@ -273,7 +288,7 @@ handle_info( {timeout, TimerRef , {'DOWN', Monitor_Ref , process, _Pid, Reason}}
     {noreply, NewContext};
 
 handle_info(Request, Context)  ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    ?LOGGER:critical("[~p]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 

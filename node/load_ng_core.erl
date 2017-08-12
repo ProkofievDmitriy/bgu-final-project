@@ -115,7 +115,7 @@ a_sync_get_status(FsmPid, PidToReply) ->
 
 
 reset(FsmPid) ->
-    gen_fsm:sync_send_all_state_event(FsmPid, reset).
+    gen_fsm:send_all_state_event(FsmPid, reset).
 
 %% ====================================================================
 %% Init
@@ -410,25 +410,15 @@ handle_sync_event(get_status, _From, StateName, State) ->
     ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
     {reply, [{routing_set, RoutingSetList}], StateName, State};
 
-handle_sync_event(reset, _From, StateName, State) ->
-    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
-    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =/= 0-> Key end),
-    RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
-    [ets:delete(State#state.routing_set, X) || X <- RoutingSet ],
-    ets:delete_all_objects(State#state.rreq_handling_set),
-    ets:delete_all_objects(State#state.pending_acknowledgements_set),
-    {reply, ok, StateName, State};
-
-
 handle_sync_event(Event, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
 	{reply, "Stub Reply", StateName, StateData}.
 %% ============================================================================================
 %% =========================================== INFO Handling =========================================
 %% ============================================================================================
 
 handle_info(Request, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Request, StateName,StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Request, StateName,StateData]),
     {next_state, StateName, StateData}.
 
 
@@ -449,15 +439,24 @@ handle_event({get_status, PidToReply}, StateName, State) ->
         PidToReply ! [{routing_set, RoutingSetList}] end),
     {next_state, StateName, State};
 
+handle_event(reset, StateName, State) ->
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
+    Query = ets:fun2ms(fun({Key, Entry}) when Entry#routing_set_entry.dest_addr =/= 0-> Key end),
+    RoutingSet = qlc:eval(ets:table(State#state.routing_set, [{traverse, {select, Query}}])),
+    [ets:delete(State#state.routing_set, X) || X <- RoutingSet ],
+    ets:delete_all_objects(State#state.rreq_handling_set),
+    ets:delete_all_objects(State#state.pending_acknowledgements_set),
+    {next_state, StateName, State};
+
 handle_event(Event, StateName, State) ->
-    ?LOGGER:debug("[~p]: STUB Handle A-SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,State]),
+    ?LOGGER:critical("[~p]: STUB Handle A-SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,State]),
     {next_state, StateName, State}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================
 %% ============================================================================================
 terminate(Reason, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
     ok.
 
 code_change(OldVsn, StateName, StateData, Extra) ->

@@ -11,7 +11,7 @@
 -include("./include/properties.hrl").
 -include("./include/vcb.hrl").
 
--record(context, {log_file}).
+-record(context, {log_file, error_log_file}).
 
 start()->
     {ok, PID} = gen_server:start({local, ?MODULE }, ?MODULE, [], []),
@@ -19,8 +19,9 @@ start()->
 
 init(_Props) ->
     {ok, File} = file:open(filename:absname("file.log"), write),
+    {ok, ErrorsFile} = file:open(filename:absname("errors_file.log"), write),
     io:format("[~p]: Opened file: ~p~n", [?MODULE, File]),
-    {ok, #context{log_file = File}}.
+    {ok, #context{log_file = File, error_log_file = ErrorsFile}}.
 
 
 
@@ -29,18 +30,14 @@ handle_info(Request, Context)  ->
 	{noreply, Context}.
 
 
-handle_cast({log, _Level, Message, Params}, Context) ->
-
-                    case ?LOGGER_MODE of
-                        file ->
-                            io:format(Context#context.log_file, Message, Params);
-                        dual ->
-                            io:format(Context#context.log_file, Message, Params),
-                            io:format(Message, Params);
-                        _ ->
-                            io:format(Message, Params)
-                        end,
-        {noreply, Context};
+handle_cast({log, Level, Message, Params}, Context) ->
+    handleLog(Context#context.log_file, Message, Params),
+    if (Level >= 3)->
+        duplicateErrorToFile(Context#context.error_log_file, Message, Params);
+    true ->
+        ok
+    end,
+    {noreply, Context};
 
 handle_cast(Request, Context) ->
     ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
@@ -61,16 +58,14 @@ code_change(_OldVsn, Context, _Extra) -> {ok, Context}.
 
 print(Level, LevelMessage, Message, Params) ->
     IsValidModule = isValidModule(Params),
-    if
-        IsValidModule ->
-            if (Level >= ?CURRENT_LOG_LEVEL) ->
-                    {Hours, Minutes, Seconds} = erlang:time(),
-                    Millis = utils:get_current_millis() rem 1000,
-                    gen_server:cast(?MODULE, {log, Level, "~p:~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds, Millis] ++ Params});
-                    true -> ok
-                end;
-                true -> ok
-            end.
+    case {IsValidModule, Level} of
+        {true, _} when Level >= ?CURRENT_LOG_LEVEL->
+            sendLog(Level, LevelMessage, Message, Params);
+        {false, _ } when Level >= 3  ->
+            sendLog(Level, LevelMessage, Message, Params);
+        _ ->
+         ok
+     end.
 
 info(Message, Params) ->
     print(1, "[INFO]   ", Message, Params).
@@ -88,7 +83,7 @@ preciseDebug(Message) ->
     debug(Message, []).
 
 dev(Message, Params) ->
-    print(5, "[TEMP]  ", Message, Params).
+    print(-2, "[TEMP]  ", Message, Params).
 dev(Message) ->
     debug(Message, []).
 
@@ -114,3 +109,28 @@ warn(Message) ->
 isValidModule([])-> true;
 isValidModule(Params)->
     not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).
+
+handleLog(LogFile, Message, Params)->
+    case ?LOGGER_MODE of
+        file ->
+            io:format(LogFile, Message, Params);
+        dual ->
+            io:format(LogFile, Message, Params),
+            io:format(Message, Params);
+        _ ->
+            io:format(Message, Params)
+    end.
+
+duplicateErrorToFile(LogFile, Message, Params)->
+    case ?LOGGER_MODE of
+        file ->
+            io:format(LogFile, Message, Params);
+        dual ->
+            io:format(LogFile, Message, Params);
+        _ -> ok
+    end.
+
+sendLog(Level, LevelMessage, Message, Params)->
+    {Hours, Minutes, Seconds} = erlang:time(),
+    Millis = utils:get_current_millis() rem 1000,
+    gen_server:cast(?MODULE, {log, Level, "~p:~p:~p:~p " ++ LevelMessage ++ Message, [Hours, Minutes, Seconds, Millis] ++ Params}).

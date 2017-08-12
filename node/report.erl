@@ -22,7 +22,8 @@
 %   Records
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--record(context, {node_name, data_server_interface, data_server_name, data_server_ip, connected_to_server, time_offset}).
+-record(context, {node_name, data_server_interface, data_server_name, data_server_ip,
+                  connected_to_server, grafana_server_ip, time_offset, mandatory_time_sync}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   API Functions Implementation
@@ -53,7 +54,9 @@ init(Properties) ->
     DataServerInterface = proplists:get_value(data_server_interface, Properties),
     DataServerName = proplists:get_value(data_server_name, Properties),
     DataServerIp = proplists:get_value(data_server_ip, Properties),
+    GrafanaServerIp = proplists:get_value(grafana_server_ip, Properties),
     NodeName = proplists:get_value(node_name, Properties),
+    MandatoryTimeSync = proplists:get_value(mandatory_time_sync, Properties),
     % Offset = ntp:ask(),
     spawn(fun()-> timer:sleep(1000), sync_time_offset() end),
     {ok, #context{
@@ -62,7 +65,9 @@ init(Properties) ->
         data_server_name = DataServerName,
         data_server_ip = DataServerIp,
         time_offset = 0,
-        connected_to_server = false
+        connected_to_server = false,
+        mandatory_time_sync = MandatoryTimeSync,
+        grafana_server_ip = GrafanaServerIp
          }}.
 
 
@@ -70,14 +75,17 @@ init(Properties) ->
 %   HANDLE CALL's synchronprepare_message_dataous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~w]: STUB Handle CALL Request(~w) from ~w, Context: ~w~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:critical("[~w]: STUB Handle CALL Request(~w) from ~w, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, time_offset = Offset} = Context) when Offset /= 0->
-    spawn(fun()-> utils:grafana_report(Type, Context#context.data_server_ip, DataList) end),
+handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, mandatory_time_sync = true, time_offset = Offset} = Context) when Offset == 0 ->
+     ?LOGGER:preciseDebug("[~w]: REPORT IGNORED - TIME NOT SYNCED . ~w ~n", [?MODULE, {Type, DataList}]);
+
+handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, mandatory_time_sync = MandatoryTimeSync, time_offset = Offset} = Context) when (MandatoryTimeSync == false) or (Offset /= 0) ->
+    spawn(fun()-> utils:grafana_report(Type, Context#context.grafana_server_ip, DataList) end),
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
     ?LOGGER:debug("[~w]: REPORT, ServerModuleInterface: ~w, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
@@ -92,15 +100,15 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, tim
             {noreply, Context#context{connected_to_server = false}}
     end;
 
+
 handle_cast({report, {Type, DataList} }, #context{connected_to_server = false} = Context) ->
-    spawn(fun()-> utils:grafana_report(Type, Context#context.data_server_ip, DataList) end),
+    spawn(fun()-> utils:grafana_report(Type, Context#context.grafana_server_ip, DataList) end),
     ?LOGGER:preciseDebug("[~w]: REPORT IGNORED - NOT CONNECTED TO DATA SERVER . ~w ~n", [?MODULE, {Type, DataList}]),
     connect_to_data_server(),
     {noreply, Context};
 
 
 handle_cast(connect_to_data_server, #context{connected_to_server = false} = Context) ->
-%TODO Pattern match in function definition to only not connected to server state
     ?LOGGER:preciseDebug("[~w]: Handle ResultCAST Request(connect_to_data_server) ~n", [?MODULE]),
     ServerNodeName = list_to_atom(atom_to_list(Context#context.data_server_name) ++ "@" ++ Context#context.data_server_ip),
     test_connection(ServerNodeName),
@@ -118,7 +126,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
             {noreply, Context}
     end;
 
-handle_cast(sync_time_offset, Context) ->
+handle_cast(sync_time_offset, #context{time_offset = 0} = Context) ->
     ServerModuleInterface = Context#context.data_server_interface,
     % Offset = ServerModuleInterface:getOffset(utils:get_current_millis()),
     % Offset = ntp:ask(),
@@ -129,7 +137,9 @@ handle_cast(sync_time_offset, Context) ->
     end,
     {noreply, Context#context{time_offset = Offset}};
 
-
+handle_cast(sync_time_offset, Context) ->
+    ?LOGGER:preciseDebug("[~w]: sync_time_offset IGNORED - ALLREADY SYNCED: offset : ~p ~n", [?MODULE, Context#context.time_offset]),
+    {noreply, Context};
 
 handle_cast(connect_to_data_server, #context{connected_to_server = true} = Context) ->
 ?LOGGER:preciseDebug("[~w]: connect_to_data_server IGNORED - ALLREADY CONNECTED~n", [?MODULE]),
@@ -137,7 +147,7 @@ handle_cast(connect_to_data_server, #context{connected_to_server = true} = Conte
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~w]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    ?LOGGER:critical("[~w]: STUB Handle CAST Request(~w), IGNORED ~n", [?MODULE, Request]),
     {noreply, Context}.
 
 
@@ -150,13 +160,13 @@ handle_cast(Request, Context) ->
 %   HANDLE INFO's
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_info(Request, Context)  ->
-    ?LOGGER:info("[~w]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
+    ?LOGGER:critical("[~w]: STUB Handle INFO Request(~w), Context: ~w~n", [?MODULE, Request, Context]),
 	{noreply, Context}.
 
 
 
 terminate(Reason, Context) ->
-    ?LOGGER:debug("[~w]: STUB terminating, reason ~w, state ~w~n", [?MODULE, Reason, Context]),
+    ?LOGGER:critical("[~w]: STUB terminating, reason ~w, state ~w~n", [?MODULE, Reason, Context]),
     ok.
 
 code_change(_OldVsn, Context, _Extra) -> {ok, Context}.

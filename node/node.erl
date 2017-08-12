@@ -147,7 +147,7 @@ init(GlobalProperties) ->
 %   HANDLE CALL's synchronous requests, reply is needed
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_call(Request, From, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
+    ?LOGGER:critical("[~p]: STUB Handle CALL Request(~w) from ~p, Context: ~w~n", [?MODULE, Request, From, Context]),
     {reply, ok, Context}.
 
 
@@ -209,17 +209,19 @@ handle_cast({initiate_transaction, {Destination, Data}}, Context) ->
 
 handle_cast(enable, Context)  ->
     ?LOGGER:info("[~p]: CAST Request(enable)~n", [?MODULE]),
+    ?PROTOCOL:enable(),
     ?PROTOCOL:reset(),
     {noreply, Context#context{enabled = true}};
 
 handle_cast(disable, Context)  ->
     ?LOGGER:info("[~p]: CAST Request(disable)~n", [?MODULE]),
     ?PROTOCOL:update_configuration(idle),
+    ?PROTOCOL:disable(),
     {noreply, Context#context{enabled = false}};
 
 
 handle_cast(Request, Context) ->
-    ?LOGGER:debug("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
+    ?LOGGER:critical("[~p]: STUB Handle CAST Request(~w), Context: ~w ~n", [?MODULE, Request, Context]),
     {noreply, Context}.
 
 
@@ -230,7 +232,7 @@ handle_cast(Request, Context) ->
 
 %case Application crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:debug("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ?LOGGER:critical("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     ApplicationType = Context#context.application_type,
     Application_Pid = ApplicationType:start_link(Context#context.application_properties),
     % Application_Pid = ?APPLICATION:start(Context#context.application_properties),
@@ -241,7 +243,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application
 
 %case Report Unit crashed, restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit_monitor_ref = Monitor_Ref} = Context)  ->
-    ?LOGGER:debug("[~p]: Report Unit crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
+    ?LOGGER:critical("[~p]: Report Unit crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     ReportUnitPid = ?REPORT_UNIT:start(Context#context.report_unit_properties),
     ReportUnitMonitorReference = erlang:monitor(process, ReportUnitPid),
     NewContext = Context#context{report_unit_monitor_ref = ReportUnitMonitorReference},
@@ -250,7 +252,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{report_unit
 %case Protocol crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_monitor_ref = Monitor_Ref} = Context)  ->
     CurrentProtocol = proplists:get_value(protocol, Context#context.node_properties),
-    ?LOGGER:debug("[~p]: Protocol ~p crashed on node ~p, reason: ~p, restarting protocol.~n",[?MODULE, CurrentProtocol, Context#context.node_name, Reason]),
+    ?LOGGER:critical("[~p]: Protocol ~p crashed on node ~p, reason: ~p, restarting protocol.~n",[?MODULE, CurrentProtocol, Context#context.node_name, Reason]),
     ProtocolPid = ?PROTOCOL:start(CurrentProtocol, Context#context.protocol_properties),
     Protocol_Monitor_Reference = erlang:monitor(process, ProtocolPid),
     NewContext = Context#context{application_monitor_ref = Protocol_Monitor_Reference},
@@ -259,7 +261,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{protocol_mo
 %case Protocol crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{logger_ref = Monitor_Ref} = Context)  ->
     LoggerPID = ?LOGGER:start(),
-    ?LOGGER:debug("[~p]: Logger ~p crashed on node ~p, reason: ~p, restarting Logger.~n",[?MODULE, ?LOGGER, Context#context.node_name, Reason]),
+    ?LOGGER:critical("[~p]: Logger ~p crashed on node ~p, reason: ~p, restarting Logger.~n",[?MODULE, ?LOGGER, Context#context.node_name, Reason]),
     LoggerREF = erlang:monitor(process, LoggerPID),
     NewContext = Context#context{logger_ref = LoggerREF},
     {noreply, NewContext};

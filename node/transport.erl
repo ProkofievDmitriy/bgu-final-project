@@ -59,7 +59,7 @@ handle_incoming_message(FsmPid, Message)->
     gen_fsm:send_event(FsmPid, {received_message, Message}).
 
 reset(FsmPid) ->
-    gen_fsm:sync_send_all_state_event(FsmPid, reset).
+    gen_fsm:send_all_state_event(FsmPid, reset).
 
 %% ====================================================================
 %% Behavioural functions
@@ -187,14 +187,8 @@ handle_sync_event({updateBottomLevel, BottomLevelModule, BottomLevelPid }, _From
 	{reply, ok, StateName, NewState};
 
 
-handle_sync_event(reset, _From, StateName, State) ->
-    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
-    ets:delete_all_objects(State#state.sessions_db),
-    {reply, ok, StateName, State};
-
-
 handle_sync_event(Event, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
 	{reply, "Stub Reply", StateName, StateData}.
 
 %% ============================================================================================
@@ -206,20 +200,26 @@ handle_info(Request, StateName, StateData) ->
 %% ============================================================================================
 %% ============================ A-Sync Event Handling =========================================
 %% ============================================================================================
-handle_event(Event, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
-    {next_state, StateName, StateData}.
+handle_event(reset, StateName, State) ->
+    ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(reset) ~n", [?MODULE]),
+    ets:delete_all_objects(State#state.sessions_db),
+    {next_state, StateName, State};
+
+
+handle_event(Event, StateName, State) ->
+    ?LOGGER:critical("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,State]),
+    {next_state, StateName, State}.
 
 %% ============================================================================================
 %% ======================================== Terminate =========================================
 %% ============================================================================================
 terminate(Reason, StateName, StateData) ->
     %TODO Proper terminate with all consequences
-    ?LOGGER:debug("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
     ok.
 
 code_change(OldVsn, StateName, StateData, Extra) ->
-    ?LOGGER:debug("[~p]: STUB Handle CODE_CHANGE Request, OldVsn: ~p, StateName: ~p, StateData: ~w, Extra: ~p.~n", [?MODULE, OldVsn, StateName, StateData, Extra]),
+    ?LOGGER:critical("[~p]: STUB Handle CODE_CHANGE Request, OldVsn: ~p, StateName: ~p, StateData: ~w, Extra: ~p.~n", [?MODULE, OldVsn, StateName, StateData, Extra]),
     {ok, StateName, StateData}.
 
 

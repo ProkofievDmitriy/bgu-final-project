@@ -10,7 +10,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %states export.
--export([idle/3, dual/3, dual/2, plc_only/3, rf_only/3, plc_only/2, rf_only/2]).
+-export([idle/3, idle/2, dual/3, dual/2, plc_only/3, rf_only/3, plc_only/2, rf_only/2]).
 %% ====================================================================
 %% API functions
 
@@ -96,6 +96,10 @@ idle(Event, _From, StateData) ->
     ?LOGGER:debug("[~p]: IDLE - (~p) IGNORING EVENT, StateData: ~w~n", [?MODULE, Event, StateData]),
      {reply, ok, dual, StateData}.
 
+
+ idle(Event, StateData) ->
+     ?LOGGER:debug("[~p]: ASYNC IDLE - (~p) IGNORING EVENT, StateData: ~w~n", [?MODULE, Event, StateData]),
+     {next_state, idle, StateData}.
 
 %% =========================================== DUAL =========================================
 
@@ -301,7 +305,7 @@ handle_sync_event({update_nodes_to_filter, NodesToFilterList}, _From, StateName,
 	{reply, ok, StateName, StateData#state{nodes_to_filter = NodesToFilterList}};
 
 handle_sync_event(Event, _From, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle SYNC EVENT Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName, StateData]),
 	{reply, "Stub Reply", StateName, StateData}.
 
 
@@ -322,7 +326,7 @@ handle_event({get_status, PidToReply}, StateName, StateData) ->
 
 
 handle_event(Event, StateName, StateData) ->
-    ?LOGGER:debug("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle INFO Request(~w), StateName: ~p, StateData: ~w~n", [?MODULE, Event, StateName,StateData]),
     {next_state, StateName, StateData}.
 
 %% ============================================================================================
@@ -330,7 +334,7 @@ handle_event(Event, StateName, StateData) ->
 %% ============================================================================================
 terminate(Reason, StateName, StateData) ->
     %TODO Proper terminate with all consequences
-    ?LOGGER:debug("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
+    ?LOGGER:critical("[~p]: STUB Handle TERMINATE Request, Reason: ~p, StateName: ~p, StateData: ~w~n", [?MODULE, Reason, StateName,StateData]),
     ok.
 
 code_change(OldVsn, StateName, StateData, Extra) ->

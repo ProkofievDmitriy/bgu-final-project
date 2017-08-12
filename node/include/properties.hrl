@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, transport, application_interface, stats_server_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -9,6 +9,7 @@
 -define(CURRENT_LOG_LEVEL, 0). % -1 - DEBUG+, 0- DEBUG, 1 - INFO, 2 - WARN, 3 - ERROR, 4 - Critical, 5 - TemoraryINFO
 
 -define(LOGGER, log).
+% -define(LOGGER_MODE, file).
 -define(LOGGER_MODE, dual).
 
 -define(LOAD_NG, load_ng).
@@ -125,9 +126,10 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
+                                 {mandatory_time_sync, true},
                                 %  {data_server_ip, "132.73.204.17"}
-                                 {data_server_ip, "192.168.14.30"} %Dima home server
-                                %  {data_server_ip, "127.0.0.1"}
+                                 {data_server_ip, "192.168.14.30"}, %Dima home server
+                                 {grafana_server_ip, "127.0.0.1"}
                                 ]).
 
 
