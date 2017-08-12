@@ -12,9 +12,6 @@
 %%%		Number of data messages
 %%%		Number of management message
 %%%
-%%% TODO:
-%%%   calculate average send to receive time.
-%%%   Log file
 %%%
 %%% @end
 %%% Created : 15. Jan 2017 1:40 AM
@@ -44,7 +41,8 @@
   code_change/3]).
 
 
--record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent,
+                    numberOfDataMsgReceived, data_msg_avg_time, data_msg_avg_relay_length}).
 
 -record(state, {counters, nodes_list, db, dm_ets, file_version, time_base}).
 %-record(event, {type, time, from, to, key, data}).
@@ -170,130 +168,15 @@ handle_call(Req, From, State) ->
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
 
-
-%**************************************************************************************
-%**********************   Management Server  Updated  *******************************
-%**************************************************************************************
-
-
-%%--------------------------------------------------------------------
-%%	----	node -> server cast management notifications	----------------------
-%%  ------------------------------------------------------------------
-
-%***************************************************************
-%**********************   Data Server  Updated  ****************
-%***************************************************************
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  A node has received a management message addressed for him  %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{management_message, received_message}, Data}, State = #state{db = DB, counters = Counters}) ->
-  UTIME = proplists:get_value(utime, Data),
-  Source = proplists:get_value(source, Data),
-  Destination = proplists:get_value(destination, Data),
-  Type = proplists:get_value(type, Data),
-
-  dets:insert(DB, {{management_message, received_message, UTIME}, {Source,Destination,Type}}),
-  NumberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived,
-%  io:format("stats_server got report about: Incoming management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-{noreply, State#state{counters = Counters#counters{numberOfManagementMsgReceived = NumberOfManagementMsgReceived + 1}}};
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  A node has Sent a management message  %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-handle_cast({{management_message, send_message}, Data}, State = #state{db = DB, counters = Counters}) ->
-
-  UTIME = proplists:get_value(utime, Data),
-  Source = proplists:get_value(source, Data),
-  Destination = proplists:get_value(destination, Data),
-  Type = proplists:get_value(type, Data),
-
-  dets:insert(DB, {{management_message, sent_message, UTIME}, {Source,Destination,Type}}),
-  NumberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent,
- % io:format("stats_server got report about: Sent management msg from ~p to ~p at ~p~n",[Source,Destination, UTIME]),
-{noreply, State#state{counters = Counters#counters{numberOfManagementMsgSent = NumberOfManagementMsgSent + 1}}};
-
-%%--------------------------------------------------------------------
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  A node has received a data message addressed for him  %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, received_message}, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
-
-  UTIME = proplists:get_value(utime, Data),
-  Source = proplists:get_value(source, Data),
-  Destination = proplists:get_value(destination, Data),
-  Id = proplists:get_value(id, Data),
-
-  NumberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived,
-  AvgTime = Counters#counters.data_msg_avg_time,
-  dets:insert(DB, {{data_message, received_message,Id}, {UTIME ,Source,Destination}}),
-  io:format("stats_server got report about: Incoming data msg ~p from ~p to ~p at ~p sent~n",[Id, Source,Destination, UTIME]),
-  io:format("Counters#counters.numberOfDataMsgReceived ~p ~n",[Counters#counters.numberOfDataMsgReceived]),
-
-  %[{Id,{StatrTIME,-1,Relays}}] = ets:lookup(DM_ets,Id),
-  Result = ets:lookup(DM_ets,Id),
-  ets:delete(DM_ets,Id),
-
-  case Result of
-      [{_, {Time, _, _}}|[]] ->
-          io:format("Message Traverse Time: ~p~n",[abs(UTIME - Time)]),
-          NewAvg = AvgTime + (abs(UTIME - Time) - AvgTime) / (NumberOfDataMsgReceived + 1),
-          UpdatedCounters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1,
-                                              data_msg_avg_time = round(NewAvg)},
-          {noreply, State#state{counters = UpdatedCounters}};
-
-     _ ->
-         io:format("Unexpected result : ~p~n",[Result]),
-         {noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1}}}
- end;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  A node has Sent a data message  %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({{data_message, send_message}, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
-
-  UTIME = proplists:get_value(utime, Data),
-  Source = proplists:get_value(source, Data),
-  Destination = proplists:get_value(destination, Data),
-  Id = proplists:get_value(id, Data),
-
-	NumberOfDataMsgSent = Counters#counters.numberOfDataMsgSent,
-  dets:insert(DB, {{data_message, sent_message,Id}, {UTIME, Source,Destination}}),
-  ets:insert(DM_ets,{Id,{UTIME,-1 ,0}}),
-
-	io:format("stats_server got report about: Sent data msg ~p from ~p to ~p at ~p~n",[Id, Source,Destination, UTIME]),
-{noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = NumberOfDataMsgSent + 1}}};
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% A node has passed a relay message %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-handle_cast({relay, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
-
-  UTIME = proplists:get_value(utime, Data),
-  Source = proplists:get_value(source, Data),
-  Destination = proplists:get_value(destination, Data),
-  Id = proplists:get_value(id, Data),
-  Node = proplists:get_value(node, Data),
-
-  NumberOfRelayMsg = Counters#counters.numberOfRelayMsg,
-  dets:insert(DB, {{data_message, relay_message, {Id, UTIME}}, {Source, Destination}}),
- % [{Id,{StartTime,EndTime ,Relays}}] = ets:lookup(DM_ets,Id),%%%%%%%%%%%%%%%%%%%%%
- % ets:insert(DM_ets,{Id,{StartTime,EndTime ,Relays+1}}),
-
-  io:format("stats_server got report about: Relay msg ~p from ~p to ~p through ~p at ~p~n",[Id, Source,Destination, Node, UTIME]),
-{noreply, State#state{counters = Counters#counters{numberOfRelayMsg = NumberOfRelayMsg + 1}}};
-
-handle_cast({states, From}, State) ->
-    % {AvgTime,AvgLength} = avrages(State#state.dm_ets),
-        %io:format("Stats AvgTime: ~p~n",[AvgTime]),
-        %io:format("Stats AvgLength: ~p~n",[AvgLength]),
-    % io:format("COUNTERS :  ~p~n",[State#state.counters]),
-
-    From!{update_metrics, State#state.counters},
-    {noreply, State};
+  handle_cast({states, From}, State = #state{counters=Counters}) ->
+      {AvgTime,AvgLength} = average(State#state.dm_ets),
+          io:format("Stats AvgTime: ~p~n",[AvgTime]),
+          io:format("Stats AvgLength: ~p~n",[AvgLength]),
+      io:format("COUNTERS :  ~p~n",[State#state.counters]),
+      NewCounters = Counters#counters{data_msg_avg_time = AvgTime, data_msg_avg_relay_length = AvgLength},
+      NewState = State#state{counters = NewCounters},
+      From!{update_metrics, NewCounters},
+      {noreply, NewState};
 
 %%  ------------------------------------------------------------------
 %%	-------------------   server Debug ONLY     ----------------------
@@ -332,21 +215,39 @@ handle_cast({export_db, Time}, State = #state{db = DB}) ->
     {ok,NewDB} = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ Time ++ ".db"}]),
   {noreply, State#state{db = NewDB}};
 
-
-
 handle_cast(stop, State) ->
     io:format("stats_server got stop Messages~n"),
     {stop, normal,State};
 
-handle_cast({{app_data_message , Dre , Type}, {Data}}, State = #state{db = DB}) ->
-      dets:insert(DB, {{app_data_message , Dre , Type},{Data}}),
-      io:format("stats_server got app_data_message ~p, ~p, ~p~n", [Dre , Type, Data]),
-      {noreply, State};
 
-handle_cast({{app_info, Type} ,Data}, State = #state{db = DB}) ->
-          dets:insert(DB, {{app_info, Type} , {Data}}),
-          io:format("stats_server got app_info  ~p, ~p~n", [Type, Data]),
-          {noreply, State};
+
+  handle_cast({Type, Data}, State = #state{dm_ets = DM_ets, db = DB, counters = Counters}) ->
+    dets:insert(DB, {Type , Data}),
+    io:format("stats_server got Message ~p about ~p~n", [Type, Data]),
+    case Type of
+      relay ->
+        update_dm_ets(DM_ets, relay, proplists:get_value(id, Data), proplists:get_value(utime, Data)),
+        {noreply, State#state{counters = Counters#counters{numberOfRelayMsg = Counters#counters.numberOfRelayMsg + 1}}};
+
+      {data_message, send_message} ->
+        update_dm_ets(DM_ets, send_message, proplists:get_value(id, Data), proplists:get_value(utime, Data)),
+        {noreply, State#state{counters = Counters#counters{numberOfDataMsgSent = Counters#counters.numberOfDataMsgSent + 1}}};
+
+      {data_message, received_message} ->
+        update_dm_ets(DM_ets, received_message, proplists:get_value(id, Data), proplists:get_value(utime, Data)),
+        {noreply, State#state{counters = Counters#counters{numberOfDataMsgReceived = Counters#counters.numberOfDataMsgReceived + 1}}};
+
+      {management_message, send_message} ->
+        {noreply, State#state{counters = Counters#counters{numberOfManagementMsgSent = Counters#counters.numberOfManagementMsgSent + 1}}};
+
+      {management_message, received_message} ->
+        {noreply, State#state{counters = Counters#counters{numberOfManagementMsgReceived = Counters#counters.numberOfManagementMsgReceived + 1}}};
+      Other ->
+        io:format("stats_server got unresolved report ~p~n",[Other]),
+        {noreply, State}
+    end;
+
+
 
 handle_cast(Msg, State) ->
     io:format("~n~n~nstats_server got cast with bad arg:~p~n~n~n", [Msg]),
@@ -456,28 +357,61 @@ export_db(DB, File_Name) ->
   dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]).
 
 
+update_dm_ets(DM_ets, relay, Id, _UTIME) ->
+  Curr = ets:lookup(DM_ets,Id),
+  case Curr of
+    [] ->
+      ets:insert(DM_ets,{Id,{0, 0, 1}});
+    [{Id,{SentTime, ReceivedTime, Relays}}] ->
+      ets:insert(DM_ets,{Id,{SentTime, ReceivedTime, Relays + 1}})
+  end;
 
+update_dm_ets(DM_ets, received_message, Id, UTIME) ->
+  Curr = ets:lookup(DM_ets,Id),
+  case Curr of
+    [] ->
+      ets:insert(DM_ets,{Id,{0, UTIME, 0}});
+    [{Id,{SentTime,0, Relays}}] ->
+      ets:insert(DM_ets,{Id,{SentTime, UTIME, Relays}})
+  end;
+update_dm_ets(DM_ets, send_message, Id, UTIME) ->
+  Curr = ets:lookup(DM_ets,Id),
+  case Curr of
+    [] ->
+      ets:insert(DM_ets,{Id,{UTIME,0 ,0}});
+    [{Id,{0,ReceivedTime, Relays}}] ->
+      ets:insert(DM_ets,{Id,{UTIME, ReceivedTime, Relays}})
+  end.
 
 %%%===================================================================
 %%% Nodes table ets functions
 %%%===================================================================
 
-%{AvgTime,AvgLength} = avrages(State#state.dm_ets),
+%{AvgTime,AvgLength} = average(State#state.dm_ets),
+average(DB) ->
+    average(DB, ets:first(DB),0.0,0,0.0,0).
 
-% avrages(DB) ->
-%     avrages(DB, ets:first(DB),0.0,0,0.0,0).
-%
-% avrages(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
-% avrages(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
-% avrages(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> {SumTime/NumberTime,SumLength/NumberLength};
-% avrages(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
-%   [{Key,Data}] = ets:lookup(DB,Key),
-%   case Data of
-%     {StartTime,EndTime ,Relays} when is_integer(StartTime) andalso is_integer(EndTime) ->
-%       avrages(DB, ets:next(DB,Key), SumTime + (EndTime - StartTime), NumberTime+1, SumLength + Relays, NumberLength+1);
-%     _ ->
-%       avrages(DB, ets:next(DB,Key), SumTime, NumberTime, SumLength, NumberLength)
-%   end.
+  %%--------------------------------------------------------------------
+  %% @private
+  %% @doc
+  %%  Calculate the average route length and the average data message
+  %%  time to reach destination
+  %% @spec average(DataBase, KeyToCalculate,CurrentTimeSum, CurrentTimeCount, CurrentLengthSum, CurrentLengthCount) ->
+  %%                                   {AverageTime, AverageLength}
+  %% @end
+  %%--------------------------------------------------------------------
+average(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
+average(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
+average(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> {SumTime/NumberTime,SumLength/NumberLength};
+average(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
+  [{Key,Data}] = ets:lookup(DB,Key),
+  case Data of
+    {StartTime,EndTime ,Relays} when StartTime > 0 andalso EndTime > 0 ->
+    %  io:format("Line 414: ~p",[Data]),
+      average(DB, ets:next(DB,Key), SumTime + (EndTime - StartTime), NumberTime+1, SumLength + Relays, NumberLength+1);
+    _ ->
+      average(DB, ets:next(DB,Key), SumTime, NumberTime, SumLength, NumberLength)
+  end.
 
 
  get_current_millis() ->
