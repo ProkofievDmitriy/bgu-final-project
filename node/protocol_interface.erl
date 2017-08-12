@@ -59,19 +59,14 @@ handle_send_message(Type, Destination, Data)->
     StartTime = utils:get_current_millis(),
     Result = receive
                {ok , sent} -> {ok , sent}
-            %    {error, Error} ->
-                %    {error, Error}
                after (2 * ?NET_TRAVERSAL_TIME) ->
                    ?LOGGER:debug("[~p]: Send ASYNCH ~p after timeout to ~p.~n", [?MODULE, Type, Destination]),
-                   ResultSyncSend = gen_server:call(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data}}, ?TIMEOUT),
-                   case ResultSyncSend of
-                       {ok , sent} -> {ok, sent};
-                       {error, timeout_exceeded} ->
+                   gen_server:cast(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data, self()}}),
+                   receive
+                       {ok , sent} -> {ok, sent}
+                       after 500 ->
                            ?LOGGER:err("[~p]: send TIMEOUT EXCEEDED : ~p.~n", [?MODULE, utils:get_current_millis() - StartTime]),
-                          {error, timeout_exceeded};
-                       Else ->
-                           ?LOGGER:critical("[~p]: send UENEXPECTED ERROR : ~p.~n", [?MODULE, Else]),
-                          Else
+                           {error, timeout_exceeded}
                    end
            end,
     ?LOGGER:info("[~p]: Send ~p to ~p , Call Result: ~p.~n", [?MODULE, Type, Destination, Result]),
