@@ -4,17 +4,17 @@
 ---
 #### Environment setup proggress:
 ##### Ensure that all properties configured to desired parameters in properties.hrl file:
-```erlang data_server_ip ```
+```data_server_ip ```
 
-```erlang grafana_server_ip``` - set atom```erlang undefined``` if not relevant
+```grafana_server_ip``` - set atom```undefined``` if not relevant
 
-```erlang APPLICATION_TYPE``` - set atom```erlang other``` for you application
+```APPLICATION_TYPE``` - set atom```other``` for you application
 
-```erlang meters_list```
+```meters_list```
 
-```erlang MODULES_TO_FILTER``` - to filter modules from log
+```MODULES_TO_FILTER``` - to filter modules from log
 
-```erlang LOGGER_MODE``` - set atom```erlang file``` to allow background running of application - path to file no edisson```bash~/node/file.log```
+```LOGGER_MODE``` - set atom```file``` to allow background running of application - path to file no edisson```~/node/file.log```
 
 
 ##### Define environment setup in  lab-env.txt file :
