@@ -874,9 +874,9 @@ forward_packet(Packet, StateData) ->
 forward_packet(Packet, StateData, NextHop) ->
     Payload = serialize_packet(Packet#load_ng_packet{source = StateData#state.self_address}),
     BottomLevelModule = StateData#state.bottom_level_module,
-    {SendStatus, Message} = BottomLevelModule:send(StateData#state.bottom_level_pid, {NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload),
+    BottomLevelModule:send_async(StateData#state.bottom_level_pid, {NextHop#routing_set_entry.medium, NextHop#routing_set_entry.next_addr}, Payload),
     ?LOGGER:info("[~p]: ~p packet forwarded to ~w, Packet uuid: ~w.~n", [?MODULE, ?GET_TYPE_NAME(Packet#load_ng_packet.type), NextHop, Packet#load_ng_packet.uuid]),
-    {SendStatus, Message, NextHop}.
+    {ok, sent, Packet}.
 
 
 get_destination_to_forward(Packet)->

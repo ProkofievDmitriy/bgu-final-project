@@ -31,9 +31,10 @@ handle_info(Request, Context)  ->
 
 
 handle_cast({log, Level, Message, Params}, Context) ->
-    handleLog(Context#context.log_file, Message, Params),
+    writeToFile(Context#context.log_file, Message, Params),
+    writeToConsole(Message, Params),
     if (Level >= 3)->
-        duplicateErrorToFile(Context#context.error_log_file, Message, Params);
+        writeToFile(Context#context.error_log_file, Message, Params);
     true ->
         ok
     end,
@@ -110,18 +111,17 @@ isValidModule([])-> true;
 isValidModule(Params)->
     not lists:member(lists:nth(1, Params), ?MODULES_TO_FILTER).
 
-handleLog(LogFile, Message, Params)->
+writeToConsole(Message, Params)->
     case ?LOGGER_MODE of
-        file ->
-            io:format(LogFile, Message, Params);
+        file -> ok;
+            % io:format(LogFile, Message, Params);
         dual ->
-            io:format(LogFile, Message, Params),
             io:format(Message, Params);
         _ ->
             io:format(Message, Params)
     end.
 
-duplicateErrorToFile(LogFile, Message, Params)->
+writeToFile(LogFile, Message, Params)->
     case ?LOGGER_MODE of
         file ->
             io:format(LogFile, Message, Params);
