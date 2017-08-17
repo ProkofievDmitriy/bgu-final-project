@@ -24,8 +24,8 @@ handle_info/2,handle_cast/2, handle_call/3, handle_event/2, handle_sync_event/3]
 	buttonUpdateNodesToFilter, nodesToFilterList, buttonStartApp, buttonRemoveNode,
 	cmbTo}).
 
--record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent,
-                    numberOfDataMsgReceived, data_msg_avg_time, data_msg_avg_relay_length}).
+-record(counters, {numberOfRelayMsg, numberOfManagementMsgSent, numberOfManagementMsgReceived, numberOfDataMsgSent, numberOfDataMsgReceived, data_msg_avg_time}).
+
 
 %%%%%%%%%%%%
 %%%     MapEts: {{NodeNameAtom,NextNode},{Medium}}
@@ -49,7 +49,7 @@ init(WxServer) ->
     %%                          GUI Setup:                          %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%.
 
-    Frame = wxFrame:new(WxServer, ?wxID_ANY, "Smart Meter Network Management Tool", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
+    Frame = wxFrame:new(WxServer, ?wxID_ANY, "LOADng", [{size,{?X_SIZE, ?Y_SIZE+40}}]),
     io:format("Frame: ~p~n",[Frame]),
     Panel = wxPanel:new(Frame),
 
@@ -282,14 +282,18 @@ handle_event(#wx{event = #wxMouse{type = left_up, x = X, y = Y}},State = #state{
 						{noreply,State#state{selectedNode = N}}
 				end;
 			true ->
-            		[{_,{Time, _, Mode,RoutingSet, NodesToFilterList}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
-		            io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
-		            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet, NodesToFilterList}}),
-		            %io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
+			case State#state.selectedNode of
+				all -> ok;
+				_ ->            		
+					[{_,{Time, _, Mode,RoutingSet, NodesToFilterList}}] = ets:lookup(State#state.nodesEts,State#state.selectedNode),
+			            io:format("~n~nUpdate location SelectedNode: ~p~n", [State#state.selectedNode]),
+			            ets:insert(State#state.nodesEts,{State#state.selectedNode,{Time, {X,Y}, Mode,RoutingSet, NodesToFilterList}}),
+			            %io:format("~n~nPlace node On: ~p,~p~n~n~n",[X,Y]),
 					wxToggleButton:setValue(UpdateLocation,false),
 					wxTextCtrl:setValue(State#state.nodesToFilterList, NodesToFilterList),
 
 					{noreply,State}
+				end
 			end;
 
 handle_event(#wx{event=#wxCommand{type = command_choice_selected, cmdString=Ex}}, State) ->
@@ -334,7 +338,7 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
         ButtonSendMSG ->
                     io:format("buttonSendMSG send: ~p~n TO: ~p~n",[wxTextCtrl:getValue(State#state.txtMsgSend), wxChoice:getStringSelection(State#state.cmbTo)]),
                     node_control_interface:initiate_transaction(SelectedNode, list_to_atom(wxChoice:getStringSelection(State#state.cmbTo)), wxTextCtrl:getValue(State#state.txtMsgSend)),
-				                    % wxTextCtrl:clear(State#state.txtMsgSend),
+                    % wxTextCtrl:clear(State#state.txtMsgSend),
                     {noreply,State};
         ButtonUpdateNodesToFilter ->
                     io:format("ButtonUpdateNodesToFilter send: ~p~n Nodes: ~p~n",[wxTextCtrl:getValue(State#state.nodesToFilterList), wxChoice:getStringSelection(State#state.cmbTo)]),
@@ -348,7 +352,6 @@ handle_event(#wx{id=ID, event=#wxCommand{type=command_button_clicked}},
 										node_control_interface:configuration_updated_from_gui ([SelectedNode, RadioState]),
                     io:format("~n~n~n AAAA ~p ~n~n~n~n",[checkRadio(State#state.configButtons)]),
                     node_control_interface:update_configuration(SelectedNode,RadioState),
-					node_control_interface:reset_node(SelectedNode),
                     %rpc:cast(SelectedNode, node_control_interface, update_configuration, [SelectedNode, checkRadio(State#state.configButtons)]),
                     io:format("ButtonSendConfig~n"),
                     {noreply,State};
@@ -453,8 +456,8 @@ handle_info({update_metrics, Counters}, State) ->
                 "\nNumber Of DataMsgSent = "++ integer_to_list(Counters#counters.numberOfDataMsgSent) ++
                 "\nNumber Of DataMsgReceived = "++ integer_to_list(Counters#counters.numberOfDataMsgReceived) ++
                 "\nNumber Of RelayMsg = "++ integer_to_list(Counters#counters.numberOfRelayMsg) ++
-                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(round(Counters#counters.data_msg_avg_time))  ++
-				"\nAverage Data Message Route Length: " ++ float_to_list(Counters#counters.data_msg_avg_relay_length)),
+                "\nEnd to End Data Message Average Delay: " ++ integer_to_list(Counters#counters.data_msg_avg_time) ++
+				"\nAverage Data Message Route Length: " ++ float_to_list(0.0)),
   {noreply, State};
 
 handle_info(E, State) ->
@@ -539,12 +542,7 @@ update_map_ets_2(MapEts, Node, [{{destination,NextNode},{next_address,NextNode},
     update_map_ets_2(MapEts, Node, NodeRoutingMap);
 
 update_map_ets_2(MapEts, Node, [_|NodeRoutingMap])->
-	update_map_ets_2(MapEts, Node, NodeRoutingMap);
-
-update_map_ets_2(A, B, C)->
-	io:format("IGNORING update_map_ets_2 - received Values: A: ~p, B: ~p, C: ~p", [A, B, C]),
-	ok.
-
+	update_map_ets_2(MapEts, Node, NodeRoutingMap).
 
 find_node(_,'$end_of_table',_) -> ok;
 find_node(NodesEts,Key, MouseLocation) ->
@@ -571,10 +569,7 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 				Result = ets:lookup(NodesEts,SelectedNode),
 				case Result of
 					[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] ->
-							%draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
-              io:format("draw map from SelectedNode ~p, RoutingSet ~p~n",[SelectedNode, RoutingSet]),
-
-      				draw_routes_from_node_to_each_node(DC, NodesEts, SelectedNode, RoutingSet),
+							draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
 							configButtonUpdate(MediumMode ,ConfigButtons);
 				     [] -> ok
 			end
@@ -601,7 +596,7 @@ draw_nodes(DC, SelectedNode, [Head|RestNodes], NodesEts,NodeChoice, CmbTo) ->
 						io:format("TIMEOUT ~p~n",[NodeKey]),
 						ets:delete(NodesEts, NodeKey), %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 						wxChoice:delete(NodeChoice, wxChoice:findString(NodeChoice, atom_to_list(NodeKey))),
-						wxChoice:delete(CmbTo, wxChoice:findString(CmbTo, atom_to_list(NodeKey)))
+						wxChoice:delete(CmbTo, wxChoice:findString(NodeChoice, atom_to_list(NodeKey)))
 					end;
 		_ ->
 			io:format("draw_nodes UNEXPECTED ERROR:  ~p~n",[Head])
@@ -660,37 +655,6 @@ draw_routes_from_node(DC, SelectedNode, Location, NodesEts,[{{destination, Node1
 
 draw_routes_from_node(_, _, _,_,_) -> ok.
 
-draw_routes_from_node_to_each_node(_DC, _NodesEts, _SourceNode, undefined)-> ok;
-draw_routes_from_node_to_each_node(_DC, _NodesEts, _SourceNode, [])-> ok;
-draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, [{{destination, DestinationNode},_, _}|RoutingSet])->
-	draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts),
-	draw_routes_from_node_to_each_node(DC, NodesEts, SourceNode, RoutingSet).
-
-draw_routes_from_node_to_node(DC, SourceNode, SourceNode, NodesEts) -> ok;
-draw_routes_from_node_to_node(DC, SourceNode, DestinationNode, NodesEts) ->
-	io:format("draw_routes_from_node_to_node SourceNode ~p, DestinationNode ~p~n",[SourceNode, DestinationNode]),
-	[{SourceNode,{_, Location1, _,RoutingSet, _}}] = ets:lookup(NodesEts,SourceNode),
-	case findNodeInRoutingSet2(DestinationNode, RoutingSet) of
-		{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}} ->
-			NextNode = makeAtom(Node),
-			[{NextNode,{_, Location2, _,_, _}}] = ets:lookup(NodesEts,NextNode),
-			draw_route(DC, Location1,Location2, Medium),
-			draw_routes_from_node_to_node(DC, NextNode, DestinationNode, NodesEts);
-		_ ->	io:format("No Route to DestinationNode ~p from ~p RoutingSet: ~p~n",[DestinationNode, SourceNode,RoutingSet]),
-				ok
-	end.
-
-findNodeInRoutingSet(DestinationNode, [{{destination, DestinationNode}, {next_address, Node}, {medium, Medium}} | RoutingSet]) ->
-	{makeAtom(Node), Medium};
-findNodeInRoutingSet(DestinationNode, [{{destination, Node1}, {_, _}}|RoutingSet]) ->
-	findNodeInRoutingSet(DestinationNode,RoutingSet);
-findNodeInRoutingSet(DestinationNode, []) ->
-	ok.
-
-findNodeInRoutingSet2(DestinationNode, undefined)->
-	ok;
-findNodeInRoutingSet2(DestinationNode,RoutingSet)->
-	lists:keyfind({destination, DestinationNode}, 1, RoutingSet).
 
 %%%%
 %%  Draws a line (representing a communication line) from Location1 to Location2 according to Medium
