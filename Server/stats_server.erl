@@ -210,9 +210,9 @@ handle_cast({export_db, Time}, State = #state{db = DB}) ->
     io:format("stats_server got cast with export_db~n"),
     A = dets:close(DB),
 
-    B = file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ "Last_Date"),
+    B = file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ Time ++ ".db"),
     io:format("RES: A ~p~nB: ~p~n",[A,B]),
-    {ok,NewDB} = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ Time ++ ".db"}]),
+    {ok,NewDB} = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}, {type, duplicate_bag}]),
   {noreply, State#state{db = NewDB}};
 
 handle_cast(stop, State) ->
@@ -292,7 +292,8 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
+terminate(_Reason,  State = #state{db = DB}) ->
+  dets:close(DB),
 	io:format("isg server terminated!!!~n"),
   ok.
 
@@ -351,12 +352,6 @@ stringTime({{YY,MM,DD},{HH,MO,_}}) ->
   "DB" ++ integer_to_list(HH) ++ ": " ++ integer_to_list(MO) ++ "-" ++
   integer_to_list(DD) ++ "." ++ integer_to_list(MM) ++ "." ++ integer_to_list(YY).
 
-export_db(DB, File_Name) ->
-  dets:close(DB),
-
-
-  dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}]).
-
 
 update_dm_ets(DM_ets, relay, Id, _UTIME) ->
   Curr = ets:lookup(DM_ets,Id),
@@ -409,7 +404,7 @@ average(DB) ->
   %%--------------------------------------------------------------------
 average(_, '$end_of_table',0.0,0, _,_) -> {0.0,0.0};
 average(_, '$end_of_table',_,_, 0.0,0) -> {0.0,0.0};
-average(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) -> 
+average(_, '$end_of_table',SumTime,NumberTime, SumLength,NumberLength) ->
 io:format("SumTime ~p,NumberTime ~p, SumLength ~p,NumberLength ~p~n",[SumTime,NumberTime, SumLength,NumberLength]),
 {SumTime/NumberTime,SumLength/NumberLength};
 average(DB, Key, SumTime, NumberTime, SumLength, NumberLength) ->
