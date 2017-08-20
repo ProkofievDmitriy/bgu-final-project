@@ -329,7 +329,7 @@ send_dreq(My_protocol, [H|T], Seq) ->
 %%      Bit_message = message_to_bit ({dreq,H,Seq}),
 %%      My_protocol ! Bit_message,
       My_protocol ! {dreq,H,Seq},
-      log:preciseDebug("sent"),
+      log:preciseDebug("sent~n"),
       _ = report_sent_dreq(H,Seq),
       send_dreq(My_protocol, T, Seq);
 

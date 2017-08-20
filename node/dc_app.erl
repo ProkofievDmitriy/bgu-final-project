@@ -232,9 +232,8 @@ collecting(timeout,State) ->
   log:debug("[~p]  received TIMEOUT event in state collecting, State data:~n
     Nrs: ~p, Ter8: ~p, Ter: ~p, Sn: ~p~n" ,
     [?MODULE,State#state.nrs,State#state.rd,State#state.ter,State#state.sn ]),
-  Nrs_new = merge_and_delete_unresponsive(State#state.nrs,State#state.rd,collecting,State#state.sn),
   Ter8_new = merge_and_delete_unresponsive(State#state.rd,State#state.nrs,collecting,State#state.sn),
-  if Nrs_new == [] ->
+  if Ter8_new == [] ->
     Result = check_phase2_exp(State#state.exp_counter, State#state.sn),
     case Result of
       finish -> {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
@@ -255,13 +254,16 @@ collecting(timeout,State) ->
         [?MODULE,State#state.sn]),
       if State#state.term_times == ?MAX_TERMINALS_TIMES ->
         log:info("[~p]  some terminals didn't respond, merging with NRS  ~n",[?MODULE]),
-        UpdatedState = State#state{ rd = Ter8_new, nrs = Nrs_new},
+%%        UpdatedState = State#state{ rd = Ter8_new, nrs = Nrs_new},
+        UpdatedState = State#state{ nrs = [], rd = Ter8_new},
         NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,timeout),
         {next_state, collecting, NewState};
         true ->
           TermTimes = State#state.term_times + 1,
           log:info("[~p]  trying to reach terminals for the ~p time ~n",
             [?MODULE,TermTimes]),
+%%          UpdatedState = State#state{nrs = Nrs_new,term_times = TermTimes},
+          Nrs_new = lists:subtract(merge_and_delete_unresponsive(State#state.nrs,State#state.rd,collecting,State#state.sn),State#state.rd),
           UpdatedState = State#state{nrs = Nrs_new,term_times = TermTimes},
           NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,timeout),
           {next_state, collecting, NewState}
@@ -414,7 +416,7 @@ prepare_for_phase_2(State)->
   app_utils:insert_nodes_to_tracker(State#state.meters),
   State#state.timer ! stop,
   Sn = State#state.sn +1,
-  Nrs = State#state.meters,
+  Nrs = lists:subtract(State#state.meters,State#state.ter),
   Rd = State#state.ter,
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,Sn]),
   _ = app_utils:send_dreq(State#state.my_protocol, Rd, Sn),
@@ -468,7 +470,7 @@ prepare_for_another_iteration_of_phase_2(State,TimerFlag)->
 
 prepare_for_reinitialization(State,Event) ->
   app_utils:clear_routing_tables(State),
-  case Event of rd_empty -> State#state.timer!stop  end,
+  if Event == rd_empty -> State#state.timer!stop; true->[]  end,
   Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?BETWEEN_EXP_TIMEOUT]),
   NewState = State#state{timer = Timerpid},
   NewState.
