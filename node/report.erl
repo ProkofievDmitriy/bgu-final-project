@@ -82,7 +82,8 @@ handle_call(Request, From, Context) ->
 %   HANDLE CAST's a-synchronous requests
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, mandatory_time_sync = true, time_offset = Offset} = Context) when Offset == 0 ->
-     ?LOGGER:preciseDebug("[~w]: REPORT IGNORED - TIME NOT SYNCED . ~w ~n", [?MODULE, {Type, DataList}]);
+     ?LOGGER:preciseDebug("[~w]: REPORT IGNORED - TIME NOT SYNCED . ~w ~n", [?MODULE, {Type, DataList}]),
+     {noreply, Context};
 
 handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, mandatory_time_sync = MandatoryTimeSync, time_offset = Offset} = Context) when (MandatoryTimeSync == false) or (Offset /= 0) ->
     spawn(fun()-> utils:grafana_report(Type, Context#context.grafana_server_ip, DataList) end),
@@ -126,11 +127,12 @@ handle_cast(connect_to_data_server, #context{connected_to_server = false} = Cont
             {noreply, Context}
     end;
 
-handle_cast(sync_time_offset, #context{time_offset = 0} = Context) ->
+handle_cast(sync_time_offset, #context{time_offset = 0, mandatory_time_sync = MandatoryTimeSync} = Context) ->
     ServerModuleInterface = Context#context.data_server_interface,
-    % Offset = ServerModuleInterface:getOffset(utils:get_current_millis()),
-    % Offset = ntp:ask(),
-    Offset = sntp:get_offset(),
+    Offset = case MandatoryTimeSync of
+        false -> ServerModuleInterface:getOffset(utils:get_current_millis());
+        true -> sntp:get_offset()
+    end,
     ?LOGGER:debug("[~w]: sync_time_offset - received offset = ~p ~n", [?MODULE, Offset]),
     if Offset =:= 0 -> spawn(fun()-> timer:sleep(1000), sync_time_offset() end);
         true -> ok

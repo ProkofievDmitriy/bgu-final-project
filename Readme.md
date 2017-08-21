@@ -6,6 +6,8 @@
 ##### Ensure that all properties configured to desired parameters in properties.hrl file:
 ```data_server_ip ```
 
+```mandatory_time_sync ``` - true to sync with ntp protocol, false - to sync in front of Management Server
+
 ```grafana_server_ip``` - set atom```undefined``` if not relevant
 
 ```APPLICATION_TYPE``` - set atom```other``` for you application
@@ -18,7 +20,7 @@
 
 
 ##### Define environment setup in  lab-env.txt file :
-For example 
+For example
 ```
 132.73.199.156 node_1 dc_app dual
 132.73.199.232 node_10 sem dual
@@ -33,7 +35,7 @@ For example
 132.73.198.241 local stats_server not_relevant
 ```
 
-##### Run run-all-nodes.sh to generate starting line 
+##### Run run-all-nodes.sh to generate starting line
 ```scripts/run-all-nodes.sh scripts/dima-env-file.txt Unnamed``` where Unnamed is terminal profile, on lab machine it is Default instead
 
 ##### Run Generated line

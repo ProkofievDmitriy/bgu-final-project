@@ -45,7 +45,7 @@
 %**************************************************************************************
 
 export(StringName) ->
-  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now(), StringName}).
+  (catch gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now(), StringName})).
 
 %% ---------------------------------------------------------------------------------------------------------
 %%                    Application -> Server functionality requests (for Deddy to fill)
@@ -54,20 +54,20 @@ export(StringName) ->
 clear_routing_tables() ->
     % clear routing tables on all nodes
     Server = global:whereis_name(loadNGgui),
-    wx_object:cast(Server, {resetAllNodes}),
+    (catch wx_object:cast(Server, {resetAllNodes})),
     {ok, cleared}.
 
 remove_stations(ListOfNodes)->
     % remove all the nodes in ListOfNodes from the network
     Server = global:whereis_name(loadNGgui),
-    wx_object:cast(Server, {remove_stations,ListOfNodes}),
+    (catch wx_object:cast(Server, {remove_stations,ListOfNodes})),
     {ok,removed}.
 
 update_medium(ListOfNodesAndMediums)->
     % update configurations for the given ListOfNodesAndMediums where each element is a tuple {NodeName, MediumType},
     % MediumType can be: plc_only , rf_only , dual
     Server = global:whereis_name(loadNGgui),
-    wx_object:cast(Server, {update_medium,ListOfNodesAndMediums}),
+    (catch wx_object:cast(Server, {update_medium,ListOfNodesAndMediums})),
 
     {ok, updated}.
 
@@ -81,7 +81,6 @@ report(Message) ->
     report(Type, ReportData).
 
 internal_report(Type, Data)->
-    % UTIME = isg_time:now_now(),
     ?LOGGER:preciseDebug("[~p]: REPORT to stats_server : Type: ~p, Data: ~p~n",[?MODULE, Type, Data]),
     case Type of
         node_state ->
@@ -90,8 +89,10 @@ internal_report(Type, Data)->
             Reply =(catch wx_object:cast(Server, {Type, Data})),
                 Reply;
         _ ->
-            Reply =(catch gen_server:cast({global, ?STATS_SERVER}, {Type, Data })),
-                Reply
+            Server2 = global:whereis_name(?STATS_SERVER),
+            ?LOGGER:debug("[~p]: Stats Server found : ~p~n",[?MODULE, Server2]),
+            Reply =(catch gen_server:cast(Server2, {Type, Data})),
+            Reply
     end.
 
 report(Type, Data)->

@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, modem_port, data_link, protocol_interface, protocol_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, report, stats_server_interface, modem_port, protocol_interface, protocol_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -126,7 +126,7 @@
 %%% REPORTING UNIT PROPERTIES
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
-                                 {mandatory_time_sync, true},
+                                 {mandatory_time_sync, false},
                                  {data_server_ip, "132.73.208.119"},
                                 %  {data_server_ip, "192.168.14.30"}, %Dima home server
                                  {grafana_server_ip, "132.73.208.119"}
