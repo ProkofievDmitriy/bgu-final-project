@@ -400,7 +400,7 @@ delete_unresponsive_nodes([H|T], Nrs,State,Sn)->
   end.
 
 check_phase1_exp(CurrentExp, CurrentSession) when ?AMR_MODE == naive ->
-  if CurrentSession == ?PHASE1_COUNT ->     % finished required times of phase 2 per experiment
+  if CurrentSession-1 == ?PHASE1_COUNT ->     % finished required times of phase 2 per experiment
     if CurrentExp == ?EXP_COUNT -> finish;    % done experimenting
       true ->reinitialize                     % start next experiment
     end;
@@ -418,7 +418,7 @@ check_phase1_exp(CurrentExp,_CurrentSession) ->
   end.
 
 check_phase2_exp(CurrentExp, CurrentSession)->
-  if CurrentSession == ?PHASE2_COUNT ->     % finished required times of phase 2 per experiment
+  if CurrentSession-1 == ?PHASE2_COUNT ->     % finished required times of phase 2 per experiment
     if CurrentExp == ?EXP_COUNT -> finish;    % done experimenting
       true ->reinitialize                     % start next experiment
     end;

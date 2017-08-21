@@ -41,7 +41,7 @@
 -define(EXP_ID, "1").
 -define(METERS, [node_4,node_6,node_9,node_10]).
 -define(MEDIUMS,[{node_1, plc_only},{node_6,dual},{node_4,dual},{node_9,dual},{node_10,dual}]).
--define(AMR_MODE, naive).
+-define(AMR_MODE, am).
 -define(PHASE1_COUNT, 1).
 -define(PHASE2_COUNT, 1).
 -define(EXP_COUNT, 1).
