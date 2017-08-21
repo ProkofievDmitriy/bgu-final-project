@@ -36,17 +36,17 @@
 
 
 % ========================== experiment properties========================
--define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
+-define(TEST_MODE, local). % local - no OTP behavior | integrated - with OTP behavior
 -define(EXP_MODE, gui). %% hardcoded / gui
 -define(EXP_ID, "1").
 -define(METERS, [node_4,node_6,node_9,node_10]).
 -define(MEDIUMS,[{node_1, plc_only},{node_6,dual},{node_4,dual},{node_9,dual},{node_10,dual}]).
--define(AMR_MODE, am).
--define(PHASE1_COUNT, 1).
+-define(AMR_MODE, naive).
+-define(PHASE1_COUNT, 2).
 -define(PHASE2_COUNT, 0).
 -define(EXP_COUNT, 1).
 
-
+-define(NAIVE_RD_LENGTH,1).
 % ================================ macros ================================
 % for external protocol use only.
 -define(DC_MODULE, dc).

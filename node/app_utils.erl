@@ -16,7 +16,7 @@
 -compile(export_all).
 -export([open_report_file/1,report_start_of_experiment/1,report_unresponsive_node/2,
   report_next_session/2,report_sent_dreq/2,report_sent_dreq_failed/2,report_received_drep/3]).
--export([hand_shake/3,random_elements/1,delete_elements/2,report_averages/0,
+-export([hand_shake/3,random_elements/1,delete_elements/2,report_averages/1,
   create_and_initialize_sets/1,update_tracker_requests/2,update_tracker_requests_time/2,
   insert_requests/2,insert_time/1,update_tracker/1,timer/2,send_dreq/3,extract_nodes_from_drep/2]).
 
@@ -104,6 +104,14 @@ report(Type,Data) ->
   Fd = get(reporting_file),
   io:format(Fd,"~w , ~w~n",[Type,Data]),
   ok.
+
+
+export_db(Name)->
+  if ?TEST_MODE == integrated ->
+    stats_server_interface:export(Name);
+    true -> []
+  end.
+
 
 update_mediums([],State) -> State;
 update_mediums( [{Node,Medium}|T] ,State)->
@@ -193,7 +201,9 @@ selected_elements(List,[H|T],New)->
   selected_elements(List,T,[lists:nth(H,List)|New]).
 
 random_elements(List) ->
-  Length = trunc(math:sqrt(lists:flatlength(List))),
+  if ?AMR_MODE == naive -> Length = ?NAIVE_RD_LENGTH;
+    true-> Length = trunc(math:sqrt(lists:flatlength(List)))
+  end,
   Indexes = random_indexes(erlang:length(List),Length,[]),
   selected_elements(List,Indexes,[]).
 
@@ -253,7 +263,7 @@ insert_requests(Nodes, Sn) ->
   [{_,{Avg, Round,Count}}]= ets:lookup(stats,avg_reqs),
   Current = erlang:length(Nodes),
   if Round =/= Sn ->
-    log:err("[~p] insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring insertion",
+    log:err("[~p] insert_requests Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring insertion~n",
       [?MODULE,Round,Sn]),
     ok;
 
@@ -267,7 +277,7 @@ insert_requests(Nodes, Sn) ->
 insert_time(Sn) ->
   [{_,{Avg,Round,_Start}}] = ets:lookup(stats,avg_round_time),
   if Round =/= Sn ->
-    log:err("[~p]  insert_time Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring         insertion",[?MODULE,Round,Sn]),
+    log:err("[~p]  insert_time Sn missmatch. popped Sn: ~p, inserted Sn: ~p ignoring insertion~n",[?MODULE,Round,Sn]),
     ok;
     true ->
       _Ok = ets:insert(stats, {avg_round_time,{Avg,Round,get_current_millis()}}),
@@ -281,9 +291,9 @@ update_tracker([H|T])->
   _Ok = ets:insert(tracker, {H,Val+1}),
   update_tracker(T).
 
-report_averages() ->
-  Avg_reqs = extract_avg_reqs(),
-  Avg_time = extract_avg_time(),
+report_averages(Sn) ->
+  Avg_reqs = extract_avg_reqs(Sn),
+  Avg_time = extract_avg_time(Sn),
   _Ok = report_to_server([{average_data_requests_per_round, Avg_reqs}, {average_time_per_round,Avg_time}]),
   ok.
 
@@ -291,18 +301,20 @@ report_to_server(List) ->
   log:info("[~p]  sending stats report: ~p~n",[?MODULE,List]),
   ok.
 
-extract_avg_reqs() ->
+extract_avg_reqs(Sn) ->
   [{_,{Avg,Round,Count}}] = ets:lookup(stats,avg_reqs),
   New_avg = (Avg* (Round) +Count) / (Round),
-  _Ok = ets:insert(stats, {avg_reqs,{New_avg,Round+1,0}}),
+  Add = if Sn == 0 -> 0; true -> 1 end,
+  _Ok = ets:insert(stats, {avg_reqs,{New_avg,Round+Add,0}}),
   New_avg.
 
-extract_avg_time() ->
+extract_avg_time(Sn) ->
   [{_,{Avg,Round,Start}}] = ets:lookup(stats,avg_round_time),
   End = get_current_millis(),
   Current = End-Start,
   New_avg = (Avg* (Round) +Current) / (Round),
-  _Ok = ets:insert(stats, {avg_round_time,{New_avg, Round+1,0}}),
+  Add = if Sn == 0 -> 0; true -> 1 end,
+  _Ok = ets:insert(stats, {avg_round_time,{New_avg, Round+Add,0}}),
   New_avg.
 
 

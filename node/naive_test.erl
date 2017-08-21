@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 01. Aug 2017 11:06
 %%%-------------------------------------------------------------------
--module(dc_app).
+-module(naive_test).
 -author("liya").
 
 -behaviour(gen_fsm).
@@ -285,8 +285,8 @@ handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To 
     Nrs = lists:subtract(State#state.nrs,Nodes),
     Rd = lists:subtract(State#state.rd,Nodes),
     if ?AMR_MODE =/= naive ->
-      Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]);
-      true -> Ter = []
+       Ter = lists:umerge([lists:subtract(State#state.ter,Nodes),[V]]);
+       true -> Ter = []
     end,
     ets:insert(mr_ets, Data),
     log:debug("[~p] updating state data {nrs: ~p, rd: ~p, ter: ~p }~n",[?MODULE,Nrs,Rd,Ter]),
@@ -438,7 +438,7 @@ prepare_for_phase_1(State,Event)->
     Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?COLLECTING_TIMEOUT]);
     true->
       Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?DISCOVERING_TIMEOUT])
-  end,
+      end,
   log:info("[~p]  sending dreq to: ~p with sn ~p~n", [?MODULE,Rd,Sn]),
   NewState = State#state{
     rd = Rd,
