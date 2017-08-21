@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, stats_server_interface, modem_port, data_link, protocol_interface, report, protocol_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, modem_port, data_link, protocol_interface, protocol_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -23,8 +23,8 @@
 %%% NODE PROPERTIES
 %-define(NETWORK_DEVICE, "enp2s0").
 
--define(NETWORK_DEVICE, "wlp3s0").
-% -define(NETWORK_DEVICE, "wlan0").
+% -define(NETWORK_DEVICE, "wlp3s0").
+-define(NETWORK_DEVICE, "wlan0").
 
 -define(NODE_RESOURCES, [layer_interface,
                          ?LOGGER,
@@ -129,7 +129,7 @@
                                  {mandatory_time_sync, true},
                                  {data_server_ip, "132.73.208.119"},
                                 %  {data_server_ip, "192.168.14.30"}, %Dima home server
-                                 {grafana_server_ip, "127.0.0.1"}
+                                 {grafana_server_ip, "132.73.208.119"}
                                 ]).
 
 
@@ -143,8 +143,5 @@
 -define(APP_PROPS_LIST, [{send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
-                        %  {meters_list, [node_7]}
-                         {meters_list, [node_10, node_4, node_6, node_9]}
-                        %  {meters_list, [node_10, node_4, node_7, node_14]}
-                        %  {meters_list, [node_22, node_25]}
+{meters_list, [node_2, node_3, node_4, node_5, node_7, node_8, node_9, node_10, node_11]}
                         ]).

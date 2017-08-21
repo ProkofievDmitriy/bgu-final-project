@@ -137,6 +137,10 @@ handle_cast(sync_time_offset, #context{time_offset = 0} = Context) ->
     end,
     {noreply, Context#context{time_offset = Offset}};
 
+handle_cast(sync_time_offset, #context{mandatory_time_sync = false} = Context) ->
+    ?LOGGER:preciseDebug("[~w]: sync_time_offset IGNORED - NOT MANDATORY TO SYNCH: offset : ~p ~n", [?MODULE, Context#context.time_offset]),
+    {noreply, Context};
+
 handle_cast(sync_time_offset, Context) ->
     ?LOGGER:preciseDebug("[~w]: sync_time_offset IGNORED - ALLREADY SYNCED: offset : ~p ~n", [?MODULE, Context#context.time_offset]),
     {noreply, Context};

@@ -1,0 +1,25 @@
+1. create your script: vi /home/root/startup_ping.sh
+#!/bin/bash
+
+sleep 1m
+ping 132.73.199.156 -c 20
+
+1.1 chmod +x /home/root/startup_ping.sh
+
+
+2. create service file: vi /etc/systemd/system/my-bootup.service
+[Unit]
+Description = Setting up Edison BLE
+
+
+[Service]
+ExecStart =/bin/bash /home/root/startup_ping.sh
+
+[Install]
+WantedBy = multi-user.target
+
+3.run: systemctl enable my-bootup.service
+
+
+
+4. remove network connections: vi /etc/wpa_supplicant/wpa_supplicant.conf

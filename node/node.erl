@@ -137,7 +137,9 @@ init(GlobalProperties) ->
         report_unit_properties = ReportUnitProperties,
         node_status_timer = Timer,
         logger_ref = LoggerREF,
-        enabled = true
+        enabled = true,
+        ip = IP,
+        mac = MAC
     },
     ?LOGGER:info("[~p]: Node: ~p, is up with context: ~p .~n", [?MODULE, NodeName, Context]),
 
@@ -278,7 +280,7 @@ handle_info(send_node_status, #context{enabled = true} = Context)  ->
         Status = ?PROTOCOL:a_sync_get_status(),
         case Status of
             {ok, Result}->
-                ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Result);
+                ?REPORT_UNIT:report(?NODE_STATUS_REPORT, Result ++ [{node_ip, Context#context.ip},{node_mac, Context#context.mac}]);
             _ -> ok
         end,
         ?LOGGER:preciseDebug("[~p]: send_node_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]) end),

@@ -86,7 +86,7 @@ internal_report(Type, Data)->
     case Type of
         node_state ->
             Server = global:whereis_name(loadNGgui),
-            ?LOGGER:preciseDebug("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
+            ?LOGGER:debug("[~p]: WxServer found : ~p~n",[?MODULE, Server]),
             Reply =(catch wx_object:cast(Server, {Type, Data})),
                 Reply;
         _ ->
