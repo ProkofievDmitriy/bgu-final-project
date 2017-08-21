@@ -356,7 +356,7 @@ terminate(Reason, StateName, State) ->
   case Reason of
       {shutdown, {done_experiment_number,Exp_counter}} ->
         log:debug("[~p] handling end of experiment number ~p~n",[?MODULE,State#state.exp_counter]),
-        Name = "exp_"++ erlang:integer_to_list(Exp_counter),
+        Name = "exp_"++ ?EXP_ID,
         stats_server_interface:export(Name);
       Reason ->[],
       log:critical("[~p] Unexpected SHUTDOWN reason: ~p ~n",[?MODULE,Reason])
@@ -408,7 +408,7 @@ check_phase1_exp (CurrentExp) ->
   end.
 
 check_phase2_exp(CurrentExp, CurrentSession)->
- if CurrentSession-1 == ?PHASE2_COUNT ->     % finished required times of phase 2 per experiment
+ if CurrentSession == ?PHASE2_COUNT ->     % finished required times of phase 2 per experiment
    if CurrentExp == ?EXP_COUNT -> finish;    % done experimenting
      true ->reinitialize                     % start next experiment
    end;

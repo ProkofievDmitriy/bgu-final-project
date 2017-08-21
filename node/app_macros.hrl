@@ -25,7 +25,7 @@
   term_times}).
 
 
--record(sem_state, {
+-record(sem_state,{
   my_pid,
   my_node,
   my_protocol,
@@ -36,7 +36,7 @@
 
 
 % ========================== experiment properties========================
-
+-define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
 -define(EXP_MODE, gui). %% hardcoded / gui
 -define(EXP_ID, "1").
 -define(METERS, [node_4,node_6,node_9,node_10]).
@@ -67,7 +67,6 @@
 
 %================================ properties ================================
 
--define(TEST_MODE, integrated). % local - no OTP behavior | integrated - with OTP behavior
 
 %%-define(DISCOVERING_TIMEOUT,30000).
 %%-define(COLLECTING_TIMEOUT,30000).
