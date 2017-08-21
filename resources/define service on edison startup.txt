@@ -18,7 +18,7 @@ ExecStart =/bin/bash /home/root/startup_ping.sh
 [Install]
 WantedBy = multi-user.target
 
-3.run: systemctl enable my-bootup.service
+3.run: systemctl disable my-bootup.service; systemctl enable my-bootup.service
 
 
 

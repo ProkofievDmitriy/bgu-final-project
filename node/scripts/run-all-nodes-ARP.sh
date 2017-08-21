@@ -57,10 +57,10 @@ do
     fi
   fi
 done
-#add stats server
-CMD="$CMD $(concat $MYIP local stats_server not_relevant $2)"
 #add node_1
 CMD="$CMD $(concat $1 node_1 dc_app dual $2)"
+#add stats server
+CMD="$CMD $(concat $MYIP local stats_server not_relevant $2)"
 NODES="[$NODES]"
 echo "starting nodes : $NODES"
 newNodesList="{meters_list, $NODES}"
