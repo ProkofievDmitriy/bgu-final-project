@@ -45,7 +45,7 @@
 %**************************************************************************************
 
 export(StringName) ->
-  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
+  gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now(), StringName}).
 
 %% ---------------------------------------------------------------------------------------------------------
 %%                    Application -> Server functionality requests (for Deddy to fill)

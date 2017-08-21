@@ -231,6 +231,11 @@ handle_cast(Request, Context) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %case Application crashed. restart it
+handle_info( {'DOWN', Monitor_Ref , process, _Pid, {shutdown, {done_experiment_number,Exp_counter}}}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
+    ?LOGGER:critical("[~p]: Application shuted down on node ~p, NOT restarting application.~n",[?MODULE, Context#context.node_name]),
+    {noreply, Context};
+
+%case Application crashed. restart it
 handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application_monitor_ref = Monitor_Ref} = Context)  ->
     ?LOGGER:critical("[~p]: Application crashed on node ~p, reason: ~p, restarting application.~n",[?MODULE, Context#context.node_name, Reason]),
     ApplicationType = Context#context.application_type,
@@ -238,7 +243,7 @@ handle_info( {'DOWN', Monitor_Ref , process, _Pid, Reason}, #context{application
     % Application_Pid = ?APPLICATION:start(Context#context.application_properties),
     % ?PROTOCOL:hand_shake(Application_Pid),
     Application_Monitor_Reference = erlang:monitor(process, Application_Pid),
-    NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference},
+    NewContext = Context#context{application_monitor_ref = Application_Monitor_Reference, application_pid = Application_Pid},
     {noreply, NewContext};
 
 %case Report Unit crashed, restart it

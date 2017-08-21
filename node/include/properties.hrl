@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, stats_server_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, stats_server_interface, modem_port, data_link, protocol_interface, report, protocol_interface]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -127,16 +127,16 @@
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
                                  {mandatory_time_sync, true},
-                                %  {data_server_ip, "132.73.204.17"}
-                                 {data_server_ip, "192.168.14.30"}, %Dima home server
+                                 {data_server_ip, "132.73.208.119"},
+                                %  {data_server_ip, "192.168.14.30"}, %Dima home server
                                  {grafana_server_ip, "127.0.0.1"}
                                 ]).
 
 
 
 %%% SIMPLE APPLICATION PROPERTIES
--define(APPLICATION_TYPE, simple_application).
-% -define(APPLICATION_TYPE, other).
+% -define(APPLICATION_TYPE, simple_application).
+-define(APPLICATION_TYPE, other).
 
 -define(MESSAGE_SEND_INTERVAL, 1). % in second
 

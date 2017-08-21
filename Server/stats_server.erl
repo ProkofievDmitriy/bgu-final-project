@@ -206,11 +206,14 @@ handle_cast({printStats}, State = #state{counters=Counters}) ->
 %%  ------------------------------------------------------------------
 %%	----      Export database to file at end of the day  ----------
 %%  ------------------------------------------------------------------
-handle_cast({export_db, Time}, State = #state{db = DB}) ->
+handle_cast({export_db, Time, Name}, State = #state{db = DB}) ->
     io:format("stats_server got cast with export_db~n"),
-    A = dets:close(DB),
+    {ok,File} = file:open(?TEMP_DETS_FILE_DIR ++ Name ++ ".txt", write),
+    FUNC = fun(X) -> io:format(File, "~w~n", [X]), continue end,
+    dets:traverse(DB, FUNC),
 
-    B = file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ Time ++ ".db"),
+    A = dets:close(DB),
+    B = file:rename(?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db",?TEMP_DETS_FILE_DIR ++ Name ++ ".db"),
     io:format("RES: A ~p~nB: ~p~n",[A,B]),
     {ok,NewDB} = dets:open_file(?TEMP_DETS_FILE,[{file, ?TEMP_DETS_FILE_DIR ++ ?TEMP_DETS_FILE ++ ".db"}, {type, duplicate_bag}]),
   {noreply, State#state{db = NewDB}};

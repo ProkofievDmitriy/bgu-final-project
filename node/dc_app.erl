@@ -169,7 +169,9 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
   if Nrs_new == [] ->
     Result = check_phase1_exp(State#state.exp_counter),
     case Result of
-      finish -> {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
+      finish ->
+      log:info("[~p]************** FINISHED EXPERIMENT *******************~n",[?MODULE]),
+      {stop,{shutdown,{done_experiment_number,State#state.exp_counter}},State};
       reinitialize ->
         log:info("[~p]~~~~~~~~~~~~FINISHED EXPERIMENT N. ~p, STARTING OVER ~~~~~~~~~~~~~~~~~~~~~n",
           [?MODULE, State#state.exp_counter]),
@@ -329,7 +331,7 @@ handle_event(tables_cleared_gui, StateName, State)->
 
 
 handle_event(Event,StateName,State) ->
-  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
+  log:err("[~p] EVENT  ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
     [?MODULE,self(),Event,StateName,State]),
   {next_state, StateName, State}.
 
@@ -344,7 +346,7 @@ handle_sync_event(get_state, StateName, StateData) ->
 
 
 handle_info(Info, StateName, State) ->
-  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
+  log:err("[~p] INFO  ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
     [?MODULE,self(),Info,StateName,State]),
   {next_state, StateName, State}.
 
@@ -352,10 +354,12 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, StateName, State) ->
   State#state.timer ! stop,
   case Reason of
-      {done_experiment_number,Exp_counter} ->
+      {shutdown, {done_experiment_number,Exp_counter}} ->
+        log:debug("[~p] handling end of experiment number ~p~n",[?MODULE,State#state.exp_counter]),
         Name = "exp_"++ erlang:integer_to_list(Exp_counter),
         stats_server_interface:export(Name);
-      Reason ->[]
+      Reason ->[],
+      log:critical("[~p] Unexpected SHUTDOWN reason: ~p ~n",[?MODULE,Reason])
   end,
 
   log:info("[~p]  terminating with info: reason : ~p, state: ~p,~n state data: ~p~n",

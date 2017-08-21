@@ -220,7 +220,7 @@ active({send_message, {Type, Destination, Data, PIDToAnswer}}, StateData) ->
                     {next_state, active, NewState}
             end;
         wait ->
-            PIDToAnswer ! {error, timeout_exceeded},
+            % PIDToAnswer ! {error, timeout_exceeded},
             {next_state, active, NewState};
         Else ->
             ?LOGGER:critical("[~p]: ACTIVE - ASYNC send_message: ~p,  - Enexpected error: ~p .~n", [?MODULE, ?GET_TYPE_NAME(Type), Else]),
@@ -428,7 +428,7 @@ handle_info(Request, StateName, StateData) ->
 handle_event({get_status, PidToReply}, StateName, State) ->
     spawn(fun()->
         StartTime = utils:get_current_millis(),
-        ?LOGGER:preciseDebug("[~p]: Handle SYNC EVENT Request(get_status) ~n", [?MODULE]),
+        ?LOGGER:preciseDebug("[~p]: Handle A SYNC EVENT Request(get_status) ~n", [?MODULE]),
         RoutingSet = query_valid_routes(State#state.routing_set),
         ?LOGGER:preciseDebug("[~p]: RoutingSetList(get_status) = ~p~n", [?MODULE, RoutingSet]),
         RoutingSetList = [
@@ -436,7 +436,8 @@ handle_event({get_status, PidToReply}, StateName, State) ->
              {next_address, RoutingSetEntry#routing_set_entry.next_addr},
              {medium, RoutingSetEntry#routing_set_entry.medium}} || RoutingSetEntry <- RoutingSet],
         ?LOGGER:preciseDebug("[~p]: get_status took ~p ~n", [?MODULE, utils:get_current_millis() - StartTime]),
-        PidToReply ! [{routing_set, RoutingSetList}] end),
+        PidToReply ! [{routing_set, RoutingSetList}]
+     end),
     {next_state, StateName, State};
 
 handle_event(reset, StateName, State) ->
@@ -951,7 +952,7 @@ query_find_next_hop(Destination, RoutingSetId)->
         [_Entry|_Rest] ->
             {ok, get_route_set_entry_with_highest_seq_num(NextHop)};
         [] ->
-            ?LOGGER:critical("[~p]: query_find_next_hop  NOT FOUND.~n", [?MODULE]),
+            ?LOGGER:warn("[~p]: query_find_next_hop  NOT FOUND.~n", [?MODULE]),
             {?EMPTY_QUERY_RESULT, "NOT FOUND"};
         _ ->
             ?LOGGER:critical("[~p]: query_find_next_hop UNEXPECTED RESULTS: ~w.~n", [?MODULE, NextHop]),

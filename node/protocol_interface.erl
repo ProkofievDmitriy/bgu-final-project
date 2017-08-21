@@ -55,8 +55,8 @@ send_data_reply(Destination, Data)->
 
 
 handle_send_message(Type, Destination, Data)->
-    gen_server:cast(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data, self()}}),
     StartTime = utils:get_current_millis(),
+    gen_server:cast(?PROTOCOL_NAME, {Type, {utils:get_node_number(Destination), Data, self()}}),
     Result = receive
                {ok , sent} -> {ok , sent}
                after (2 * ?NET_TRAVERSAL_TIME) ->

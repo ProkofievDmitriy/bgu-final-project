@@ -218,21 +218,27 @@ loop(Port, OS_PID, Super_PID, Port_Errors, DataLinkFsmPid) ->
 
 extract_crc(List) ->
 	extract_crc(List, [],  lists:flatlength(List)).
-extract_crc( LCRC, Rest,X) when X =:= 4 -> {LCRC, Rest};
-extract_crc( [H|T] , Rest, X) -> extract_crc(T, Rest ++ [H] , X-1).
+extract_crc( LCRC, Rest, 4) -> {LCRC, Rest};
+extract_crc( [H|T] , Rest, X) -> extract_crc(T, Rest ++ [H] , X-1);
+extract_crc( LCRC, Rest, X)->  crc_error.
 
 %check received data. returns 1 if data !not! at the rigth packet format. returns 0 if it is the rigth format.
 examine_data( [Channel | _ ]) when (Channel < 0) orelse (Channel > 2) -> channel_error;
+examine_data( [Channel, RSSI | []]) -> crc_error;
+examine_data( []) -> channel_error;
 examine_data( [Channel, RSSI | Rest]) ->
-	{LCRC, L_NO_CRC} = extract_crc(Rest),
-	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
-	?LOGGER:preciseDebug("[~p]: CRC is:~w~n", [?MODULE, CRC]),
-	CRC2 = erlang:crc32(L_NO_CRC),
-	?LOGGER:preciseDebug("[~p]: CRC2 is:~w. L_NO_CRC is:~w~n", [?MODULE, CRC2, L_NO_CRC]),
-	case CRC2  of
-		CRC -> [Channel] ++ [RSSI] ++ L_NO_CRC;
-		_Else ->   crc_error
-	end.
+    case  extract_crc(Rest) of
+        {LCRC, L_NO_CRC} ->
+        	CRC = binary:decode_unsigned(list_to_binary(LCRC)),
+        	?LOGGER:preciseDebug("[~p]: CRC is:~w~n", [?MODULE, CRC]),
+        	CRC2 = erlang:crc32(L_NO_CRC),
+        	?LOGGER:preciseDebug("[~p]: CRC2 is:~w. L_NO_CRC is:~w~n", [?MODULE, CRC2, L_NO_CRC]),
+        	case CRC2  of
+        		CRC -> [Channel] ++ [RSSI] ++ L_NO_CRC;
+        		_Else ->   crc_error
+    	    end;
+        _ -> crc_error
+    end.
 
 examine_data2(L) -> X = length(L),
 	Ans = examine_data(L),

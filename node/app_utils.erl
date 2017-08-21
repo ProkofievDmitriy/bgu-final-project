@@ -97,12 +97,12 @@ report_received_dreq(Destination, SessionNumber) ->
 report(Type,Data) ->
   if ?TEST_MODE == integrated ->
     ReportingUnit = get(reporting_unit),
+    log:info("[~p] sending report ~w ~w~n", [?MODULE,Type,Data]),
     ReportingUnit:report(Type,Data);
     true -> []
   end,
   Fd = get(reporting_file),
   io:format(Fd,"~w , ~w~n",[Type,Data]),
-  log:info("[~p] sending report ~w ~w~n", [?MODULE,Type,Data]),
   ok.
 
 update_mediums([],State) -> State;

@@ -88,7 +88,7 @@ handle_cast({report, {Type, DataList}}, #context{connected_to_server = true, man
     spawn(fun()-> utils:grafana_report(Type, Context#context.grafana_server_ip, DataList) end),
     ReportMessageData = prepare_message_data(DataList, Context),
     ServerModuleInterface = Context#context.data_server_interface,
-    ?LOGGER:debug("[~w]: REPORT, ServerModuleInterface: ~w, Data: ~w~n", [?MODULE, ServerModuleInterface, ReportMessageData]),
+    ?LOGGER:debug("[~w]: REPORT, Type: ~w, Data: ~w~n", [?MODULE, Type, ReportMessageData]),
     ReportResult = ServerModuleInterface:report(Type, ReportMessageData),
     case ReportResult of
         {ok, _} -> {noreply, Context};

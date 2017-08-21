@@ -141,7 +141,7 @@ handle_event({drep,To,Data,Seq},StateName, State) when To == ?DC_NODE ->
 
 
 handle_event(Event,StateName,State) ->
-  log:err("[~p]   ~p received UNEXPECTED MESSAGE ~p in state ~w with data ~w",
+  log:err("[~p]   ~p received UNEXPECTED EVENT ~p in state ~w with data ~w",
     [?MODULE,self(),Event,StateName,State]),
   {next_state, StateName, State}.
 
