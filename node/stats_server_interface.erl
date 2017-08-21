@@ -34,7 +34,7 @@
 %% API
 -export([report/2, report/1, getOffset/1]).
 -export([clear_routing_tables/0,remove_stations/1,update_medium/1]).
--export([export/0]).
+-export([export/1]).
 
 %%%=======================================loadNGgui============================
 %%% APItry
@@ -44,7 +44,7 @@
 %**********************   Management Server  		  	*******************************
 %**************************************************************************************
 
-export() ->
+export(StringName) ->
   gen_server:cast({global, ?STATS_SERVER}, {export_db, isg_time:now_now()}).
 
 %% ---------------------------------------------------------------------------------------------------------

@@ -352,7 +352,9 @@ handle_info(Info, StateName, State) ->
 terminate(Reason, StateName, State) ->
   State#state.timer ! stop,
   case Reason of
-      {done_experiment_number,Exp_counter} -> stats_server_interface:export();
+      {done_experiment_number,Exp_counter} ->
+        Name = "exp_"++ erlang:integer_to_list(Exp_counter),
+        stats_server_interface:export(Name);
       Reason ->[]
   end,
 
