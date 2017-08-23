@@ -48,9 +48,15 @@ updateBottomLevel(FsmPid, BottomLevelModule, BottomLevelPid)->
 
 handle_incoming_message(FsmPid, Packet)->
     ?LOGGER:preciseDebug("[~p]: handle_incoming_message : Packet: ~w ~n", [?MODULE, Packet]),
-    <<Medium:8, RSSI:8, Source:?ADDRESS_LENGTH, Target:?ADDRESS_LENGTH, Data/bitstring>> = list_to_binary(Packet), % parse incoming packet, currently ignore RSSI
-    ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
-    gen_fsm:send_event(FsmPid, {received_message, {Medium, Source, Target, Data}}).
+    Bin = list_to_binary(Packet),
+    case Bin of
+    <<Medium:8, RSSI:8, Source:?ADDRESS_LENGTH, Target:?ADDRESS_LENGTH, Data/bitstring>> ->
+        ?LOGGER:debug("[~p]: handle_incoming_message : Medium: ~p , RSSI: ~p, Target: ~p, Data : ~w ~n", [?MODULE, ?GET_MEDIUM_NAME(Medium), RSSI, Target, Data]),
+        gen_fsm:send_event(FsmPid, {received_message, {Medium, Source, Target, Data}});
+        Other -> ?LOGGER:critical("[~p]: received unmatched bitstring:  ~p ~n", [?MODULE, Other])
+    end.
+
+
 
 get_status(FsmPid) ->
     Result = (catch gen_fsm:sync_send_all_state_event(FsmPid, get_status, 60000)),

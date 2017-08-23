@@ -1,4 +1,4 @@
--define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, report, stats_server_interface, modem_port, protocol_interface, protocol_interface]).
+-define(MODULES_TO_FILTER, [utils, transport, node, load_ng, load_ng_core, application_interface, report, stats_server_interface, modem_port, protocol_interface, protocol_interface,data_link]).
 % -define(MODULES_TO_FILTER, [load_ng, transport, stats_server_interface]).
 % -define(MODULES_TO_FILTER, [stats_server_interface, report]).
 
@@ -127,9 +127,9 @@
 -define(REPORT_UNIT_PROPS_LIST, [{data_server_interface, stats_server_interface},
                                  {data_server_name, stats_server},
                                  {mandatory_time_sync, false},
-                                 {data_server_ip, "132.73.208.119"},
+                                 {data_server_ip, "132.73.202.119"},
                                 %  {data_server_ip, "192.168.14.30"}, %Dima home server
-                                 {grafana_server_ip, "132.73.208.119"}
+                                 {grafana_server_ip, "132.73.202.119"}
                                 ]).
 
 
@@ -143,5 +143,5 @@
 -define(APP_PROPS_LIST, [{send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
-{meters_list, [node_2, node_3, node_4, node_5, node_6, node_7, node_9, node_10, node_11, node_12, node_13, node_14, node_15]}
+{meters_list, [node_2, node_3, node_4, node_5, node_6, node_7, node_8, node_9, node_10, node_12, node_13, node_14]}
                         ]).

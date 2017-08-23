@@ -46,6 +46,12 @@ report_next_session(SessionNumber, CurrentTerminals) ->
   _Ok = report(Type,Data),
   ok.
 
+report_removed_stations(RemovedNodes, CurrentNodes,SessionNumber)->
+  Type = {app_info, removed_stations},
+  Data = [{removed, RemovedNodes},{current, CurrentNodes},{session, SessionNumber}],
+  _Ok = report(Type,Data),
+  ok.
+
 report_routing_tables_cleared(ExperimentNum)->
   Type = {app_info,routing_table_cleared},
   Data = [{experiment_num,ExperimentNum}],
@@ -113,12 +119,12 @@ export_db(Name)->
   end.
 
 
-update_mediums([],State) -> State;
-update_mediums( [{Node,Medium}|T] ,State)->
+
+update_mediums( [Node,Medium] ,State)->
   Mediums = State#state.mediums,
   NewMediums = lists:keyreplace(Node,1,Mediums,{Node,Medium}),
   NewState = State#state{ mediums = NewMediums},
-  update_mediums(T,NewState).
+  NewState.
 
 
 
@@ -249,6 +255,10 @@ insert_nodes_to_tracker([H|T])->
   _Ok = ets:insert(tracker, {H,0}),
   insert_nodes_to_tracker(T).
 
+remove_nodes_from_tracker([])-> ok;
+remove_nodes_from_tracker([H|T])->
+    _Ok = ets:delete(tracker, H),
+    remove_nodes_from_tracker(T).
 
 update_tracker_requests(Rd,Sn)->
   insert_requests( Rd, Sn),

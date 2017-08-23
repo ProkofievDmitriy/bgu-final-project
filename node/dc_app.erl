@@ -61,7 +61,7 @@ configuration_updated_from_gui(Pid,ListOfNodesAndMediums) ->
   gen_fsm:send_event(Pid, {configuration_update_gui, ListOfNodesAndMediums}).
 
 stations_removed_from_gui(Pid,ListOfNodes)->
-  gen_fsm:send_event(Pid, {stations_removed_gui,ListOfNodes}).
+  gen_fsm:send_event(Pid, {stations_removed_gui,ListOfNodes,Pid}).
 
 routing_tables_cleared_from_gui(Pid) ->
   gen_fsm:send_all_state_event(Pid,tables_cleared_gui).
@@ -192,7 +192,13 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
       UpdatedState = State#state{ nrs = Nrs_new },
       NewState = prepare_for_another_iteration_of_phase_1(UpdatedState,Event),
       {next_state, discovering, NewState}
-  end.
+  end;
+
+
+
+  discovering({stations_removed_gui,ListOfNodes,Pid}, State)->
+  gen_fsm:send_all_state_event(Pid, {stations_removed_gui,ListOfNodes}),
+  {next_state, discovering, State}.
 
 
 
@@ -222,7 +228,8 @@ collecting(rd_empty,State) ->
     true ->
       log:debug("[~p]  received requested replies, preparing for another iteration of Sn ~p~n",
         [?MODULE,State#state.sn]),
-      UpdatedState = State#state{ rd = Ter8 },
+      Nrs = lists:subtract(State#state.nrs, Ter8),
+      UpdatedState = State#state{ rd = Ter8 , nrs = Nrs },
       NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,rd_empty),
       {next_state, collecting, NewState}
   end;
@@ -268,7 +275,11 @@ collecting(timeout,State) ->
           NewState = prepare_for_another_iteration_of_phase_2(UpdatedState,timeout),
           {next_state, collecting, NewState}
       end
-  end.
+  end;
+
+  collecting({stations_removed_gui,ListOfNodes,Pid}, State)->
+  gen_fsm:send_all_state_event(Pid, {stations_removed_gui,ListOfNodes}),
+  {next_state, collecting, State}.
 
 
 handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To andalso StateName== discovering orelse State#state.my_node == To andalso StateName== collecting ->
@@ -329,6 +340,23 @@ handle_event({received_message, Bit_string}, StateName, State) ->
 handle_event(tables_cleared_gui, StateName, State)->
   app_utils:report_routing_tables_cleared(State#state.exp_counter),
   {next_state, StateName, State};
+
+  handle_event({stations_removed_gui,ListOfNodes}, StateName, State)->
+        Meters = lists:subtract(State#state.meters, ListOfNodes),
+        Nrs = lists:subtract(State#state.nrs, ListOfNodes),
+        Rd = lists:subtract(State#state.rd, ListOfNodes),
+        Ter = lists:subtract(State#state.ter, ListOfNodes),
+        app_utils:remove_nodes_from_tracker(ListOfNodes),
+        log:info("[~p]  stations ~p removed from gui in state ~p  ~n",[?MODULE,ListOfNodes,StateName]),
+        app_utils:report_removed_stations(ListOfNodes,Meters,State#state.sn),
+        NewState = NewState = State#state{
+          rd = Rd,
+          nrs = Nrs,
+          ter = Ter,
+          meters = Meters},
+      {next_state, StateName, NewState};
+
+
 
 
 handle_event(Event,StateName,State) ->
@@ -392,9 +420,10 @@ delete_unresponsive_nodes([H|T], Nrs,State,Sn)->
   if Val < (?MAX_DREQ_TRIES +Add) ->
     delete_unresponsive_nodes(T,Nrs,State,Sn);
     true ->
-      log:debug("[~p] WARNING ~p in unresponsive, removing from current round~n",
+      log:debug("[~p] WARNING ~p in unresponsive, removing ~n",
         [?MODULE,H]),
       app_utils:report_unresponsive_node(H,Sn),
+      stats_server_interface:remove_stations([H]),
       Nrs1=lists:delete(H,Nrs),
       delete_unresponsive_nodes(T,Nrs1,State,Sn)
   end.
@@ -506,6 +535,7 @@ prepare_for_another_iteration_of_phase_2(State,TimerFlag)->
 
 
 prepare_for_reinitialization(State,Event) ->
+  app_utils:report_averages(State#state.sn),
   app_utils:clear_routing_tables(State),
   if Event == rd_empty -> State#state.timer!stop; true->[]  end,
   Timerpid = erlang:spawn(app_utils,timer,[State#state.my_pid,?BETWEEN_EXP_TIMEOUT]),
