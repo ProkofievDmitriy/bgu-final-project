@@ -572,7 +572,7 @@ update_map(Canvas, SelectedNode, NodesEts,MapEts,ConfigButtons,UpdateLocation,No
 				case Result of
 					[{SelectedNode,{_, {X,Y}, MediumMode, RoutingSet, NodesToFilter}}] ->
 							%draw_routes_from_node(DC, SelectedNode, {X,Y},NodesEts,RoutingSet),
-              					%	io:format("draw map from SelectedNode ~p, RoutingSet ~p~n",[SelectedNode, RoutingSet]),
+              					io:format("Selected Node: ~p, Routing Set: ~p~n",[SelectedNode, RoutingSet]),
       							draw_routes_from_node_to_each_node(DC, NodesEts, SelectedNode, RoutingSet),
 							configButtonUpdate(MediumMode ,ConfigButtons);
 				     [] -> ok
