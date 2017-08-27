@@ -709,6 +709,7 @@ draw_route(DC, Location1,Location2, Medium) ->
     end,
     wxDC:setPen(DC, wxPen:new(Colour)),
     wxDC:drawLine(DC, Location1, Location2),
+    wxDC:drawPolygon(DC,calculateTrianglePoints(Location1, Location2)),
     wxDC:setPen(DC, wxPen:new(?wxBLACK)).
 
 makeAtom(NodeNumber) -> list_to_atom("node_" ++ integer_to_list(NodeNumber)).
@@ -794,6 +795,29 @@ trim_string([H|RestString], Delimiter, ValueAcc, Acc)->
 list_of_integers_to_string([]) -> [];
 list_of_integers_to_string(ListOfIntegers) when is_list(ListOfIntegers) -> [ integer_to_list(X) ++ " " || X <- ListOfIntegers];
 list_of_integers_to_string(_) -> [].
+
+
+lineEndCalculate(Start,LineEnd) when LineEnd > Start->
+	trunc(0.9*(LineEnd - Start)+Start);
+lineEndCalculate(Start,LineEnd) when LineEnd < Start->
+	trunc(0.1*(Start - LineEnd)+LineEnd);
+lineEndCalculate(X,X) ->
+		X.
+
+calculateTrianglePoints({StartX,StartY},{LineEndX,LineEndY}) ->
+
+	EndX =lineEndCalculate(StartX, LineEndX),
+	EndY =lineEndCalculate(StartY, LineEndY),
+	Dx = StartX - EndX,
+	Dy = StartY - EndY,
+	Norm = math:sqrt(Dx*Dx+Dy*Dy),
+	Udx = Dx/Norm,
+	Udy = Dy/Norm,
+	Ax = Udx * math:sqrt(3)/2 - Udy * 1/2,
+	Ay = Udx * 1/2 + Udy * math:sqrt(3)/2,
+	Bx = Udx * math:sqrt(3)/2 + Udy * 1/2,
+	By =  - Udx * 1/2 + Udy * math:sqrt(3)/2,
+	[{EndX,EndY}, {trunc(EndX + 20 * Ax), trunc(EndY + 20 * Ay)},{trunc(EndX + 20 * Bx), trunc(EndY + 20 * By)}].
 
 get_current_millis() ->
     {Mega, Sec, Micro} = os:timestamp(),
