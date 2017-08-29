@@ -7,4 +7,4 @@
 132.73.192.31 node_14 sem dual
 132.73.192.42 node_15 sem plc_only
 132.73.192.80 node_16 sem dual
-132.73.202.119 local stats_server not_relevant
+132.73.194.130 local stats_server not_relevant
