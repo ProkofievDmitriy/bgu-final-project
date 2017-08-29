@@ -143,5 +143,5 @@
 -define(APP_PROPS_LIST, [{send_message_interval, ?MESSAGE_SEND_INTERVAL},
 %                         {role, smart_meter}
                          {role, data_concentration_server},
-{meters_list, [node_2, node_3, node_4, node_5, node_6, node_7, node_9, node_10, node_11, node_12, node_13, node_14, node_16]}
+{meters_list, [node_2, node_3, node_5, node_6, node_7, node_8, node_9, node_10, node_11, node_12, node_13, node_14, node_15]}
                         ]).

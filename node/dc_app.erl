@@ -109,11 +109,11 @@ init({Me,MyProtocol,MyNode,ReportingUnit, Meters}) ->
 
 idle({configuration_update_gui, ListOfNodesAndMediums},State)->
   NewState = app_utils:update_mediums(ListOfNodesAndMediums,State),
-  log:info("[~p]  updating configuration from ~w to ~w~n",
-    [?MODULE, State#state.mediums, NewState#state.mediums]),
+  log:info("[~p]  updating configuration ~w ~n",
+    [?MODULE, ListOfNodesAndMediums]),
   {next_state, idle, NewState};
 
-idle({stations_removed_gui,ListOfNodes},State)->
+idle({stations_removed_gui,ListOfNodes,Pid},State)->
   Meters = State#state.meters,
   NewMeters = lists:subtract(Meters,ListOfNodes),
   NewState = State#state{meters = NewMeters},
@@ -126,7 +126,12 @@ idle(start_from_gui,State)->
   NewState = State#state{timer = Timerpid},
   log:info("[~p]  received start_from_gui mark ~n", [?MODULE]),
   log:info("[~p]  STARTING APPLICATION IN ~p MODE ~n", [?MODULE,?AMR_MODE]),
-  {next_state, discovering, NewState}.
+  {next_state, discovering, NewState};
+
+  idle(Event,State) ->
+      log:err("[~p] EVENT  ~p received UNEXPECTED EVENT ~p in state idle with data ~w",
+        [?MODULE,self(),Event,State]),
+        {next_state, idle, State}.
 
 
 
@@ -139,7 +144,12 @@ reinitialize(timeout,State) ->
     exp_counter = State#state.exp_counter +1,
     sn =0,
     timer = Timerpid},
-  {next_state, discovering, NewState}.
+  {next_state, discovering, NewState};
+
+  reinitialize(Event,State) ->
+      log:err("[~p] EVENT  ~p received UNEXPECTED EVENT ~p in state reinitialize with data ~w",
+        [?MODULE,self(),Event,State]),
+        {next_state, reinitialize, State}.
 
 
 discovering(timeout,State) when State#state.sn==0 ->
@@ -198,7 +208,12 @@ discovering(Event,State) when Event==timeout; Event==rd_empty ->
 
   discovering({stations_removed_gui,ListOfNodes,Pid}, State)->
   gen_fsm:send_all_state_event(Pid, {stations_removed_gui,ListOfNodes}),
-  {next_state, discovering, State}.
+  {next_state, discovering, State};
+
+discovering(Event,State) ->
+    log:err("[~p] EVENT  ~p received UNEXPECTED EVENT ~p in state discovering with data ~w",
+      [?MODULE,self(),Event,State]),
+      {next_state, discovering, State}.
 
 
 
@@ -279,7 +294,12 @@ collecting(timeout,State) ->
 
   collecting({stations_removed_gui,ListOfNodes,Pid}, State)->
   gen_fsm:send_all_state_event(Pid, {stations_removed_gui,ListOfNodes}),
-  {next_state, collecting, State}.
+  {next_state, collecting, State};
+
+  collecting(Event,State) ->
+      log:err("[~p] EVENT  ~p received UNEXPECTED EVENT ~p in state discovering with data ~w",
+        [?MODULE,self(),Event,State]),
+        {next_state, collecting, State}.
 
 
 handle_event({drep,To,Data,Seq},StateName,State) when State#state.my_node == To andalso StateName== discovering orelse State#state.my_node == To andalso StateName== collecting ->
@@ -425,6 +445,8 @@ delete_unresponsive_nodes([H|T], Nrs,State,Sn)->
       app_utils:report_unresponsive_node(H,Sn),
       stats_server_interface:remove_stations([H]),
       Nrs1=lists:delete(H,Nrs),
+      Pid = get(my_pid),
+      gen_fsm:send_all_state_event(Pid, {stations_removed_gui,[H]}),
       delete_unresponsive_nodes(T,Nrs1,State,Sn)
   end.
 
