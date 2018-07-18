@@ -1,3 +1,5 @@
 ### My project from Distributed Programming Course
 
-@Prokofiev Dmitry
+@Prokofiev
+
+[Link to Project Presentation](https://www.youtube.com/watch?v=AKQexViNE_Y)
