@@ -1,3 +1,3 @@
 ### My project from Distributed Programming Course
 
-@Dmitry Prokofiev
+@Prokofiev Dmitry
